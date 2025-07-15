@@ -1,0 +1,1701 @@
+
+{
+    "$defs": {
+        "Assign": {
+            "properties": {
+                "location": {
+                    "title": "Location",
+                    "type": "string"
+                },
+                "expr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Expr"
+                },
+                "type_value": {
+                    "$ref": "#/$defs/AssignTypeDatatype",
+                    "default": "replacechildren"
+                },
+                "attr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Attr"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                },
+                "content": {
+                    "items": {},
+                    "title": "Content",
+                    "type": "array"
+                }
+            },
+            "required": [
+                "location"
+            ],
+            "title": "Assign",
+            "type": "object"
+        },
+        "AssignTypeDatatype": {
+            "description": "The assign type that allows for precise manipulation of the datamodel\nlocation.\n\nTypes are:\nreplacechildren (default),\nfirstchild, lastchild,\nprevioussibling, nextsibling,\nreplace, delete,\naddattribute",
+            "enum": [
+                "replacechildren",
+                "firstchild",
+                "lastchild",
+                "previoussibling",
+                "nextsibling",
+                "replace",
+                "delete",
+                "addattribute"
+            ],
+            "title": "AssignTypeDatatype",
+            "type": "string"
+        },
+        "BindingDatatype": {
+            "description": "The binding type in use for the SCXML document.",
+            "enum": [
+                "early",
+                "late"
+            ],
+            "title": "BindingDatatype",
+            "type": "string"
+        },
+        "BooleanDatatype": {
+            "description": "Boolean: true or false only",
+            "enum": [
+                "true",
+                "false"
+            ],
+            "title": "BooleanDatatype",
+            "type": "string"
+        },
+        "Cancel": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "sendid": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Sendid"
+                },
+                "sendidexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Sendidexpr"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Cancel",
+            "type": "object"
+        },
+        "Content": {
+            "properties": {
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                },
+                "expr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Expr"
+                },
+                "content": {
+                    "items": {},
+                    "title": "Content",
+                    "type": "array"
+                }
+            },
+            "title": "Content",
+            "type": "object"
+        },
+        "Data": {
+            "properties": {
+                "id": {
+                    "title": "Id",
+                    "type": "string"
+                },
+                "src": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Src"
+                },
+                "expr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Expr"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                },
+                "content": {
+                    "items": {},
+                    "title": "Content",
+                    "type": "array"
+                }
+            },
+            "required": [
+                "id"
+            ],
+            "title": "Data",
+            "type": "object"
+        },
+        "Datamodel": {
+            "properties": {
+                "data": {
+                    "items": {
+                        "$ref": "#/$defs/Data"
+                    },
+                    "title": "Data",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Datamodel",
+            "type": "object"
+        },
+        "Donedata": {
+            "properties": {
+                "content": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Content"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "param": {
+                    "items": {
+                        "$ref": "#/$defs/Param"
+                    },
+                    "title": "Param",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Donedata",
+            "type": "object"
+        },
+        "Else": {
+            "properties": {
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Else",
+            "type": "object"
+        },
+        "Elseif": {
+            "properties": {
+                "cond": {
+                    "title": "Cond",
+                    "type": "string"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "cond"
+            ],
+            "title": "Elseif",
+            "type": "object"
+        },
+        "ExmodeDatatype": {
+            "description": "Describes the processor execution mode for this document, being either \"lax\" or\n\"strict\".",
+            "enum": [
+                "lax",
+                "strict"
+            ],
+            "title": "ExmodeDatatype",
+            "type": "string"
+        },
+        "Final": {
+            "properties": {
+                "onentry": {
+                    "items": {
+                        "$ref": "#/$defs/Onentry"
+                    },
+                    "title": "Onentry",
+                    "type": "array"
+                },
+                "onexit": {
+                    "items": {
+                        "$ref": "#/$defs/Onexit"
+                    },
+                    "title": "Onexit",
+                    "type": "array"
+                },
+                "donedata": {
+                    "items": {
+                        "$ref": "#/$defs/Donedata"
+                    },
+                    "title": "Donedata",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Final",
+            "type": "object"
+        },
+        "Finalize": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Finalize",
+            "type": "object"
+        },
+        "Foreach": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "array": {
+                    "title": "Array",
+                    "type": "string"
+                },
+                "item": {
+                    "title": "Item",
+                    "type": "string"
+                },
+                "index": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Index"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "array",
+                "item"
+            ],
+            "title": "Foreach",
+            "type": "object"
+        },
+        "History": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "transition": {
+                    "$ref": "#/$defs/Transition"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "type_value": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/HistoryTypeDatatype"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "transition"
+            ],
+            "title": "History",
+            "type": "object"
+        },
+        "HistoryTypeDatatype": {
+            "enum": [
+                "shallow",
+                "deep"
+            ],
+            "title": "HistoryTypeDatatype",
+            "type": "string"
+        },
+        "If": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "elseif": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Elseif"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "else_value": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Else"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "cond": {
+                    "title": "Cond",
+                    "type": "string"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "cond"
+            ],
+            "title": "If",
+            "type": "object"
+        },
+        "Initial": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "transition": {
+                    "$ref": "#/$defs/Transition"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "transition"
+            ],
+            "title": "Initial",
+            "type": "object"
+        },
+        "Invoke": {
+            "properties": {
+                "content": {
+                    "items": {
+                        "$ref": "#/$defs/Content"
+                    },
+                    "title": "Content",
+                    "type": "array"
+                },
+                "param": {
+                    "items": {
+                        "$ref": "#/$defs/Param"
+                    },
+                    "title": "Param",
+                    "type": "array"
+                },
+                "finalize": {
+                    "items": {
+                        "$ref": "#/$defs/Finalize"
+                    },
+                    "title": "Finalize",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "type_value": {
+                    "default": "scxml",
+                    "title": "Type Value",
+                    "type": "string"
+                },
+                "typeexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Typeexpr"
+                },
+                "src": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Src"
+                },
+                "srcexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Srcexpr"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "idlocation": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Idlocation"
+                },
+                "namelist": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Namelist"
+                },
+                "autoforward": {
+                    "$ref": "#/$defs/BooleanDatatype",
+                    "default": "false"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Invoke",
+            "type": "object"
+        },
+        "Log": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "label": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                },
+                "expr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Expr"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Log",
+            "type": "object"
+        },
+        "Onentry": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Onentry",
+            "type": "object"
+        },
+        "Onexit": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Onexit",
+            "type": "object"
+        },
+        "Parallel": {
+            "properties": {
+                "onentry": {
+                    "items": {
+                        "$ref": "#/$defs/Onentry"
+                    },
+                    "title": "Onentry",
+                    "type": "array"
+                },
+                "onexit": {
+                    "items": {
+                        "$ref": "#/$defs/Onexit"
+                    },
+                    "title": "Onexit",
+                    "type": "array"
+                },
+                "transition": {
+                    "items": {
+                        "$ref": "#/$defs/Transition"
+                    },
+                    "title": "Transition",
+                    "type": "array"
+                },
+                "state": {
+                    "items": {
+                        "$ref": "#/$defs/State"
+                    },
+                    "title": "State",
+                    "type": "array"
+                },
+                "parallel": {
+                    "items": {
+                        "$ref": "#/$defs/Parallel"
+                    },
+                    "title": "Parallel",
+                    "type": "array"
+                },
+                "history": {
+                    "items": {
+                        "$ref": "#/$defs/History"
+                    },
+                    "title": "History",
+                    "type": "array"
+                },
+                "datamodel": {
+                    "items": {
+                        "$ref": "#/$defs/Datamodel"
+                    },
+                    "title": "Datamodel",
+                    "type": "array"
+                },
+                "invoke": {
+                    "items": {
+                        "$ref": "#/$defs/Invoke"
+                    },
+                    "title": "Invoke",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Parallel",
+            "type": "object"
+        },
+        "Param": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "name": {
+                    "title": "Name",
+                    "type": "string"
+                },
+                "expr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Expr"
+                },
+                "location": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Location"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "title": "Param",
+            "type": "object"
+        },
+        "Raise": {
+            "properties": {
+                "event": {
+                    "title": "Event",
+                    "type": "string"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "event"
+            ],
+            "title": "Raise",
+            "type": "object"
+        },
+        "Script": {
+            "properties": {
+                "src": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Src"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                },
+                "content": {
+                    "items": {},
+                    "title": "Content",
+                    "type": "array"
+                }
+            },
+            "title": "Script",
+            "type": "object"
+        },
+        "Send": {
+            "properties": {
+                "content": {
+                    "items": {
+                        "$ref": "#/$defs/Content"
+                    },
+                    "title": "Content",
+                    "type": "array"
+                },
+                "param": {
+                    "items": {
+                        "$ref": "#/$defs/Param"
+                    },
+                    "title": "Param",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "event": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Event"
+                },
+                "eventexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Eventexpr"
+                },
+                "target": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Target"
+                },
+                "targetexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Targetexpr"
+                },
+                "type_value": {
+                    "default": "scxml",
+                    "title": "Type Value",
+                    "type": "string"
+                },
+                "typeexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Typeexpr"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "idlocation": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Idlocation"
+                },
+                "delay": {
+                    "default": "0s",
+                    "title": "Delay",
+                    "type": "string"
+                },
+                "delayexpr": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Delayexpr"
+                },
+                "namelist": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Namelist"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Send",
+            "type": "object"
+        },
+        "State": {
+            "properties": {
+                "onentry": {
+                    "items": {
+                        "$ref": "#/$defs/Onentry"
+                    },
+                    "title": "Onentry",
+                    "type": "array"
+                },
+                "onexit": {
+                    "items": {
+                        "$ref": "#/$defs/Onexit"
+                    },
+                    "title": "Onexit",
+                    "type": "array"
+                },
+                "transition": {
+                    "items": {
+                        "$ref": "#/$defs/Transition"
+                    },
+                    "title": "Transition",
+                    "type": "array"
+                },
+                "initial": {
+                    "items": {
+                        "$ref": "#/$defs/Initial"
+                    },
+                    "title": "Initial",
+                    "type": "array"
+                },
+                "state": {
+                    "items": {
+                        "$ref": "#/$defs/State"
+                    },
+                    "title": "State",
+                    "type": "array"
+                },
+                "parallel": {
+                    "items": {
+                        "$ref": "#/$defs/Parallel"
+                    },
+                    "title": "Parallel",
+                    "type": "array"
+                },
+                "final": {
+                    "items": {
+                        "$ref": "#/$defs/Final"
+                    },
+                    "title": "Final",
+                    "type": "array"
+                },
+                "history": {
+                    "items": {
+                        "$ref": "#/$defs/History"
+                    },
+                    "title": "History",
+                    "type": "array"
+                },
+                "datamodel": {
+                    "items": {
+                        "$ref": "#/$defs/Datamodel"
+                    },
+                    "title": "Datamodel",
+                    "type": "array"
+                },
+                "invoke": {
+                    "items": {
+                        "$ref": "#/$defs/Invoke"
+                    },
+                    "title": "Invoke",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "id": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Id"
+                },
+                "initial_attribute": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Initial Attribute",
+                    "type": "array"
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "State",
+            "type": "object"
+        },
+        "Transition": {
+            "properties": {
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "raise_value": {
+                    "items": {
+                        "$ref": "#/$defs/Raise"
+                    },
+                    "title": "Raise Value",
+                    "type": "array"
+                },
+                "if_value": {
+                    "items": {
+                        "$ref": "#/$defs/If"
+                    },
+                    "title": "If Value",
+                    "type": "array"
+                },
+                "foreach": {
+                    "items": {
+                        "$ref": "#/$defs/Foreach"
+                    },
+                    "title": "Foreach",
+                    "type": "array"
+                },
+                "send": {
+                    "items": {
+                        "$ref": "#/$defs/Send"
+                    },
+                    "title": "Send",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "assign": {
+                    "items": {
+                        "$ref": "#/$defs/Assign"
+                    },
+                    "title": "Assign",
+                    "type": "array"
+                },
+                "log": {
+                    "items": {
+                        "$ref": "#/$defs/Log"
+                    },
+                    "title": "Log",
+                    "type": "array"
+                },
+                "cancel": {
+                    "items": {
+                        "$ref": "#/$defs/Cancel"
+                    },
+                    "title": "Cancel",
+                    "type": "array"
+                },
+                "event": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Event"
+                },
+                "cond": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Cond"
+                },
+                "target": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Target",
+                    "type": "array"
+                },
+                "type_value": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/TransitionTypeDatatype"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Transition",
+            "type": "object"
+        },
+        "TransitionTypeDatatype": {
+            "description": "The type of the transition i.e. internal or external.",
+            "enum": [
+                "internal",
+                "external"
+            ],
+            "title": "TransitionTypeDatatype",
+            "type": "string"
+        }
+    },
+    "properties": {
+        "state": {
+            "items": {
+                "$ref": "#/$defs/State"
+            },
+            "title": "State",
+            "type": "array"
+        },
+        "parallel": {
+            "items": {
+                "$ref": "#/$defs/Parallel"
+            },
+            "title": "Parallel",
+            "type": "array"
+        },
+        "final": {
+            "items": {
+                "$ref": "#/$defs/Final"
+            },
+            "title": "Final",
+            "type": "array"
+        },
+        "datamodel": {
+            "items": {
+                "$ref": "#/$defs/Datamodel"
+            },
+            "title": "Datamodel",
+            "type": "array"
+        },
+        "script": {
+            "items": {
+                "$ref": "#/$defs/Script"
+            },
+            "title": "Script",
+            "type": "array"
+        },
+        "other_element": {
+            "items": {},
+            "title": "Other Element",
+            "type": "array"
+        },
+        "initial": {
+            "items": {
+                "type": "string"
+            },
+            "title": "Initial",
+            "type": "array"
+        },
+        "name": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Name"
+        },
+        "version": {
+            "anyOf": [
+                {
+                    "type": "number"
+                },
+                {
+                    "type": "string"
+                }
+            ],
+            "default": "1.0",
+            "title": "Version"
+        },
+        "datamodel_attribute": {
+            "default": "null",
+            "title": "Datamodel Attribute",
+            "type": "string"
+        },
+        "binding": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/BindingDatatype"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null
+        },
+        "exmode": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/ExmodeDatatype"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null
+        },
+        "other_attributes": {
+            "additionalProperties": {
+                "type": "string"
+            },
+            "title": "Other Attributes",
+            "type": "object"
+        }
+    },
+    "title": "Scxml",
+    "type": "object"
+}
