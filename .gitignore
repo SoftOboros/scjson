@@ -7,3 +7,4 @@ __pycache__/
 envrc-*
 venv
 
+js/node_modules
