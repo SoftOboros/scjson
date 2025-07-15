@@ -121,3 +121,38 @@ scjson convert --from scxml path/to/file.scxml --to scjson path/to/file.scjson
 
 # Validate a scjson file
 scjson validate path/to/file.scjson
+```
+
+### Java Module
+
+The Java implementation uses Maven. If your environment requires an HTTP/HTTPS
+proxy, create `~/.m2/settings.xml` with proxy settings before building:
+
+```xml
+<settings>
+  <proxies>
+    <proxy>
+      <id>internal-proxy</id>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>proxy</host>
+      <port>8080</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+    <proxy>
+      <id>internal-proxy-https</id>
+      <active>true</active>
+      <protocol>https</protocol>
+      <host>proxy</host>
+      <port>8080</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+  </proxies>
+</settings>
+```
+
+Build the module with:
+
+```bash
+cd java && mvn clean install -DskipTests -B && cd ..
+```
