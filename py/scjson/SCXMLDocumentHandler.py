@@ -1,4 +1,4 @@
-from typing import Optional, Type, Union, Any, Boolean, get_args, get_origin
+from typing import Optional, Type, Union, Any, get_args, get_origin
 from enum import Enum
 from decimal import Decimal
 import xmlschema
@@ -7,14 +7,13 @@ from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.serializers import XmlSerializer
-from .pydantic import Scxml as PydanticScxml
 from .dataclasses import Scxml as Scxml
 
 class SCXMLDocumentHandler:
     def __init__(
         self, model_class: Type = Scxml,
         schema_path: Optional[str] = None,
-        pretty: Boolean = True
+        pretty: bool = True
     ):
         self.model_class = model_class
         self.schema_path = schema_path
