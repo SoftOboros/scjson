@@ -10,15 +10,20 @@ describe('cli', function()
     package.path = 'lua/?.lua;' .. package.path
     local scjson = require('scjson')
 
-    it('converts xml to json', function()
+    it('converts xml to json with defaults', function()
         local xml = '<scxml xmlns="http://www.w3.org/2005/07/scxml"/>'
-        local json = scjson.xml_to_json(xml)
-        assert.is.truthy(json:find('"version"'))
+        local j = scjson.xml_to_json(xml)
+        local data = require("dkjson").decode(j)
+        assert.are.equal(1.0, data.version)
+        assert.are.equal('null', data.datamodel_attribute)
     end)
 
-    it('converts json to xml', function()
-        local json = '{"version":1.0}'
-        local xml = scjson.json_to_xml(json)
-        assert.is.truthy(xml:find('scxml'))
+    it('roundtrips json and xml', function()
+        local obj = { version = 1.0, datamodel_attribute = 'null', state = { id = 'a' } }
+        local json_str = require('dkjson').encode(obj)
+        local xml = scjson.json_to_xml(json_str)
+        assert.is.truthy(xml:find('<scxml'))
+        local back = scjson.xml_to_json(xml)
+        assert.is.truthy(back:find('"state"'))
     end)
 end)
