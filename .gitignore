@@ -8,3 +8,6 @@ envrc-*
 venv
 
 js/node_modules
+
+# Rust build artifacts
+rust/target/
