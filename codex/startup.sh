@@ -35,3 +35,9 @@ EOF
 fi
 
 cd java && mvn clean install -DskipTests -B && cd ..
+cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
+cd swift && swift package resolve && swift build && cd ..
+cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
+
+
+
