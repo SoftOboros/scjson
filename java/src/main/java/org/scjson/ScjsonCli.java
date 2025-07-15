@@ -9,7 +9,8 @@ package org.scjson;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+
+import org.scjson.ValidateCommand;
 
 /**
  * Entry point for the scjson command line interface.
@@ -34,6 +35,7 @@ public class ScjsonCli implements Runnable {
         int exitCode = new CommandLine(new ScjsonCli())
                 .addSubcommand("to-json", new ScxmlToScjson())
                 .addSubcommand("to-xml", new ScjsonToScxml())
+                .addSubcommand("validate", new ValidateCommand())
                 .execute(args);
         System.exit(exitCode);
     }
