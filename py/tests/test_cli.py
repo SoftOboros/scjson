@@ -1,0 +1,114 @@
+from pathlib import Path
+import json
+import sys
+from click.testing import CliRunner
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scjson.cli import main
+from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+
+
+def _create_scxml(path: Path) -> str:
+    return '<scxml xmlns="http://www.w3.org/2005/07/scxml"/>'
+
+
+def test_single_json_conversion(tmp_path):
+    xml_path = tmp_path / "sample.scxml"
+    xml_path.write_text(_create_scxml(xml_path))
+    runner = CliRunner()
+    result = runner.invoke(main, ["json", str(xml_path)])
+    assert result.exit_code == 0
+    out_path = xml_path.with_suffix(".scjson")
+    assert out_path.exists()
+    data = json.loads(out_path.read_text())
+    assert data["version"] == 1.0
+
+
+def test_directory_json_conversion(tmp_path):
+    src_dir = tmp_path / "dir"
+    src_dir.mkdir()
+    for name in ["a", "b"]:
+        (src_dir / f"{name}.scxml").write_text(_create_scxml(Path(name)))
+    runner = CliRunner()
+    result = runner.invoke(main, ["json", str(src_dir)])
+    assert result.exit_code == 0
+    for name in ["a", "b"]:
+        assert (src_dir / f"{name}.scjson").exists()
+
+
+def _create_scjson(handler: SCXMLDocumentHandler) -> str:
+    xml = _create_scxml(Path())
+    return handler.xml_to_json(xml)
+
+
+def test_single_xml_conversion(tmp_path):
+    handler = SCXMLDocumentHandler()
+    json_path = tmp_path / "sample.scjson"
+    json_path.write_text(_create_scjson(handler))
+    runner = CliRunner()
+    result = runner.invoke(main, ["xml", str(json_path)])
+    assert result.exit_code == 0
+    out_path = json_path.with_suffix(".scxml")
+    assert out_path.exists()
+    data = out_path.read_text()
+    assert "scxml" in data
+
+
+def test_directory_xml_conversion(tmp_path):
+    handler = SCXMLDocumentHandler()
+    src_dir = tmp_path / "jsons"
+    src_dir.mkdir()
+    for name in ["x", "y"]:
+        (src_dir / f"{name}.scjson").write_text(_create_scjson(handler))
+    runner = CliRunner()
+    result = runner.invoke(main, ["xml", str(src_dir)])
+    assert result.exit_code == 0
+    for name in ["x", "y"]:
+        assert (src_dir / f"{name}.scxml").exists()
+
+
+def test_recursive_conversion(tmp_path):
+    runner = CliRunner()
+    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    scjson_dir = tmp_path / "tests" / "scjson"
+    scxml_dir = tmp_path / "tests" / "scxml"
+
+    result = runner.invoke(main, ["json", str(tutorial_dir), "-o", str(scjson_dir), "-r"])
+    assert result.exit_code == 0
+    result = runner.invoke(main, ["xml", str(scjson_dir), "-o", str(scxml_dir), "-r"])
+    assert result.exit_code == 0
+
+    json_files = list(scjson_dir.rglob("*.scjson"))
+    xml_files = list(scxml_dir.rglob("*.scxml"))
+    assert json_files
+    assert xml_files
+    assert len(xml_files) <= len(json_files)
+
+    handler = SCXMLDocumentHandler()
+    for f in xml_files[:5]:
+        xml_str = f.read_text()
+        json_str = handler.xml_to_json(xml_str)
+        xml_rt = handler.json_to_xml(json_str)
+        assert "scxml" in xml_rt
+
+
+def test_recursive_validation(tmp_path):
+    """Validate all converted files recursively."""
+    runner = CliRunner()
+    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    scjson_dir = tmp_path / "tests" / "scjson"
+    scxml_dir = tmp_path / "tests" / "scxml"
+
+    assert (
+        runner.invoke(main, ["json", str(tutorial_dir), "-o", str(scjson_dir), "-r"]).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(main, ["xml", str(scjson_dir), "-o", str(scxml_dir), "-r"]).exit_code
+        == 0
+    )
+
+    result = runner.invoke(main, ["validate", str(tmp_path / "tests"), "-r"])
+    assert result.exit_code != 0
+    assert "Validation failed" in result.output
