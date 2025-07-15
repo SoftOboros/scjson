@@ -1,0 +1,34 @@
+apt update && apt install -y nano maven gradle
+unset NPM_CONFIG_HTTP_PROXY
+unset NPM_CONFIG_HTTPS_PROXY
+git submodule update --init
+cd js && npm ci && cd ..
+cd py && pip install -r requirements.txt && cd ..
+
+mkdir -p ~/.m2
+if [ ! -f ~/.m2/settings.xml ]; then
+  cat > ~/.m2/settings.xml <<EOF
+<settings>
+  <proxies>
+    <proxy>
+      <id>internal-proxy</id>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>proxy</host>
+      <port>8080</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+    <proxy>
+      <id>internal-proxy-https</id>
+      <active>true</active>
+      <protocol>https</protocol>
+      <host>proxy</host>
+      <port>8080</port>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+  </proxies>
+</settings>
+EOF
+fi
+
+cd java && mvn clean install -DskipTests -B && cd ..
