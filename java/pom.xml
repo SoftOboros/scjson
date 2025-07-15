@@ -12,7 +12,7 @@
         <dependency>
             <groupId>org.everit.json</groupId>
             <artifactId>org.everit.json.schema</artifactId>
-            <version>1.14.2</version>
+            <version>1.5.1</version>
         </dependency>
         <!-- JSON parsing and serialization -->
         <dependency>
@@ -32,12 +32,8 @@
             <artifactId>picocli</artifactId>
             <version>4.7.5</version>
         </dependency>
-        <!-- Optional: SCXML parsing and execution (Apache Commons) -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-scxml2</artifactId>
-            <version>2.0</version>
-        </dependency>
+        <!-- Optional: SCXML parsing and execution (Apache Commons)
+             Dependency removed pending artifact availability -->
     </dependencies>
     <build>
         <plugins>
