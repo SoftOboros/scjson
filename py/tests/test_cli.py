@@ -112,3 +112,35 @@ def test_recursive_validation(tmp_path):
     result = runner.invoke(main, ["validate", str(tmp_path / "tests"), "-r"])
     assert result.exit_code != 0
     assert "Validation failed" in result.output
+
+
+def test_recursive_verify(tmp_path):
+    """Verify converted files recursively using -v option."""
+    runner = CliRunner()
+    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    scjson_dir = tmp_path / "tests" / "scjson"
+    scxml_dir = tmp_path / "tests" / "scxml"
+
+    assert (
+        runner.invoke(main, ["json", str(tutorial_dir), "-o", str(scjson_dir), "-r"]).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(main, ["xml", str(scjson_dir), "-o", str(scxml_dir), "-r"]).exit_code
+        == 0
+    )
+
+    result = runner.invoke(main, ["json", str(scxml_dir), "-r", "-v"])
+    assert result.exit_code == 0
+    result = runner.invoke(main, ["xml", str(scjson_dir), "-r", "-v"])
+    assert result.exit_code == 0
+
+    handler = SCXMLDocumentHandler()
+    originals = sorted(tutorial_dir.rglob("*.scxml"))
+    for orig in originals[:3]:
+        rel = orig.relative_to(tutorial_dir)
+        converted = scxml_dir / rel
+        if converted.exists():
+            o_json = json.loads(handler.xml_to_json(orig.read_text()))
+            c_json = json.loads(handler.xml_to_json(converted.read_text()))
+            assert o_json == c_json
