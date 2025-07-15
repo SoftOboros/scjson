@@ -11,10 +11,12 @@ from .dataclasses import Scxml as Scxml
 
 class SCXMLDocumentHandler:
     def __init__(
-        self, model_class: Type = Scxml,
+        self,
+        model_class: Type = Scxml,
         schema_path: Optional[str] = None,
-        pretty: bool = True
-    ):
+        pretty: bool = True,
+        omit_empty: bool = True,
+    ) -> None:
         self.model_class = model_class
         self.schema_path = schema_path
         self.parser = XmlParser()
@@ -24,6 +26,7 @@ class SCXMLDocumentHandler:
             )
         )
         self.schema = xmlschema.XMLSchema(schema_path) if schema_path else None
+        self.omit_empty = omit_empty
 
     def validate(self, xml_path: str) -> bool:
         if not self.schema:
@@ -53,12 +56,36 @@ class SCXMLDocumentHandler:
             return [SCXMLDocumentHandler._fix_decimal(v) for v in obj]
         return obj
 
+    @staticmethod
+    def _remove_empty(obj: Any):
+        """Recursively remove keys with None or empty containers."""
+        if isinstance(obj, dict):
+            return {
+                k: SCXMLDocumentHandler._remove_empty(v)
+                for k, v in obj.items()
+                if v is not None
+                and not (isinstance(v, (list, dict)) and len(v) == 0)
+            }
+        if isinstance(obj, list):
+            return [
+                SCXMLDocumentHandler._remove_empty(v)
+                for v in obj
+                if v is not None
+                and not (isinstance(v, (list, dict)) and len(v) == 0)
+            ]
+        return obj
+
     def xml_to_json(self, xml_str: str) -> str:
         """Convert SCXML string to canonical JSON."""
         model = self.parser.from_string(xml_str, self.model_class)
-        if hasattr(model, "model_dump_json"):
-            return model.model_dump_json(indent=2)
-        return json.dumps(SCXMLDocumentHandler._fix_decimal(asdict(model)), indent=2)
+        if hasattr(model, "model_dump"):
+            data = model.model_dump()
+        else:
+            data = asdict(model)
+        data = SCXMLDocumentHandler._fix_decimal(data)
+        if self.omit_empty:
+            data = SCXMLDocumentHandler._remove_empty(data)
+        return json.dumps(data, indent=2)
 
     def _to_dataclass(self, cls: type, data: Any):
         """Recursively build dataclass instance from dict."""

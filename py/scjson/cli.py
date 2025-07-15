@@ -22,18 +22,26 @@ def main(ctx):
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
-def xml(path: Path, output: Path | None, recursive: bool):
+@click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
+@click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
+def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_empty: bool):
     """Convert a single scjson file or all scjson files in a directory."""
-    handler = SCXMLDocumentHandler()
+    handler = SCXMLDocumentHandler(omit_empty=not keep_empty)
 
-    def convert_file(src: Path, dest: Path):
+    def convert_file(src: Path, dest: Path | None):
         try:
             with open(src, "r", encoding="utf-8") as f:
                 json_str = f.read()
             xml_str = handler.json_to_xml(json_str)
+            if verify:
+                handler.xml_to_json(xml_str)
+                click.echo(f"Verified {src}")
+                return True
         except Exception as e:
             click.echo(f"Failed to convert {src}: {e}", err=True)
             return False
+        if dest is None:
+            return True
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "w", encoding="utf-8") as f:
             f.write(xml_str)
@@ -46,7 +54,7 @@ def xml(path: Path, output: Path | None, recursive: bool):
         for src in path.glob(pattern):
             if src.is_file():
                 rel = src.relative_to(path)
-                dest = out_dir / rel.with_suffix(".scxml")
+                dest = out_dir / rel.with_suffix(".scxml") if not verify else None
                 convert_file(src, dest)
     else:
         if output and (output.is_dir() or not output.suffix):
@@ -60,25 +68,34 @@ def xml(path: Path, output: Path | None, recursive: bool):
             if output and output.suffix
             else (base / path.with_suffix(".scxml").name)
         ) if output else path.with_suffix(".scxml")
-        convert_file(path, out_file)
+        dest = None if verify else out_file
+        convert_file(path, dest)
 
 
 @main.command(help="Convert SCXML file to scjson.")
 @click.argument("path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
-def json(path: Path, output: Path | None, recursive: bool):
+@click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
+@click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
+def json(path: Path, output: Path | None, recursive: bool, verify: bool, keep_empty: bool):
     """Convert a single SCXML file or all SCXML files in a directory."""
-    handler = SCXMLDocumentHandler()
+    handler = SCXMLDocumentHandler(omit_empty=not keep_empty)
 
-    def convert_file(src: Path, dest: Path):
+    def convert_file(src: Path, dest: Path | None):
         try:
             with open(src, "r", encoding="utf-8") as f:
                 xml_str = f.read()
             json_str = handler.xml_to_json(xml_str)
+            if verify:
+                handler.json_to_xml(json_str)
+                click.echo(f"Verified {src}")
+                return True
         except Exception as e:
             click.echo(f"Failed to convert {src}: {e}", err=True)
             return False
+        if dest is None:
+            return True
         dest.parent.mkdir(parents=True, exist_ok=True)
         with open(dest, "w", encoding="utf-8") as f:
             f.write(json_str)
@@ -91,7 +108,7 @@ def json(path: Path, output: Path | None, recursive: bool):
         for src in path.glob(pattern):
             if src.is_file():
                 rel = src.relative_to(path)
-                dest = out_dir / rel.with_suffix(".scjson")
+                dest = out_dir / rel.with_suffix(".scjson") if not verify else None
                 convert_file(src, dest)
     else:
         if output and (output.is_dir() or not output.suffix):
@@ -105,7 +122,8 @@ def json(path: Path, output: Path | None, recursive: bool):
             if output and output.suffix
             else (base / path.with_suffix(".scjson").name)
         ) if output else path.with_suffix(".scjson")
-        convert_file(path, out_file)
+        dest = None if verify else out_file
+        convert_file(path, dest)
 
 
 @main.command(help="Validate scjson or SCXML files by round-tripping them in memory.")
