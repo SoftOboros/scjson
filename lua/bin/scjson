@@ -1,0 +1,39 @@
+#!/usr/bin/env lua5.4
+--[[
+Agent Name: lua-cli-runner
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+]]
+
+local scjson = require('scjson')
+
+local cmd = arg[1]
+local path = arg[2]
+
+if not cmd or not path then
+    io.stderr:write('Usage: scjson <json|xml> <path>\n')
+    os.exit(1)
+end
+
+if cmd == 'json' then
+    local data = io.open(path):read('*a')
+    local out = scjson.xml_to_json(data)
+    local out_path = path:gsub('%.scxml$', '.scjson')
+    local f = io.open(out_path, 'w')
+    f:write(out)
+    f:close()
+    print('Wrote ' .. out_path)
+elseif cmd == 'xml' then
+    local data = io.open(path):read('*a')
+    local out = scjson.json_to_xml(data)
+    local out_path = path:gsub('%.scjson$', '.scxml')
+    local f = io.open(out_path, 'w')
+    f:write(out)
+    f:close()
+    print('Wrote ' .. out_path)
+else
+    io.stderr:write('Unknown command: ' .. cmd .. '\n')
+    os.exit(1)
+end
