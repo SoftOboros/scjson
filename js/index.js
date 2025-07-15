@@ -37,6 +37,9 @@ function removeEmpty(value) {
   if (value === null) {
     return undefined;
   }
+  if (value === '') {
+    return undefined;
+  }
   return value;
 }
 
@@ -49,6 +52,9 @@ const validate = ajv.compile(schema);
  * @param {string} xmlStr - XML input.
  * @param {boolean} [omitEmpty=true] - Remove empty values when true.
  * @returns {string} JSON representation.
+ *
+ * Removes the XML namespace attribute and injects default values
+ * expected by the schema.
  */
 function xmlToJson(xmlStr, omitEmpty = true) {
   const parser = new XMLParser({ ignoreAttributes: false });
@@ -59,11 +65,20 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
+  if (obj['@_xmlns']) {
+    delete obj['@_xmlns'];
+  }
   if (obj.version === undefined) {
     obj.version = 1.0;
   }
+  if (obj.datamodel_attribute === undefined) {
+    obj.datamodel_attribute = 'null';
+  }
   if (!validate(obj)) {
     throw new Error('Invalid scjson');
+  }
+  if (omitEmpty) {
+    obj = removeEmpty(obj) || {};
   }
   return JSON.stringify(obj, null, 2);
 }
