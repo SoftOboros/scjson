@@ -1,2 +1,4 @@
 include README.md
 include LEGAL.md
+include LICENSE
+recursive-include tests *

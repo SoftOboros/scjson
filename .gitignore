@@ -8,7 +8,7 @@ venv
 .ruff_cache
 dist
 build
-
+*.egg-info
 
 js/node_modules
 
