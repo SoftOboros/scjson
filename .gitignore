@@ -1,4 +1,3 @@
-/venv
 db.sqlite3
 .envrc
 __pycache__/
@@ -6,6 +5,10 @@ __pycache__/
 .pyc
 envrc-*
 venv
+.ruff_cache
+dist
+build
+
 
 js/node_modules
 

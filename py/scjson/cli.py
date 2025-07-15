@@ -1,15 +1,29 @@
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
-from . import __version__, __description__, __progname__
+from importlib.metadata import version, PackageNotFoundError
 
+def _get_metadata(pkg="scjson"):
+    try:
+        return {
+            "version": version(pkg),
+            "progname": pkg,
+            "description": "SCJSON: SCXML ↔ JSON converter"
+        }
+    except PackageNotFoundError:
+        return {
+            "version": "unknown (not installed)",
+            "progname": pkg,
+            "description": "SCJSON (not installed)"
+        }
+md = _get_metadata()
+md_str = f"{md['progname']} {md['version']} - {md['description']}"
 
 def _splash() -> None:
     """Display program header."""
-    click.echo(f"{__progname__} {__version__} - {__description__}")
+    click.echo(md_str)
 
-
-@click.group(help=__description__, invoke_without_command=True)
+@click.group(help=md_str, invoke_without_command=True)
 @click.pass_context
 def main(ctx):
     """Command line interface for scjson conversions."""
