@@ -107,7 +107,7 @@ Currently supported:
 - ⏳ Rust (planned)
 - ⏳ Go (planned)
 - ⏳ C# (planned)
-- ⏳ lua (planned)
+- ✅ Lua (basic implementation in [`/lua`](./lua))
 
 All converters (will) share the same schema and test suite to ensure compatibility.
 

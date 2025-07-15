@@ -1,9 +1,12 @@
-apt update && apt install -y nano maven gradle
+apt update && apt install -y nano maven gradle lua5.4 luarocks
 unset NPM_CONFIG_HTTP_PROXY
 unset NPM_CONFIG_HTTPS_PROXY
 git submodule update --init
 cd js && npm ci && cd ..
 cd py && pip install -r requirements.txt && cd ..
+cd lua && luarocks install luaexpat --deps-mode=one && \
+    luarocks install dkjson --deps-mode=one && \
+    luarocks install busted --deps-mode=one && cd ..
 
 mkdir -p ~/.m2
 if [ ! -f ~/.m2/settings.xml ]; then
