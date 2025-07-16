@@ -7,6 +7,7 @@ cd py && pip install -r requirements.txt && cd ..
 cd lua && luarocks install luaexpat --deps-mode=one && \
     luarocks install dkjson --deps-mode=one && \
     luarocks install busted --deps-mode=one && cd ..
+cd ruby && gem install bundler && bundle install && cd ..
 
 mkdir -p ~/.m2
 if [ ! -f ~/.m2/settings.xml ]; then

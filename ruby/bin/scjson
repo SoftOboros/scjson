@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+# Agent Name: ruby-cli-runner
+#
+# Part of the scjson project.
+# Developed by Softoboros Technology Inc.
+# Licensed under the BSD 1-Clause License.
+
+require 'bundler/setup'
+require_relative '../lib/scjson/cli'
+Scjson.main
