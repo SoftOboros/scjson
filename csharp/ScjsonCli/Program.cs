@@ -50,6 +50,15 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Convert SCXML files to scjson.
+    /// </summary>
+    /// <param name="path">Input file or directory path.</param>
+    /// <param name="output">Output location or null for default.</param>
+    /// <param name="recursive">Process directories recursively.</param>
+    /// <param name="verify">Only verify without writing output.</param>
+    /// <param name="keepEmpty">Retain empty elements.</param>
+    /// <returns>Exit code.</returns>
     private static int RunJson(string path, string? output, bool recursive, bool verify, bool keepEmpty)
     {
         bool success = true;
@@ -67,7 +76,11 @@ public static class Program
                 }
                 if (dest != null)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                    var dir = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
                     File.WriteAllText(dest, jsonStr);
                     Console.WriteLine($"Wrote {dest}");
                 }
@@ -116,6 +129,15 @@ public static class Program
         return success ? 0 : 1;
     }
 
+    /// <summary>
+    /// Convert scjson files to SCXML.
+    /// </summary>
+    /// <param name="path">Input file or directory path.</param>
+    /// <param name="output">Output location or null for default.</param>
+    /// <param name="recursive">Process directories recursively.</param>
+    /// <param name="verify">Only verify without writing output.</param>
+    /// <param name="keepEmpty">Retain empty elements.</param>
+    /// <returns>Exit code.</returns>
     private static int RunXml(string path, string? output, bool recursive, bool verify, bool keepEmpty)
     {
         bool success = true;
@@ -133,7 +155,11 @@ public static class Program
                 }
                 if (dest != null)
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                    var dir = Path.GetDirectoryName(dest);
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
                     File.WriteAllText(dest, xmlStr);
                     Console.WriteLine($"Wrote {dest}");
                 }
@@ -182,6 +208,12 @@ public static class Program
         return success ? 0 : 1;
     }
 
+    /// <summary>
+    /// Validate scjson or SCXML files by round-tripping.
+    /// </summary>
+    /// <param name="path">Input file or directory path.</param>
+    /// <param name="recursive">Process directories recursively.</param>
+    /// <returns>Exit code.</returns>
     private static int RunValidate(string path, bool recursive)
     {
         bool success = true;
@@ -234,8 +266,21 @@ public static class Program
         return success ? 0 : 1;
     }
 
+    /// <summary>
+    /// Parsed command line options.
+    /// </summary>
+    /// <param name="Path">Input path.</param>
+    /// <param name="Output">Output location.</param>
+    /// <param name="Recursive">Process directories recursively.</param>
+    /// <param name="Verify">Only verify without writing output.</param>
+    /// <param name="KeepEmpty">Retain empty elements.</param>
     private record Options(string? Path, string? Output, bool Recursive, bool Verify, bool KeepEmpty);
 
+    /// <summary>
+    /// Parse command line options.
+    /// </summary>
+    /// <param name="args">Command line arguments.</param>
+    /// <returns>Parsed options.</returns>
     private static Options ParseOptions(string[] args)
     {
         string? output = null;
