@@ -41,10 +41,14 @@ Each language implementation lives in its own directory, as a standalone module 
 /examples/ → SCXML and scjson sample pairs
 /tutorial/ → Git submodule: Zhornyak SCXML tutorial
 /python/ → Python reference implementation (CLI + library)
-/typescript/ → TypeScript converter and tooling (WIP)
-/rust/ → Rust module for scjson (planned)
-/go/ → Go implementation (planned)
-/csharp/ → C# implementation (planned)
+/js/ → JavaScript CLI and library
+/ruby/ → Ruby CLI and gem
+/go/ → Go command line utility
+/rust/ → Rust command line utility
+/swift/ → Swift command line tool
+/java/ → Java command line tool
+/lua/ → Lua scripts
+/csharp/ → C# command line tool
 
 
 Each directory is designed to be independently usable as a library or CLI tool.
@@ -53,14 +57,17 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 ## Converters
 
-| Language     | Status     | Path                          | Notes                      |
-|--------------|------------|-------------------------------|----------------------------|
-| Python       | ✅ Stable  | [`/python`](./python)         | Reference implementation   |
-| TypeScript   | ⏳ WIP     | [`/typescript`](./typescript) | AJV + XML parser planned   |
-| Rust         | ⏳ Planned | [`/rust`](./rust)             | `serde` + `quick-xml`      |
-| Go           | ⏳ Planned | [`/go`](./go)                 | `encoding/json` + `xml`    |
-| C#           | ⏳ Planned | [`/csharp`](./csharp)         | LINQ-to-XML, Json.NET      |
-
+| Language  | Status | Path | Notes |
+|-----------|--------|------|-------|
+| Python    | ✅ Stable | [`/py`](./py) | Reference CLI |
+| JavaScript| ✅ Beta | [`/js`](./js) | Node CLI |
+| Ruby      | ✅ Beta | [`/ruby`](./ruby) | Gem CLI |
+| Go        | ✅ Beta | [`/go`](./go) | Go binary |
+| Rust      | ✅ Beta | [`/rust`](./rust) | Cargo crate |
+| Swift     | ✅ Beta | [`/swift`](./swift) | Swift package |
+| Java      | ✅ Beta | [`/java`](./java) | Maven CLI |
+| Lua       | ✅ Basic | [`/lua`](./lua) | Lua scripts |
+| C#        | ✅ Beta | [`/csharp`](./csharp) | .NET CLI |
 ---## Examples & Test Suite
 
 This repo includes a curated set of canonical SCXML examples and their equivalent `scjson` forms in [`/examples`](./examples). These are used for:
@@ -98,18 +105,7 @@ This ensures you get the complete tutorial content alongside the examples and co
 ---
 
 ## Converters
-
-Language-specific converters for SCXML ↔ scjson are under active development.
-
-Currently supported:
-- ✅ Python (reference implementation)
-- ⏳ TypeScript/JavaScript (planned)
-- ⏳ Rust (planned)
-- ⏳ Go (planned)
-- ⏳ C# (planned)
-- ✅ Lua (basic implementation in [`/lua`](./lua))
-
-All converters (will) share the same schema and test suite to ensure compatibility.
+All converters share the same schema and test suite to ensure compatibility.
 
 ---
 
@@ -164,3 +160,61 @@ pip install scjson
 ```
 
 
+
+For a full example of installing toolchains and dependencies across languages see [`codex/startup.sh`](codex/startup.sh).
+
+### Python Module
+```bash
+cd py
+pip install -r requirements.txt
+pytest -q
+```
+
+### JavaScript Module
+```bash
+cd js
+npm ci
+npm test --silent
+```
+
+### Ruby Module
+```bash
+cd ruby
+gem install bundler
+bundle install
+bundle exec rspec
+```
+
+### Go Module
+```bash
+cd go
+go test ./...
+go build
+```
+
+### Rust Module
+```bash
+cd rust
+cargo test
+```
+
+### Swift Module
+```bash
+cd swift
+swift test
+```
+
+### C# Module
+```bash
+cd csharp
+dotnet test -v minimal
+```
+
+### Lua Module
+```bash
+cd lua
+luarocks install luaexpat --deps-mode=one
+luarocks install dkjson --deps-mode=one
+luarocks install busted --deps-mode=one
+busted tests
+```
