@@ -14,3 +14,9 @@ js/node_modules
 
 # Rust build artifacts
 rust/target/
+go/go
+java/target/
+swift/.build/
+csharp/**/bin/
+csharp/**/obj/
+csharp/tmp*/
