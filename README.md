@@ -156,3 +156,11 @@ Build the module with:
 ```bash
 cd java && mvn clean install -DskipTests -B && cd ..
 ```
+
+### Package Repostory Availability
+pypi: [https://pypi.org/project/scjson/]
+```bash
+pip install scjson
+```
+
+

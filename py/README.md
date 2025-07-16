@@ -14,6 +14,18 @@ You can also install from a checkout of this repository:
 cd py && pip install -e .
 ```
 
+## Source Code - Multi-Language Support
+[https://github.com/SoftOboros/scjson/]
+- csharp
+- go
+- java
+- javascript / typescript
+- lua
+- python
+- ruby
+- rust
+- swift
+
 ## Command Line Usage
 
 After installation the `scjson` command is available:
@@ -64,7 +76,7 @@ async def post_xml(slug: str, request: Request):
     return data
 ```
 
-# SCJSON Caveats
+## SCJSON Caveats
 
 The SCXML conversion helpers normalize data so it can be stored as JSON.
 During `asdict()` serialization the generated dataclasses may contain

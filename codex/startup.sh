@@ -41,6 +41,3 @@ cd swift && swift package resolve && swift build && cd ..
 cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
 cd csharp/ScjsonCli && dotnet restore && dotnet build --no-restore && cd ../..
 cd csharp/Scjson.Tests && dotnet restore && cd ../..
-
-
-
