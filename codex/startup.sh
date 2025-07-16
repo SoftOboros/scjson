@@ -1,4 +1,4 @@
-apt update && apt install -y nano maven gradle lua5.4 luarocks
+apt update && apt install -y nano maven gradle lua5.4 luarocks dotnet-sdk-8.0
 unset NPM_CONFIG_HTTP_PROXY
 unset NPM_CONFIG_HTTPS_PROXY
 git submodule update --init
@@ -38,6 +38,8 @@ cd java && mvn clean install -DskipTests -B && cd ..
 cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
 cd swift && swift package resolve && swift build && cd ..
 cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
+cd csharp/ScjsonCli && dotnet restore && dotnet build --no-restore && cd ../..
+cd csharp/Scjson.Tests && dotnet restore && cd ../..
 
 
 
