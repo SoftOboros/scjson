@@ -28,7 +28,7 @@ Why JSON?
 
 ## Schema
 
-The canonical `scjson.schema.json` file is located in [`/schema`](./schema).  
+The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).  
 It is generated from Pydantic models and used to validate all `*.scjson` documents.
 
 ---
@@ -158,7 +158,15 @@ pypi: [https://pypi.org/project/scjson/]
 ```bash
 pip install scjson
 ```
-
+npm: [https://www.npmjs.com/package/scjson]
+```bash
+npm install scjson
+```
+dockerhub: [https://hub.docker.com/r/iraa/scjson]
+(Full development environment for all supported languages)
+```bash
+docker pull iraa/scjson:latest
+```
 
 
 For a full example of installing toolchains and dependencies across languages see [`codex/startup.sh`](codex/startup.sh).
