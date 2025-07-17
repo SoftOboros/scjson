@@ -1,7 +1,7 @@
 {
   "name": "scjson",
   "version": "0.1.5",
-  "description": "Convert SCXML to/from scjson (JSON-based representation of state machines)",
+  "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
   "keywords": [
     "scjson",
     "scxml",
