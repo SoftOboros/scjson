@@ -12,9 +12,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    wget \
     git \
     nano \
     python3 \
+    python3-venv \
     python3-pip \
     ruby-full \
     maven \
@@ -26,58 +28,54 @@ RUN apt-get update && apt-get install -y \
     golang-go \
     rustc \
     cargo \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js from official tarball
-RUN curl -fsSL https://nodejs.org/dist/v22.2.0/node-v22.2.0-linux-x64.tar.xz -o node.tar.xz \
-    && tar -xJf node.tar.xz -C /usr/local --strip-components=1 \
-    && rm node.tar.xz
+RUN wget https://download.swift.org/swift-6.1.2-release/ubuntu2204/swift-6.1.2-RELEASE/swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \
+    && tar -xzf swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \
+    && mv swift-6.1.2-RELEASE-ubuntu22.04 /opt/swift
 
-# Install Swift using Swiftly
-RUN curl -fsSL https://github.com/swift-server/swiftly/releases/download/1.0.1/swiftly-linux-amd64 -o /usr/local/bin/swiftly \
-    && chmod +x /usr/local/bin/swiftly \
-    && swiftly install 6.1.2
+ENV PATH="/opt/swift/usr/bin:$PATH"
 
 WORKDIR /opt/scjson
+
+# Upgrade node
+ENV NODE_VERSION=22.2.0
+RUN wget https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz \
+    && tar -xJf node-v$NODE_VERSION-linux-x64.tar.xz -C /usr/local --strip-components=1 \
+    && rm node-v$NODE_VERSION-linux-x64.tar.xz
+
+# Upgrade Rust
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# copy repo to container
 COPY . .
 
 # Replicate repository setup
-RUN git submodule update --init \
+RUN git submodule update --init 
+
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN cd py && pip install -r requirements.txt && cd .. \
     && cd js && npm ci && cd .. \
-    && cd py && pip install -r requirements.txt && cd .. \
-    && cd lua && luarocks install luaexpat --deps-mode=one && \
-       luarocks install dkjson --deps-mode=one && \
-       luarocks install busted --deps-mode=one && cd .. \
-    && cd ruby && gem install bundler && bundle install && cd .. \
-    && mkdir -p /root/.m2 \
-    && [ -f /root/.m2/settings.xml ] || (cat > /root/.m2/settings.xml <<'EOS'
-<settings>
-  <proxies>
-    <proxy>
-      <id>internal-proxy</id>
-      <active>true</active>
-      <protocol>http</protocol>
-      <host>proxy</host>
-      <port>8080</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
-    </proxy>
-    <proxy>
-      <id>internal-proxy-https</id>
-      <active>true</active>
-      <protocol>https</protocol>
-      <host>proxy</host>
-      <port>8080</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
-    </proxy>
-  </proxies>
-</settings>
-EOS
-) \
-    && cd java && mvn clean install -DskipTests -B && cd .. \
-    && cd rust && cargo clean && cargo fetch && cargo build --locked && cd .. \
+    && cd lua \
+        && luarocks install luaexpat --deps-mode=one \
+        && luarocks install dkjson --deps-mode=one \
+        && luarocks install busted --deps-mode=one \
+        && cd .. \
+    && cd ruby && gem install bundler && bundle install && cd ..
+
+# build compiled items.
+RUN cd java && mvn clean install -DskipTests -B && cd .. \
+    && cd rust && cargo clean && cargo fetch && cargo build -Znext-lockfile-bump --locked && cd .. \
     && cd swift && swift package resolve && swift build && cd .. \
     && cd go && go mod verify && go mod download && go build -mod=readonly && cd .. \
     && cd csharp/ScjsonCli && dotnet restore && dotnet build --no-restore && cd ../.. \
     && cd csharp/Scjson.Tests && dotnet restore && cd ../..
+
+# Setup proxy settings.xml separately
+COPY ./java/proxy-settings.xml /root/.m2/settings.xml
 
 CMD ["bash"]
