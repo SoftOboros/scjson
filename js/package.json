@@ -1,18 +1,45 @@
 {
   "name": "scjson",
-  "version": "1.0.0",
+  "version": "0.1.5",
   "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
+  "keywords": [
+    "scjson",
+    "scxml",
+    "state-machine",
+    "conversion",
+    "json",
+    "cli",
+    "xml"
+  ],
+  "homepage": "https://github.com/SoftOboros/scjson/tree/main/js",
+  "bugs": {
+    "url": "https://github.com/SoftOboros/scjson/issues"
+  },
+  "license": "BSD-1-Clause",
+  "author": "Softoboros Technology Inc. <ira@softoboros.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SoftOboros/scjson.git"
+  },
+  "bin": {
+    "scjson": "bin/scjson.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "index.js",
+    "tests/"
+  ],
   "main": "index.js",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "jest",
     "lint": "eslint"
-  },
-  "keywords": [],
-  "author": "Softoboros Technology Inc.",
-  "license": "BSD-1-Clause",
-  "type": "commonjs",
-  "bin": {
-    "scjson": "bin/scjson.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",
