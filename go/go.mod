@@ -1,4 +1,4 @@
-module scjson/go
+module scjson
 
 go 1.24.3
 

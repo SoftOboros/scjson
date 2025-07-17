@@ -1,15 +1,15 @@
 {
-  "name": "scjson-js",
+  "name": "scjson",
   "version": "1.0.0",
-  "description": "",
+  "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
   "main": "index.js",
   "scripts": {
     "test": "jest",
     "lint": "eslint"
   },
   "keywords": [],
-  "author": "",
-  "license": "MIT",
+  "author": "Softoboros Technology Inc.",
+  "license": "BSD-1-Clause",
   "type": "commonjs",
   "bin": {
     "scjson": "bin/scjson.js"

@@ -7,7 +7,7 @@
 //! Command line interface for scjson conversions.
 
 use clap::{Parser, Subcommand};
-use scjson_rust::{json_to_xml, xml_to_json};
+use scjson::{json_to_xml, xml_to_json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
