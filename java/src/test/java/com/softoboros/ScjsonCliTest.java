@@ -5,13 +5,13 @@
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
-package org.scjson;
+package com.softobros;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
-import org.scjson.ValidateCommand;
+import com.softobros.ValidateCommand;
 
 import java.nio.file.Path;
 

@@ -165,6 +165,27 @@ data validation and convenient `.model_dump()` helpers.
 
 Pydantic models with strict validation settings.
 
+### Other Resources
+github: [https://github.com/SoftOboros/scjson]
+```bash
+git clone https://github.com/SoftOboros/scjson.git
+
+git clone git@github.com:SoftOboros/scjson.git
+
+gh repo clone SoftOboros/scjson
+```
+
+npm: [https://www.npmjs.com/package/scjson]
+```bash
+npm install scjson
+```
+
+dockerhub: [https://hub.docker.com/r/iraa/scjson]
+(Full development environment for all supported languages)
+```bash
+docker pull iraa/scjson:latest
+```
+
 ## License
 
 All source code in this directory is released under the BSD&nbsp;1-Clause license. See `LICENSE` and `LEGAL.md` for details.

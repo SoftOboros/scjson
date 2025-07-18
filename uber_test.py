@@ -33,7 +33,7 @@ LANG_CMDS: dict[str, list[str]] = {
         "java",
         "-cp",
         str(ROOT / "java" / "target" / "scjson-0.1.0-SNAPSHOT.jar"),
-        "org.scjson.ScjsonCli",
+        "com.softobros.ScjsonCli",
     ],
     "csharp": [
         "dotnet",

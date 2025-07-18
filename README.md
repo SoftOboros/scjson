@@ -133,7 +133,7 @@ proxy, create `~/.m2/settings.xml` with proxy settings before building:
       <protocol>http</protocol>
       <host>proxy</host>
       <port>8080</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
+      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>s
     </proxy>
     <proxy>
       <id>internal-proxy-https</id>
@@ -158,10 +158,12 @@ pypi: [https://pypi.org/project/scjson/]
 ```bash
 pip install scjson
 ```
+
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
 ```
+
 dockerhub: [https://hub.docker.com/r/iraa/scjson]
 (Full development environment for all supported languages)
 ```bash

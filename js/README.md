@@ -29,4 +29,26 @@ scjson xml path/to/machine.scjson
 scjson validate path/to/dir -r
 ```
 
+### Other Resources
+github: [https://github.com/SoftOboros/scjson]
+```bash
+git clone https://github.com/SoftOboros/scjson.git
+
+git clone git@github.com:SoftOboros/scjson.git
+
+gh repo clone SoftOboros/scjson
+```
+
+pypi: [https://www.npmjs.com/package/scjson]
+```bash
+npm install scjson
+```
+
+dockerhub: [https://hub.docker.com/r/iraa/scjson]
+(Full development environment for all supported languages)
+```bash
+docker pull iraa/scjson:latest
+```
+
+
 All source code in this directory is released under the BSD\u00A01-Clause license. See `LICENSE` and `LEGAL.md` for details.

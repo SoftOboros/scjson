@@ -5,12 +5,12 @@
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
-package org.scjson;
+package com.softobros;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
-import org.scjson.ValidateCommand;
+import com.softobros.ValidateCommand;
 
 /**
  * Entry point for the scjson command line interface.

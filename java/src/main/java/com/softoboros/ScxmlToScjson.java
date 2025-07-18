@@ -1,11 +1,11 @@
 /**
- * Agent Name: scjson-to-scxml
+ * Agent Name: scxml-to-scjson
  *
  * Part of the scjson project.
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
-package org.scjson;
+package com.softobros;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -17,13 +17,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Command that converts SCJSON documents to SCXML format.
+ * Command that converts SCXML documents to SCJSON format.
  */
-@Command(name = "to-xml", description = "Convert SCJSON to SCXML")
-public class ScjsonToScxml implements java.util.concurrent.Callable<Integer> {
+@Command(name = "to-json", description = "Convert SCXML to SCJSON")
+public class ScxmlToScjson implements java.util.concurrent.Callable<Integer> {
 
     /** Input file or directory. */
-    @Parameters(paramLabel = "PATH", description = "SCJSON file or directory")
+    @Parameters(paramLabel = "PATH", description = "SCXML file or directory")
     private File path;
 
     /** Optional output file or directory. */
@@ -55,10 +55,10 @@ public class ScjsonToScxml implements java.util.concurrent.Callable<Integer> {
             Files.createDirectories(destDir);
         }
         Files.walk(srcDir, recursive ? Integer.MAX_VALUE : 1)
-                .filter(p -> p.toString().endsWith(".scjson"))
+                .filter(p -> p.toString().endsWith(".scxml"))
                 .forEach(p -> {
                     Path rel = srcDir.relativize(p);
-                    Path dest = destDir.resolve(rel).resolveSibling(rel.getFileName().toString().replaceFirst("\\.scjson$", ".scxml"));
+                    Path dest = destDir.resolve(rel).resolveSibling(rel.getFileName().toString().replaceFirst("\\.scxml$", ".scjson"));
                     try {
                         if (!verify && !Files.exists(dest.getParent())) {
                             Files.createDirectories(dest.getParent());
@@ -75,25 +75,25 @@ public class ScjsonToScxml implements java.util.concurrent.Callable<Integer> {
             return outOpt;
         }
         Path base = outOpt != null ? outOpt.toPath() : input.getParent();
-        String name = input.getFileName().toString().replaceFirst("\\.scjson$", ".scxml");
+        String name = input.getFileName().toString().replaceFirst("\\.scxml$", ".scjson");
         return base.resolve(name).toFile();
     }
 
     private void convertFile(Path input, Path output) throws IOException {
-        String json = Files.readString(input);
-        String xml = convertString(json);
+        String xml = Files.readString(input);
+        String json = convertString(xml);
         if (!verify) {
-            Files.writeString(output, xml);
+            Files.writeString(output, json);
         }
     }
 
     /**
-     * Convert SCJSON content to XML (placeholder implementation).
+     * Convert XML content to JSON (placeholder implementation).
      *
-     * @param json JSON string
-     * @return XML string
+     * @param xml XML string
+     * @return JSON string
      */
-    public static String convertString(String json) {
-        return "<?xml version=\"1.0\" encoding=\"utf-8\"?><scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\"/>";
+    public static String convertString(String xml) {
+        return "{\n  \"version\": 1.0\n}";
     }
 }

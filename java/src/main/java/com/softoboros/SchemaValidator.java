@@ -5,7 +5,7 @@
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
-package org.scjson;
+package com.softobros;
 
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.loader.SchemaLoader;
