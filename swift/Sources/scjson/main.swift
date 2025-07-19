@@ -8,6 +8,7 @@ Licensed under the BSD 1-Clause License.
 
 import Foundation
 import ArgumentParser
+import SCJSONKit
 
 /**
  Conversion utilities and CLI for SCXML <-> scjson.
@@ -159,9 +160,9 @@ extension SCJSON {
      - Returns: JSON representation.
      */
     static func xmlToJson(_ xml: String, omitEmpty: Bool = true) throws -> String {
-        let obj: [String: Any] = ["version": 1, "datamodel_attribute": "null"]
-        let jsonData = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted])
-        return String(data: jsonData, encoding: .utf8) ?? "{}"
+        let doc = ScjsonDocument(version: 1, datamodelAttribute: omitEmpty ? "null" : "")
+        let data = try JSONEncoder().encode(doc)
+        return String(data: data, encoding: .utf8) ?? "{}"
     }
 
     /** Convert scjson string to SCXML.
@@ -169,8 +170,9 @@ extension SCJSON {
      - Returns: SCXML representation.
      */
     static func jsonToXml(_ json: String) throws -> String {
-        _ = try JSONSerialization.jsonObject(with: Data(json.utf8))
-        return "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\"/>"
+        let data = Data(json.utf8)
+        let doc = try JSONDecoder().decode(ScjsonDocument.self, from: data)
+        return "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" datamodel=\"\(doc.datamodelAttribute)\"/>"
     }
 
     private static func convertScxmlFile(src: URL, dest: URL?, keepEmpty: Bool, verify: Bool) throws {
