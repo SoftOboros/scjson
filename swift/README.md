@@ -1,6 +1,6 @@
 # scjson Swift Package
 
-This directory contains the Swift implementation of **scjson**. The package exposes a command line tool that can convert between `.scxml` and `.scjson` and perform validation using the shared schema.
+This directory contains the Swift implementation of **scjson**. The package exposes a reusable library (`SCJSONKit`) and a command line tool that can convert between `.scxml` and `.scjson` and perform validation using the shared schema.
 
 ## Installation
 
@@ -9,6 +9,16 @@ swift build -c release
 ```
 
 After building, the `scjson` executable will be available in `.build/release`.
+
+## Library Usage
+
+Add `SCJSONKit` as a dependency in your `Package.swift` and import the models:
+
+```swift
+import SCJSONKit
+
+let doc = ScjsonDocument()
+```
 
 ## Command Line Usage
 
