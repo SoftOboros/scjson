@@ -23,6 +23,9 @@ export const defaultAssign = (): AssignProps => ({
     otherAttributes: {},
     content: [],
 });
+
+export type AssignArray = AssignProps[];
+
 export const AssignTypeDatatypeProps = {
     Addattribute: "addattribute",
     Delete: "delete",
@@ -63,6 +66,9 @@ export const defaultCancel = (): CancelProps => ({
     sendidexpr: null,
     otherAttributes: {},
 });
+
+export type CancelArray = CancelProps[];
+
 export interface ContentProps {
     otherAttributes: Record<string, object>;
     expr: string | null;
@@ -74,6 +80,9 @@ export const defaultContent = (): ContentProps => ({
     expr: null,
     content: [],
 });
+
+export type ContentArray = ContentProps[];
+
 export interface DataProps {
     id: string;
     src: string | null;
@@ -89,6 +98,9 @@ export const defaultData = (): DataProps => ({
     otherAttributes: {},
     content: [],
 });
+
+export type DataArray = DataProps[];
+
 export interface DatamodelProps {
     data: DataProps[];
     otherElement: Record<string, object>[];
@@ -100,6 +112,9 @@ export const defaultDatamodel = (): DatamodelProps => ({
     otherElement: [],
     otherAttributes: {},
 });
+
+export type DatamodelArray = DatamodelProps[];
+
 export interface DonedataProps {
     content: ContentProps | null;
     param: ParamProps[];
@@ -111,6 +126,9 @@ export const defaultDonedata = (): DonedataProps => ({
     param: [],
     otherAttributes: {},
 });
+
+export type DonedataArray = DonedataProps[];
+
 export interface ElseProps {
     otherAttributes: Record<string, object>;
 }
@@ -118,6 +136,7 @@ export interface ElseProps {
 export const defaultElse = (): ElseProps => ({
     otherAttributes: {},
 });
+
 export interface ElseifProps {
     cond: string;
     otherAttributes: Record<string, object>;
@@ -127,6 +146,7 @@ export const defaultElseif = (): ElseifProps => ({
     cond: "",
     otherAttributes: {},
 });
+
 export const ExmodeDatatypeProps = {
     Lax: "lax",
     Strict: "strict",
@@ -151,6 +171,9 @@ export const defaultFinal = (): FinalProps => ({
     id: null,
     otherAttributes: {},
 });
+
+export type FinalArray = FinalProps[];
+
 export interface FinalizeProps {
     otherElement: Record<string, object>[];
     raiseValue: RaiseProps[];
@@ -176,6 +199,9 @@ export const defaultFinalize = (): FinalizeProps => ({
     cancel: [],
     otherAttributes: {},
 });
+
+export type FinalizeArray = FinalizeProps[];
+
 export interface ForeachProps {
     otherElement: Record<string, object>[];
     raiseValue: RaiseProps[];
@@ -207,6 +233,9 @@ export const defaultForeach = (): ForeachProps => ({
     index: null,
     otherAttributes: {},
 });
+
+export type ForeachArray = ForeachProps[];
+
 export interface HistoryProps {
     otherElement: Record<string, object>[];
     transition: TransitionProps;
@@ -222,6 +251,9 @@ export const defaultHistory = (): HistoryProps => ({
     typeValue: null,
     otherAttributes: {},
 });
+
+export type HistoryArray = HistoryProps[];
+
 export const HistoryTypeDatatypeProps = {
     Deep: "deep",
     Shallow: "shallow",
@@ -260,6 +292,9 @@ export const defaultIf = (): IfProps => ({
     cond: "",
     otherAttributes: {},
 });
+
+export type IfArray = IfProps[];
+
 export interface InitialProps {
     otherElement: Record<string, object>[];
     transition: TransitionProps;
@@ -271,6 +306,9 @@ export const defaultInitial = (): InitialProps => ({
     transition: defaultTransition(),
     otherAttributes: {},
 });
+
+export type InitialArray = InitialProps[];
+
 export interface InvokeProps {
     content: ContentProps[];
     param: ParamProps[];
@@ -302,6 +340,9 @@ export const defaultInvoke = (): InvokeProps => ({
     autoforward: BooleanDatatypeProps.False,
     otherAttributes: {},
 });
+
+export type InvokeArray = InvokeProps[];
+
 export interface LogProps {
     otherElement: Record<string, object>[];
     label: string | null;
@@ -315,6 +356,9 @@ export const defaultLog = (): LogProps => ({
     expr: null,
     otherAttributes: {},
 });
+
+export type LogArray = LogProps[];
+
 export interface OnentryProps {
     otherElement: Record<string, object>[];
     raiseValue: RaiseProps[];
@@ -340,6 +384,9 @@ export const defaultOnentry = (): OnentryProps => ({
     cancel: [],
     otherAttributes: {},
 });
+
+export type OnentryArray = OnentryProps[];
+
 export interface OnexitProps {
     otherElement: Record<string, object>[];
     raiseValue: RaiseProps[];
@@ -365,6 +412,9 @@ export const defaultOnexit = (): OnexitProps => ({
     cancel: [],
     otherAttributes: {},
 });
+
+export type OnexitArray = OnexitProps[];
+
 export interface ParallelProps {
     onentry: OnentryProps[];
     onexit: OnexitProps[];
@@ -392,6 +442,9 @@ export const defaultParallel = (): ParallelProps => ({
     id: null,
     otherAttributes: {},
 });
+
+export type ParallelArray = ParallelProps[];
+
 export interface ParamProps {
     otherElement: Record<string, object>[];
     name: string;
@@ -407,6 +460,9 @@ export const defaultParam = (): ParamProps => ({
     location: null,
     otherAttributes: {},
 });
+
+export type ParamArray = ParamProps[];
+
 export interface RaiseProps {
     event: string;
     otherAttributes: Record<string, object>;
@@ -416,6 +472,9 @@ export const defaultRaise = (): RaiseProps => ({
     event: "",
     otherAttributes: {},
 });
+
+export type RaiseArray = RaiseProps[];
+
 export interface ScriptProps {
     src: string | null;
     otherAttributes: Record<string, object>;
@@ -427,6 +486,9 @@ export const defaultScript = (): ScriptProps => ({
     otherAttributes: {},
     content: [],
 });
+
+export type ScriptArray = ScriptProps[];
+
 export interface ScxmlProps {
     state: StateProps[];
     parallel: ParallelProps[];
@@ -458,6 +520,7 @@ export const defaultScxml = (): ScxmlProps => ({
     exmode: null,
     otherAttributes: {},
 });
+
 export interface SendProps {
     content: ContentProps[];
     param: ParamProps[];
@@ -493,6 +556,9 @@ export const defaultSend = (): SendProps => ({
     namelist: null,
     otherAttributes: {},
 });
+
+export type SendArray = SendProps[];
+
 export interface StateProps {
     onentry: OnentryProps[];
     onexit: OnexitProps[];
@@ -526,6 +592,9 @@ export const defaultState = (): StateProps => ({
     initialAttribute: [],
     otherAttributes: {},
 });
+
+export type StateArray = StateProps[];
+
 export interface TransitionProps {
     otherElement: Record<string, object>[];
     raiseValue: RaiseProps[];
@@ -559,6 +628,9 @@ export const defaultTransition = (): TransitionProps => ({
     typeValue: null,
     otherAttributes: {},
 });
+
+export type TransitionArray = TransitionProps[];
+
 export const TransitionTypeDatatypeProps = {
     External: "external",
     Internal: "internal",
@@ -571,7 +643,11 @@ export type Kind = "number" | "string" | "record<string, object>" | "number[]" |
                    | "cancel" | "content" | "data" | "datamodel" | "donedata" | "else" | "elseif"
                    | "exmodedatatype" | "final" | "finalize" | "foreach" | "history" | "historytypedatatype" | "if"
                    | "initial" | "invoke" | "log" | "onentry" | "onexit" | "parallel" | "param" | "raise"
-                   | "script" | "scxml" | "send" | "state" | "transition" | "transitiontypedatatype";
+                   | "script" | "scxml" | "send" | "state" | "transition" | "transitiontypedatatype"
+                   | "assignarray" | "cancelarray" | "contentarray" | "dataarray" | "datamodelarray"
+                   | "donedataarray" | "finalarray" | "finalizearray" | "foreacharray" | "historyarray" | "ifarray"
+                   | "initialarray" | "invokearray" | "logarray" | "onentryarray" | "onexitarray" | "parallelarray"
+                   | "paramarray" | "raisearray" | "scriptarray" | "sendarray" | "statearray" | "transitionarray";
 
 export type PropsUnion = null | string | number | Record<string, object> | string[] | number[]
                          | Record<string, object>[] | AssignProps | AssignTypeDatatypeProps | BindingDatatypeProps
@@ -579,40 +655,67 @@ export type PropsUnion = null | string | number | Record<string, object> | strin
                          | ElseProps | ElseifProps | ExmodeDatatypeProps | FinalProps | FinalizeProps | ForeachProps
                          | HistoryProps | HistoryTypeDatatypeProps | IfProps | InitialProps | InvokeProps | LogProps
                          | OnentryProps | OnexitProps | ParallelProps | ParamProps | RaiseProps | ScriptProps
-                         | ScxmlProps | SendProps | StateProps | TransitionProps | TransitionTypeDatatypeProps;
+                         | ScxmlProps | SendProps | StateProps | TransitionProps | TransitionTypeDatatypeProps
+                         | AssignArray | CancelArray | ContentArray | DataArray | DatamodelArray | DonedataArray
+                         | FinalArray | FinalizeArray | ForeachArray | HistoryArray | IfArray | InitialArray
+                         | InvokeArray | LogArray | OnentryArray | OnexitArray | ParallelArray | ParamArray
+                         | RaiseArray | ScriptArray | SendArray | StateArray | TransitionArray;
 
 export type KindMap = {
     assign: AssignProps
+    assignarray: AssignArray
     assigntypedatatype: AssignTypeDatatypeProps
     bindingdatatype: BindingDatatypeProps
     booleandatatype: BooleanDatatypeProps
     cancel: CancelProps
+    cancelarray: CancelArray
     content: ContentProps
+    contentarray: ContentArray
     data: DataProps
+    dataarray: DataArray
     datamodel: DatamodelProps
+    datamodelarray: DatamodelArray
     donedata: DonedataProps
+    donedataarray: DonedataArray
     else: ElseProps
     elseif: ElseifProps
     exmodedatatype: ExmodeDatatypeProps
     final: FinalProps
+    finalarray: FinalArray
     finalize: FinalizeProps
+    finalizearray: FinalizeArray
     foreach: ForeachProps
+    foreacharray: ForeachArray
     history: HistoryProps
+    historyarray: HistoryArray
     historytypedatatype: HistoryTypeDatatypeProps
     if: IfProps
+    ifarray: IfArray
     initial: InitialProps
+    initialarray: InitialArray
     invoke: InvokeProps
+    invokearray: InvokeArray
     log: LogProps
+    logarray: LogArray
     onentry: OnentryProps
+    onentryarray: OnentryArray
     onexit: OnexitProps
+    onexitarray: OnexitArray
     parallel: ParallelProps
+    parallelarray: ParallelArray
     param: ParamProps
+    paramarray: ParamArray
     raise: RaiseProps
+    raisearray: RaiseArray
     script: ScriptProps
+    scriptarray: ScriptArray
     scxml: ScxmlProps
     send: SendProps
+    sendarray: SendArray
     state: StateProps
+    statearray: StateArray
     transition: TransitionProps
+    transitionarray: TransitionArray
     transitiontypedatatype: TransitionTypeDatatypeProps
 }
 

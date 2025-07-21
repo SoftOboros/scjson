@@ -188,11 +188,12 @@ def validate(path: Path, recursive: bool):
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
 def typescript(output: Path | None):
     """Create typescrupt Type files for scjson."""
-    print(f"Convert Scjson tyoe for typescript - Path: {output}")
+    print(f"Convert Scjson type for typescript - Path: {output}")
     Gen = JinjaGenPydantic(output=output)
     base_dir = os.path.abspath(output)
     interfaces = Gen.interfaces
-    schema = Gen.schemas
+    schemas = Gen.schemas
+    all_arrays = Gen.all_arrays
     os.makedirs(base_dir, exist_ok=True)
     is_runtime = True
     file_name = "scjsonProps.ts"

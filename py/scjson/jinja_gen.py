@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import importlib
 import inspect
+from typing import List
 from enum import Enum
 from pydantic import BaseModel
 from jinja2 import Environment, select_autoescape, FileSystemLoader
@@ -35,7 +36,7 @@ class JinjaGenPydantic(object):
         self.objekts = {}
         self.schema = {}
         self.array_types = []
-        self.env = Environment(loader=FileSystemLoader(my_path),
+        self.env = Environment(loader=FileSystemLoader(self.template_path),
                 autoescape=select_autoescape([]),
                 trim_blocks=True,
                 extensions=["jinja2.ext.do"]  # This enables {% do %}
@@ -50,6 +51,7 @@ class JinjaGenPydantic(object):
         self.env.globals.update(str=str)
         self.env.globals.update(    get_field_default=JinjaGenPydantic._get_default_value,
                                     get_field_type=JinjaGenPydantic._get_field_type,
+                                    get_schema_types=JinjaGenPydantic._get_schema_types,
                                     list_join=JinjaGenPydantic._list_join,
                                     is_field_enum=JinjaGenPydantic._is_field_enum,
                                 )
@@ -166,6 +168,28 @@ class JinjaGenPydantic(object):
         # None -> null, integer -> number, else ->
         return ret_val
 
+    def _get_schema_types(schema: dict, name: str = "") -> List[str]:
+        """Template helper to return the reference type from teh schema."""
+        t_list = [f'{name}'] if name else []
+        for _, prop in schema['properties'].items():
+            if "type" in prop:
+                if prop["type"].find('$ref') == 0:
+                    t_list.append(f'{prop["$ref"].split("/")[-1]}[]')
+                elif prop["type"] == "array" and "items" in prop:
+                    if type(prop["items"]) == dict and '$ref' in prop["items"]:
+                        t_list.append(JinjaGenPydantic._get_field_type(prop["items"])[:-5] + '[]')
+            elif "anyOf" in prop:
+                for option in prop["anyOf"]:
+                    if "$ref" in option:
+                        t_name = f'{option["$ref"].split("/")[-1]}'
+                        if 'enum' not in schema['$defs'][t_name]:
+                            t_list.append(t_name)
+            elif '$ref' in prop:
+                t_name = f'{prop["$ref"].split("/")[-1]}'
+                if 'enum' not in schema['$defs'][t_name]:
+                    t_list.append(t_name)
+        return set(t_list)
+
     def _is_field_enum(prop: dict | str, schema: dict) -> bool:
         "Templat helper function to "
         ret_val = False
@@ -191,7 +215,6 @@ class JinjaGenPydantic(object):
             join_list.append(pre + field + post)
         ret_val.append(sep.join(join_list))
         return ("\n" + indent * " " + sep).join(ret_val)
-
 
     def _check_props(self, objekt, name) -> bool:
         """Check for missing props and update from references."""

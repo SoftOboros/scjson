@@ -32,6 +32,7 @@ export const default{{ if_name }} = (): {{ if_name }}Props => ({
     {{ to_camel(field_name) }}: {{ get_field_default(field, schem["$defs"])}},
 {% endfor %}
 });
+
 {% else %}
 export declare const default{{ if_name }}: () => {{ if_name }}Props;
 
@@ -66,10 +67,10 @@ export declare const {{pascal_name}}Props: {
 };
 
 {% endif %}
+{% endif %}
 {% if if_name in all_arrays %}
 export type {{ if_name }}Array = {{ if_name }}Props[];
 
-{% endif %}
 {% endif %}
 {%- endfor %}
 {% set kinds = ['"number"', '"string"', '"record<string, object>"', '"number[]"', '"string[]"', '"record<string, object>[]"'] %}
