@@ -12,7 +12,7 @@
 
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import Ajv from 'ajv';
-import schema from '../scjson.schema.json' assert { type: 'json' };
+import schema from './scjson.schema.json';
 
 const ajv = new Ajv({ useDefaults: true, strict: false });
 const validate = ajv.compile(schema);

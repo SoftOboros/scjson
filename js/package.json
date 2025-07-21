@@ -1,6 +1,6 @@
 {
   "name": "scjson",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
   "keywords": [
     "scjson",
@@ -31,21 +31,34 @@
   "type": "commonjs",
   "exports": {
     ".": "./index.js",
-    "./browser": "./browser.mjs"
+    "./props": "./scjsonProps.ts",
+    "./browser": {
+      "import": "./browser.mjs",
+      "require": "./browser.cjs"
+    }
   },
   "typesVersions": {
     "*": {
       "browser": [
         "/types/scjson-browser.d.ts"
+      ],
+      "props": [
+        "/types/scjsonProps.d.ts"
       ]
+
     }
   },
+  "types": "types/*",
   "files": [
     "bin/",
     "index.js",
     "browser.mjs",
+    "browser.cjs",
+    "scjsonProps.ts",
     "types/scjson-browser.d.ts",
+    "types/scjsonProps.d.ts",
     "tests/",
+    "scjson.schema.json",
     "README.md",
     "LEGAL.md",
     "LICENSE"

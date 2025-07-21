@@ -2,6 +2,8 @@
 
 This directory contains the Python implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface and utility functions to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
 
+The package includes pydantic and dataclasses types for the associated objects / enums in both standard and strict forms.
+
 ## Installation
 
 ```bash
@@ -35,10 +37,16 @@ After installation the `scjson` command is available:
 scjson json path/to/machine.scxml
 
 # Convert back to SCXML
-scjson xml path/to/machine.scjson
+scjson xml path/to/machine.scjson - o path/to/output.scxml
 
 # Validate recursively
 scjson validate path/to/dir -r
+
+# Genrate typescript Types
+scjson  typescript -o dir/of/output
+
+# Genrate scjson.schema.json
+scjson  schema -o dir/of/output
 ```
 
 ## FastAPI example Usage
@@ -74,6 +82,16 @@ async def post_xml(slug: str, request: Request):
     data.setdefault("name", slug)
     store[slug] = data
     return data
+```
+
+## Importing Objects.
+This imports the definitions of individual types.  See below for lib variats.
+Class varaints available for pydantic and dataclasses implementing both the
+standard and strict xsd variants.
+
+```python
+from scjson.pydantic import Scxml, State, Transition, Onentry # etc.
+
 ```
 
 ## SCJSON Caveats
