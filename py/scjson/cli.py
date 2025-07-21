@@ -1,7 +1,10 @@
+import os
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
+from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError
+from json import dumps
 
 def _get_metadata(pkg="scjson"):
     try:
@@ -180,6 +183,38 @@ def validate(path: Path, recursive: bool):
     if not success:
         raise SystemExit(1)
 
+
+@main.command(help="Create typescrupt Type files for scjson")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
+def typescript(output: Path | None):
+    """Create typescrupt Type files for scjson."""
+    print(f"Convert Scjson tyoe for typescript - Path: {output}")
+    Gen = JinjaGenPydantic(output=output)
+    base_dir = os.path.abspath(output)
+    interfaces = Gen.interfaces
+    schema = Gen.schemas
+    os.makedirs(base_dir, exist_ok=True)
+    is_runtime = True
+    file_name = "scjsonProps.ts"
+    file_description = "Properties runtime file for scjson types"
+    Gen.render_to_file(file_name, "scjson_props.ts.jinja2", locals())
+    is_runtime = False
+    file_name = "scjsonProps.d.ts"
+    file_description = "Properties definition file for scjson types"
+    Gen.render_to_file(f"types/{file_name}", "scjson_props.ts.jinja2", locals())
+
+
+@main.command(help="Export scjson.schema.json")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
+def schema(output: Path | None):
+    """Export scjson.schema.json."""
+    Gen = JinjaGenPydantic(output=output)
+    base_dir = os.path.abspath(output)
+    outname = os.path.join(base_dir, "scjson.schema.json")
+    os.makedirs(base_dir, exist_ok=True)
+    with open(outname, "w") as schemafile:
+        schemafile.write(dumps(Gen.schemas["Scxml"], indent=4)) 
+    print(f'Generated: {outname}')
 
 if __name__ == "__main__":
     main()

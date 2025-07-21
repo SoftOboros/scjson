@@ -1,0 +1,21 @@
+{#
+    base.ts.jinja2  : A Base template for typescript client files. 
+-#}
+{% block file_header %}{#       The 'file_header' block is to be overloaded to add custom file_heades #}
+{% endblock %}
+{% block imports %}{#           The 'file_imports' block is to be overloaded to add custom imports #}
+{% block system_imports %}{#    The 'system_imports' block is to be overloaded to add custom imports #}
+{% endblock %}
+{% block chakra_imports %}{#    The 'chakra_imports' block is to be overloaded to add custom imports #}
+{% endblock %}
+{% block internal_imports %}{#  The 'chakra_components' block is to be overloaded to add custom imports #}
+{% endblock %}
+{% endblock %}
+{% block types %}{#             The 'types' block is to be overloaded to types #}
+{% endblock %}
+{% block interfaces %}{#        The 'interfaces' block is to be overloaded to interfaces #}
+{% endblock %}
+{% block constants %}{#         The 'internal_constants' block is to be overloaded to add internal objs #}
+{% endblock %}
+{% block exports %}{#           The 'exports' block is to be overloaded to exported objects#}
+{% endblock %}
