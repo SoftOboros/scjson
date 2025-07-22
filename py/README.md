@@ -211,5 +211,5 @@ docker pull iraa/scjson:latest
 
 ## License
 
-All source code in this directory is released under the BSD&nbsp;1-Clause license. See `LICENSE` and `LEGAL.md` for details.
+All source code in this directory is released under the BSD&nbsp;1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.
 
