@@ -137,7 +137,7 @@ pypi: [https://pypi.org/project/scjson/]
 pip install scjson
 ```
 
-cargo: [https://cargo.io/crates/scjson]
+cargo: [https://crates.io/crates/scjson]
 ```bash
 cargo install scjson
 ```
