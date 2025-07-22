@@ -6,8 +6,6 @@ Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 """
 
-"""Cross-language conversion test runner."""
-
 from __future__ import annotations
 
 import json
@@ -15,6 +13,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
+
+pytest.skip(
+    "Uber tests require external runtimes", allow_module_level=True
+)
 
 from py.scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
