@@ -132,9 +132,14 @@ git clone git@github.com:SoftOboros/scjson.git
 gh repo clone SoftOboros/scjson
 ```
 
-pypi: [https://www.npmjs.com/package/scjson]
+pypi: [https://pypi.org/project/scjson/]
 ```bash
-npm install scjson
+pip install scjson
+```
+
+cargo: [https://cargo.io/crates/scjson]
+```bash
+cargo install scjson
 ```
 
 dockerhub: [https://hub.docker.com/r/iraa/scjson]

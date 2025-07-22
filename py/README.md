@@ -198,6 +198,11 @@ npm: [https://www.npmjs.com/package/scjson]
 npm install scjson
 ```
 
+cargo: [https://cargo.io/crates/scjson]
+```bash
+cargo install scjson
+```
+
 dockerhub: [https://hub.docker.com/r/iraa/scjson]
 (Full development environment for all supported languages)
 ```bash

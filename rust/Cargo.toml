@@ -2,7 +2,15 @@ cargo-features = ["edition2024"]
 [package]
 name = "scjson"
 version = "0.2.1"
+authors = ["Ira Abbott ira@softobotos.com"]
 edition = "2024"
+license = "BSD-1-Clause"
+description = "SCXML to JSON converter, part of the multi-language scjson ecosystem"
+readme = "README.md"
+repository = "https://github.com/softoboros/scjson"
+homepage = "https://github.com/softoboros/scjson"
+keywords = ["scxml", "json", "converter", "cli", "xml"]
+categories = ["parser-implementations", "data-structures", "command-line-utilities"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
