@@ -365,11 +365,17 @@ class DocumentContext(BaseModel):
         doc = Scxml.model_validate_json(json_str)
         return cls.from_doc(doc)
 
-    def run(self, steps: int = 1) -> None:
-        """Execute ``steps`` microsteps of the state machine.
+    def run(self, steps: int | None = None) -> None:
+        """Execute pending events.
+
+        When ``steps`` is ``None`` (the default), microsteps continue until the
+        event queue is empty.  Otherwise, up to ``steps`` microsteps are
+        executed.
 
         Args:
-            steps: Number of microsteps to execute.
+            steps: Optional microstep limit.
         """
-        for _ in range(steps):
+        count = 0
+        while self.events and (steps is None or count < steps):
             self.microstep()
+            count += 1

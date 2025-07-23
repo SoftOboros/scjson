@@ -38,6 +38,24 @@ def _make_cond_doc() -> Scxml:
     )
 
 
+def _make_local_data_doc() -> Scxml:
+    """Root data overridden by state-scoped <data> entry."""
+    return Scxml(
+        id="shadow",
+        initial=["s"],
+        datamodel=[Datamodel(data=[Data(id="flag", expr="0")])],
+        state=[
+            State(
+                id="s",
+                datamodel=[Datamodel(data=[Data(id="flag", expr="1")])],
+                transition=[Transition(event="go", target=["t"], cond="flag == 1")],
+            ),
+            State(id="t"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
 def test_initial_configuration():
     """Ensure initial states are entered on context creation."""
     ctx = DocumentContext.from_doc(_make_doc())
@@ -66,3 +84,11 @@ def test_transition_condition():
     ctx2.enqueue("go")
     ctx2.microstep()
     assert "b" not in ctx2.configuration
+
+
+def test_state_scoped_datamodel():
+    """State-level <data> should shadow global variables."""
+    ctx = DocumentContext.from_doc(_make_local_data_doc())
+    ctx.enqueue("go")
+    ctx.microstep()
+    assert "t" in ctx.configuration
