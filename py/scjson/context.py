@@ -11,7 +11,7 @@ Runtime execution context with onentry/onexit and history support.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Deque
+from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,79 +23,11 @@ from .pydantic import (
     ScxmlFinalType,
     State,
 )
-from collections import deque
-from enum import Enum
+from .events import Event, EventQueue
+from .activation import ActivationRecord, TransitionSpec
 
 
 SCXMLNode = State | ScxmlParallelType | ScxmlFinalType | History | Scxml
-
-
-class Event(BaseModel):
-    name: str
-    data: Any | None = None
-
-
-class EventQueue:
-    """Simple FIFO for external/internal events."""
-
-    def __init__(self) -> None:
-        self._q: Deque[Event] = deque()
-
-    def push(self, evt: Event) -> None:
-        self._q.append(evt)
-
-    def pop(self) -> Optional[Event]:
-        return self._q.popleft() if self._q else None
-
-    def __bool__(self) -> bool:
-        return bool(self._q)
-
-
-class ActivationStatus(str, Enum):
-    ACTIVE = "active"
-    FINAL = "final"
-
-
-class TransitionSpec(BaseModel):
-    """Simplified representation of a transition."""
-
-    event: Optional[str] = None
-    target: List[str] = Field(default_factory=list)
-    cond: Optional[str] = None
-
-
-class ActivationRecord(BaseModel):
-    """Runtime frame for an entered state/parallel/final element."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    id: str
-    node: SCXMLNode
-    parent: Optional["ActivationRecord"] = None
-    status: ActivationStatus = ActivationStatus.ACTIVE
-    local_data: Dict[str, Any] = Field(default_factory=dict)
-    children: List["ActivationRecord"] = Field(default_factory=list)
-    transitions: List["TransitionSpec"] = Field(default_factory=list)
-
-    def mark_final(self) -> None:
-        self.status = ActivationStatus.FINAL
-        if self.parent and all(c.status is ActivationStatus.FINAL for c in self.parent.children):
-            self.parent.mark_final()
-
-    def add_child(self, child: "ActivationRecord") -> None:
-        self.children.append(child)
-
-    def is_active(self) -> bool:  # noqa: D401
-        """Return *True* while the activation is not finalised."""
-        return self.status is ActivationStatus.ACTIVE
-
-    def path(self) -> List["ActivationRecord"]:
-        cur: Optional["ActivationRecord"] = self
-        out: List["ActivationRecord"] = []
-        while cur:
-            out.append(cur)
-            cur = cur.parent
-        return list(reversed(out))
 
 
 class DocumentContext(BaseModel):
