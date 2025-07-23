@@ -61,15 +61,30 @@ class EventQueue:
     """Simple FIFO for external/internal events."""
 
     def __init__(self) -> None:
+        """Create an empty queue."""
+
         self._q: Deque[Event] = deque()
 
     def push(self, evt: Event) -> None:
+        """Append ``evt`` to the queue.
+
+        :param evt: ``Event`` instance to enqueue.
+        :returns: ``None``
+        """
+
         self._q.append(evt)
 
     def pop(self) -> Optional[Event]:
+        """Remove and return the next event if available.
+
+        :returns: The next ``Event`` or ``None`` when empty.
+        """
+
         return self._q.popleft() if self._q else None
 
     def __bool__(self) -> bool:
+        """Return ``True`` if any events are queued."""
+
         return bool(self._q)
 
 
@@ -109,11 +124,19 @@ class ActivationRecord(BaseModel):
     # ------------------------------------------------------------------ #
 
     def mark_final(self) -> None:
+        """Flag this activation and its ancestors as final when complete."""
+
         self.status = ActivationStatus.FINAL
         if self.parent and all(c.status is ActivationStatus.FINAL for c in self.parent.children):
             self.parent.mark_final()
 
     def add_child(self, child: "ActivationRecord") -> None:
+        """Add ``child`` to this activation's children list.
+
+        :param child: Activation record to attach.
+        :returns: ``None``
+        """
+
         self.children.append(child)
 
     # ------------------------------------------------------------------ #
@@ -125,6 +148,11 @@ class ActivationRecord(BaseModel):
         return self.status is ActivationStatus.ACTIVE
 
     def path(self) -> List["ActivationRecord"]:
+        """Return the ancestry chain from root to ``self``.
+
+        :returns: ``list`` of activations starting at the root.
+        """
+
         cur: Optional["ActivationRecord"] = self
         out: List["ActivationRecord"] = []
         while cur:
