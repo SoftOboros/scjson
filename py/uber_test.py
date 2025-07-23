@@ -12,21 +12,23 @@ import json
 import shutil
 import subprocess
 import sys
+from os import sep
+from os.path import abspath, split as pathsplit
 from pathlib import Path
 
 import pytest
 
-pytest.skip(
-    "Uber tests require external runtimes", allow_module_level=True
-)
+#pytest.skip(
+#    "Uber tests require external runtimes", allow_module_level=True
+#)
 
-from py.scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(sep.join(pathsplit(str(Path(__file__).resolve().parent))[:-1]))
 TUTORIAL = ROOT / "tutorial"
 
 LANG_CMDS: dict[str, list[str]] = {
-    "python": [sys.executable, "-m", "scjson.cli"],
+    "python": [sys.executable, "-m", "scjson"],
     "javascript": ["node", str(ROOT / "js" / "bin" / "scjson.js")],
     "ruby": ["ruby", str(ROOT / "ruby" / "bin" / "scjson")],
     "lua": ["lua5.4", str(ROOT / "lua" / "bin" / "scjson")],
@@ -60,6 +62,7 @@ def _available(cmd: list[str]) -> bool:
 def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Path, dict]:
     result = {}
     for f in files:
+        print(f)
         data = f.read_text(encoding="utf-8")
         result[f] = json.loads(handler.xml_to_json(data))
     return result
