@@ -54,5 +54,7 @@ public class ScxmlRunnerTest {
                 .toList();
         assertTrue(entered.containsAll(List.of("s0", "s1", "s2", "pass")),
                 "Did not traverse all expected states");
+        assertTrue(!entered.contains("fail"),
+                "Machine entered unexpected fail state");
     }
 }
