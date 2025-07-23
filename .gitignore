@@ -15,7 +15,9 @@ js/node_modules
 # Rust build artifacts
 rust/target/
 go/go
+go/scjson
 java/target/
+java/commons-scxml/
 swift/.build/
 csharp/**/bin/
 csharp/**/obj/
