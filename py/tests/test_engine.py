@@ -92,3 +92,17 @@ def test_state_scoped_datamodel():
     ctx.enqueue("go")
     ctx.microstep()
     assert "t" in ctx.configuration
+
+
+def test_eval_condition_bad_syntax():
+    """Invalid syntax should not raise exceptions."""
+    ctx = DocumentContext.from_doc(_make_doc())
+    result = ctx._eval_condition("flag ==", ctx.root_activation)
+    assert result is False
+
+
+def test_eval_condition_missing_variable():
+    """Undefined variables are treated as false."""
+    ctx = DocumentContext.from_doc(_make_doc())
+    result = ctx._eval_condition("unknown", ctx.root_activation)
+    assert result is False
