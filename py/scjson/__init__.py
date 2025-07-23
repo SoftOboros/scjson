@@ -8,7 +8,7 @@ Licensed under the BSD 1-Clause License.
 scjson conversion tools.
 """
 
-from .engine import DocumentContext
+from .context import DocumentContext
 from .json_stream import JsonStreamDecoder
 
 __all__ = ["DocumentContext", "JsonStreamDecoder"]

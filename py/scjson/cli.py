@@ -11,7 +11,7 @@ import sys
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
-from .engine import DocumentContext
+from .context import DocumentContext
 from .json_stream import JsonStreamDecoder
 from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError

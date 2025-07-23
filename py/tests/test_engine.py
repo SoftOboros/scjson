@@ -8,7 +8,7 @@ Licensed under the BSD 1-Clause License.
 
 from decimal import Decimal
 from scjson.pydantic import Scxml, State, Transition, Datamodel, Data
-from scjson.engine import DocumentContext
+from scjson.context import DocumentContext
 
 
 def _make_doc():
@@ -56,6 +56,47 @@ def _make_local_data_doc() -> Scxml:
     )
 
 
+def _make_entry_exit_doc() -> Scxml:
+    """State machine with onentry/onexit assignments."""
+    return Scxml(
+        id="actions",
+        datamodel=[Datamodel(data=[Data(id="count", expr="0")])],
+        initial=["a"],
+        state=[
+            State(
+                id="a",
+                onentry=[{"assign": [{"location": "count", "expr": "count + 1"}]}],
+                onexit=[{"assign": [{"location": "count", "expr": "count + 2"}]}],
+                transition=[Transition(event="go", target=["b"])],
+            ),
+            State(id="b"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def _make_history_doc() -> Scxml:
+    """Parent state with history."""
+    return Scxml(
+        id="hist",
+        initial=["p"],
+        state=[
+            State(
+                id="p",
+                initial_attribute=["s1"],
+                history=[{"id": "h", "transition": Transition(target=["s1"])}],
+                state=[
+                    State(id="s1", transition=[Transition(event="next", target=["s2"])]),
+                    State(id="s2")
+                ],
+                transition=[Transition(event="toQ", target=["q"])]
+            ),
+            State(id="q", transition=[Transition(event="back", target=["h"])]),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
 def test_initial_configuration():
     """Ensure initial states are entered on context creation."""
     ctx = DocumentContext.from_doc(_make_doc())
@@ -93,7 +134,7 @@ def test_state_scoped_datamodel():
     ctx.microstep()
     assert "t" in ctx.configuration
 
-
+    
 def test_eval_condition_bad_syntax():
     """Invalid syntax should not raise exceptions."""
     ctx = DocumentContext.from_doc(_make_doc())
@@ -106,3 +147,26 @@ def test_eval_condition_missing_variable():
     ctx = DocumentContext.from_doc(_make_doc())
     result = ctx._eval_condition("unknown", ctx.root_activation)
     assert result is False
+
+    
+def test_onentry_onexit_actions():
+    """onentry/onexit assign actions should update variables."""
+    ctx = DocumentContext.from_doc(_make_entry_exit_doc())
+    assert ctx.data_model["count"] == 1
+    ctx.enqueue("go")
+    ctx.microstep()
+    assert ctx.data_model["count"] == 3
+
+
+def test_history_state_restore():
+    """History states restore last active child."""
+    ctx = DocumentContext.from_doc(_make_history_doc())
+    ctx.enqueue("next")
+    ctx.microstep()
+    assert "s2" in ctx.configuration
+    ctx.enqueue("toQ")
+    ctx.microstep()
+    assert "q" in ctx.configuration and "p" not in ctx.configuration
+    ctx.enqueue("back")
+    ctx.microstep()
+    assert "p" in ctx.configuration and "s2" in ctx.configuration
