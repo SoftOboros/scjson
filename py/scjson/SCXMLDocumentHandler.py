@@ -1,3 +1,14 @@
+"""
+Agent Name: scxml-document-handler
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+
+Utilities for loading, validating, and converting SCXML documents to and from
+their JSON representation.
+"""
+
 from typing import Optional, Type, Union, Any, get_args, get_origin
 from enum import Enum
 from decimal import Decimal
