@@ -1,0 +1,6 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="start">
+    <state id="start">
+        <transition event="go" target="end"/>
+    </state>
+    <final id="end"/>
+</scxml>
