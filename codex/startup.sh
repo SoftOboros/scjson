@@ -1,3 +1,10 @@
+#!/bin/bash
+# Agent Name: startup-script
+#
+# Part of the scjson project.
+# Developed by Softoboros Technology Inc.
+# Licensed under the BSD 1-Clause License.
+
 apt update && apt install -y nano maven gradle lua5.4 luarocks dotnet-sdk-8.0
 unset NPM_CONFIG_HTTP_PROXY
 unset NPM_CONFIG_HTTPS_PROXY
@@ -43,7 +50,8 @@ cd java \
   && git checkout tags/commons-scxml2-2.0-M1 -b scxml-2.0-M1 \
   && mvn clean install -DskipTests -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 \
   && cd ..
-  && mvn clean install -DskipTests -B -Dmaven.compiler.source=8 -Dmaven.compiler.target=8\
+  && mvn clean install -DskipTests -B -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 \
+  && mvn -q -DskipTests dependency:go-offline \
   && cd ..
 cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
 cd swift && swift package resolve && swift build && cd ..
