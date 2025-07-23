@@ -8,6 +8,8 @@ Licensed under the BSD 1-Clause License.
 
 import os
 import sys
+import contextlib
+from typing import TextIO
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
@@ -230,33 +232,55 @@ def schema(output: Path | None):
 
 
 @main.command(help="Run a document using the demo engine.")
-@click.option("--input", "-I", "input_path", required=True, type=click.Path(exists=True, path_type=Path), help="SCJSON/SCXML document")
-@click.option("--output", "-o", "workdir", type=click.Path(path_type=Path), help="Working directory")
+@click.option(
+    "--input",
+    "-I",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="SCJSON/SCXML document",
+)
+@click.option(
+    "--output",
+    "-o",
+    "workdir",
+    type=click.Path(path_type=Path),
+    help="Working directory",
+)
 @click.option("--xml", "is_xml", is_flag=True, default=False, help="Input is SCXML")
-def run(input_path: Path, workdir: Path | None, is_xml: bool):
+def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     """Execute a document with the demo engine.
 
     Args:
         input_path: Path to the SCJSON or SCXML document.
-        workdir: Directory used for any runtime output.
+        workdir: Directory used for runtime output and event logs.
         is_xml: Treat ``input_path`` as SCXML when ``True``.
+
+    Returns:
+        ``None``
     """
+
+    sink: TextIO = sys.stdout
     if workdir:
         workdir.mkdir(parents=True, exist_ok=True)
+        sink_path = workdir / "events.log"
+        sink = open(sink_path, "w", encoding="utf-8")
     ctx = (
         DocumentContext.from_xml_file(input_path)
         if is_xml
         else DocumentContext.from_json_file(input_path)
     )
     ctx.enqueue("start")
-    ctx.run()
-
-    for msg in JsonStreamDecoder(sys.stdin):
-        evt = msg.get("event") or msg.get("name")
-        data = msg.get("data")
-        if evt:
-            ctx.enqueue(evt, data)
-            ctx.run()
+    with contextlib.redirect_stdout(sink):
+        ctx.run()
+        for msg in JsonStreamDecoder(sys.stdin):
+            evt = msg.get("event") or msg.get("name")
+            data = msg.get("data")
+            if evt:
+                ctx.enqueue(evt, data)
+                ctx.run()
+    if sink is not sys.stdout:
+        sink.close()
 
 if __name__ == "__main__":
     main()

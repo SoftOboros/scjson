@@ -164,7 +164,9 @@ def test_run_command_scjson(tmp_path):
     runner = CliRunner()
     result = runner.invoke(main, ["run", "-I", str(json_path), "-o", str(tmp_path)])
     assert result.exit_code == 0
-    assert "[microstep] consumed event: start" in result.output
+    log_path = tmp_path / "events.log"
+    assert log_path.exists()
+    assert "[microstep] consumed event: start" in log_path.read_text()
 
 
 def test_run_command_scxml(tmp_path):
@@ -174,7 +176,9 @@ def test_run_command_scxml(tmp_path):
     runner = CliRunner()
     result = runner.invoke(main, ["run", "-I", str(xml_path), "--xml", "-o", str(tmp_path)])
     assert result.exit_code == 0
-    assert "[microstep] consumed event: start" in result.output
+    log_path = tmp_path / "events.log"
+    assert log_path.exists()
+    assert "[microstep] consumed event: start" in log_path.read_text()
 
 
 
