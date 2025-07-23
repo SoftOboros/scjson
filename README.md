@@ -153,11 +153,11 @@ Build the module with:
 cd java && mvn clean install -DskipTests -B && cd ..
 ```
 #### Running SCXML documents
-Use `ScxmlRunner` to execute state machines and capture traces. Example:
+You can execute a state machine using the CLI:
 ```bash
-java com.softoboros.ScxmlRunner examples/example.scxml examples/events.json trace.json
+java -jar target/scjson.jar run examples/example.scxml -e examples/events.json -o trace.json
 ```
-This command requires the Apache Commons SCXML library. Ensure Maven can download dependencies or has them cached locally.
+This uses `ScxmlRunner` under the hood and requires the Apache Commons SCXML library. Ensure Maven can download dependencies or has them cached locally.
 ### Package Repostory Availability
 pypi: [https://pypi.org/project/scjson/]
 ```bash
