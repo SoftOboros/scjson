@@ -8,10 +8,8 @@ Licensed under the BSD 1-Clause License.
 
 import os
 import sys
-import json as jsonlib
 import click
 from pathlib import Path
-from typing import Any
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
 from .engine import DocumentContext
 from .json_stream import JsonStreamDecoder

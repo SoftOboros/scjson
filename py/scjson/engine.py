@@ -203,7 +203,6 @@ class DocumentContext(BaseModel):
         elif dm_attr != "python":
             raise ValueError("Only the python datamodel is supported")
 
-        ident = getattr(doc, "id", None) or getattr(doc, "name", None) or "root"
         root_state = cls._build_activation_tree(doc, None)
         ctx = cls(doc=doc, root_activation=root_state)
         ctx.data_model = root_state.local_data
