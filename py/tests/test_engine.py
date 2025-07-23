@@ -8,7 +8,7 @@ Licensed under the BSD 1-Clause License.
 
 from decimal import Decimal
 from scjson.pydantic import Scxml, State, Transition, Datamodel, Data
-from scjson.engine import DocumentContext
+from scjson.context import DocumentContext
 
 
 def _make_doc():

@@ -13,7 +13,7 @@ from click.testing import CliRunner
 import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scjson.pydantic import Scxml
-from scjson.engine import DocumentContext
+from scjson.context import DocumentContext
 
 from scjson.cli import main
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
