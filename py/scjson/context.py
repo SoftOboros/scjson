@@ -49,6 +49,13 @@ class DocumentContext(BaseModel):
     # ------------------------------------------------------------------ #
 
     def enqueue(self, evt_name: str, data: Any | None = None) -> None:
+        """Add an event to the queue for later processing.
+
+        :param evt_name: Name of the event to enqueue.
+        :param data: Optional payload for the event.
+        :returns: ``None``
+        """
+
         self.events.push(Event(name=evt_name, data=data))
 
     def microstep(self) -> None:
@@ -303,6 +310,13 @@ class DocumentContext(BaseModel):
         return cls.from_doc(doc)
 
     def run(self, steps: int | None = None) -> None:
+        """Execute microsteps until the queue is empty or ``steps`` is reached.
+
+        :param steps: Maximum number of microsteps to run, or ``None`` for no
+            limit.
+        :returns: ``None``
+        """
+
         count = 0
         while self.events and (steps is None or count < steps):
             self.microstep()
