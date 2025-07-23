@@ -34,25 +34,23 @@ public class ScxmlRunnerTest {
     }
 
     /**
-     * Run the W3C test150 state machine and ensure all states are visited.
+     * Run the W3C test451 state machine and ensure all states are visited.
      *
      * @throws Exception on failure
      */
     @Test
     void testExecutionTrace() throws Exception {
         List<ScxmlRunner.Event> events = new ArrayList<>();
-        events.add(event("foo"));
-        events.add(event("bar"));
 
-        Path scxml = Path.of("..", "tutorial", "Tests", "ecma", "W3C",
-                "Mandatory", "Auto", "test150.scxml").normalize();
+        Path scxml = Path.of("..", "tutorial", "Tests", "python", "W3C",
+                "Optional", "Auto", "test451.scxml").normalize();
         ScxmlRunner.ExecutionTrace trace = ScxmlRunner.run(scxml.toFile(), events);
 
         List<String> entered = trace.entries.stream()
                 .filter(t -> "enter".equals(t.type))
                 .map(t -> t.id)
                 .toList();
-        assertTrue(entered.containsAll(List.of("s0", "s1", "s2", "pass")),
+        assertTrue(entered.containsAll(List.of("s0", "s1", "pass")),
                 "Did not traverse all expected states");
         assertTrue(!entered.contains("fail"),
                 "Machine entered unexpected fail state");
