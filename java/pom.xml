@@ -32,8 +32,14 @@
             <artifactId>picocli</artifactId>
             <version>4.7.5</version>
         </dependency>
-        <!-- Optional: SCXML parsing and execution (Apache Commons)
-             Dependency removed pending artifact availability -->
+        <!-- Optional: SCXML parsing and execution (Apache Commons) -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-scxml</artifactId>
+            <version>0.9</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/commons-scxml-0.9.jar</systemPath>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

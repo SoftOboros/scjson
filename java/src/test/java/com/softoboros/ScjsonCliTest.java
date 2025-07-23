@@ -128,4 +128,13 @@ public class ScjsonCliTest {
                 .execute(jsonDir.toString(), "-r", "-v");
         assertEquals(0, v2);
     }
+
+    /**
+     * Verify that the Apache Commons SCXML library is on the classpath.
+     */
+    @Test
+    void testCommonsScxmlAvailable() {
+        org.apache.commons.scxml.model.SCXML machine = new org.apache.commons.scxml.model.SCXML();
+        assertNotNull(machine);
+    }
 }

@@ -20,3 +20,4 @@ swift/.build/
 csharp/**/bin/
 csharp/**/obj/
 csharp/tmp*/
+java/lib/*.jar

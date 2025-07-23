@@ -35,7 +35,13 @@ if [ ! -f ~/.m2/settings.xml ]; then
 EOF
 fi
 
-cd java && mvn clean install -DskipTests -B && cd ..
+if [ ! -f java/lib/commons-scxml-0.9.jar ]; then
+  curl -L -o java/lib/commons-scxml-0.9.jar \
+    https://repo1.maven.org/maven2/commons-scxml/commons-scxml/0.9/commons-scxml-0.9.jar
+fi
+
+cd java && mvn -B -DskipTests dependency:go-offline && \
+    mvn clean install -DskipTests -o -B && cd ..
 cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
 cd swift && swift package resolve && swift build && cd ..
 cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
