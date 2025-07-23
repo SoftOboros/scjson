@@ -35,7 +35,16 @@ if [ ! -f ~/.m2/settings.xml ]; then
 EOF
 fi
 
-cd java && mvn clean install -DskipTests -B && cd ..
+cd java \
+  && git clone https://github.com/apache/commons-scxml.git \
+  && cd commons-scxml \
+  && git fetch --tags \
+  && git tag \
+  && git checkout tags/commons-scxml2-2.0-M1 -b scxml-2.0-M1 \
+  && mvn clean install -DskipTests -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 \
+  && cd ..
+  && mvn clean install -DskipTests -B -Dmaven.compiler.source=8 -Dmaven.compiler.target=8\
+  && cd ..
 cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
 cd swift && swift package resolve && swift build && cd ..
 cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
