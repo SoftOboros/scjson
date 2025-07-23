@@ -14,7 +14,7 @@ import org.apache.commons.scxml2.env.SimpleDispatcher;
 import org.apache.commons.scxml2.env.SimpleErrorReporter;
 import org.apache.commons.scxml2.env.SimpleSCXMLListener;
 import org.apache.commons.scxml2.env.jexl.JexlEvaluator;
-import org.apache.commons.scxml2.env.jexl.JexlUtils;
+import org.apache.commons.scxml2.env.jexl.JexlContext;
 import org.apache.commons.scxml2.io.SCXMLReader;
 import org.apache.commons.scxml2.model.EnterableState;
 import org.apache.commons.scxml2.model.SCXML;
@@ -100,9 +100,10 @@ public final class ScxmlRunner {
         }
 
         ExecutionTrace trace = new ExecutionTrace();
-        SCXMLExecutor exec = new SCXMLExecutor(new JexlEvaluator(), new SimpleDispatcher(), new SimpleErrorReporter());
+        JexlEvaluator evaluator = new JexlEvaluator();
+        SCXMLExecutor exec = new SCXMLExecutor(evaluator, new SimpleDispatcher(), new SimpleErrorReporter());
         exec.setStateMachine(scxml);
-        exec.setRootContext(JexlUtils.newContext(null));
+        exec.setRootContext(new JexlContext());
         exec.addListener(scxml, new SimpleSCXMLListener() {
             @Override
             public void onEntry(EnterableState state) {
