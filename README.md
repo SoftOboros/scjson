@@ -152,13 +152,17 @@ Build the module with:
 ```bash
 cd java && mvn clean install -DskipTests -B && cd ..
 ```
-
+#### Running SCXML documents
+Use `ScxmlRunner` to execute state machines and capture traces. Example:
+```bash
+java com.softoboros.ScxmlRunner examples/example.scxml examples/events.json trace.json
+```
+This command requires the Apache Commons SCXML library. Ensure Maven can download dependencies or has them cached locally.
 ### Package Repostory Availability
 pypi: [https://pypi.org/project/scjson/]
 ```bash
 pip install scjson
 ```
-
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
