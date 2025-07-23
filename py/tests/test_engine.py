@@ -92,3 +92,96 @@ def test_state_scoped_datamodel():
     ctx.enqueue("go")
     ctx.microstep()
     assert "t" in ctx.configuration
+
+def _make_logic_doc() -> Scxml:
+    """State machine exercising boolean operators."""
+    return Scxml(
+        id="logic",
+        initial=["s"],
+        datamodel=[Datamodel(data=[
+            Data(id="a", expr="1"),
+            Data(id="b", expr="0"),
+            Data(id="c", expr="1"),
+        ])],
+        state=[
+            State(
+                id="s",
+                transition=[
+                    Transition(event="to1", target=["t1"], cond="a == 1 and b == 0"),
+                    Transition(event="to2", target=["t2"], cond="a == 1 or b == 1"),
+                    Transition(event="to3", target=["t3"], cond="not b"),
+                    Transition(event="to4", target=["t4"], cond="a == 1 and (b == 0 or c == 1)"),
+                ],
+            ),
+            State(id="t1"),
+            State(id="t2"),
+            State(id="t3"),
+            State(id="t4"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def _make_nested_doc() -> Scxml:
+    """Two-step machine for nested condition checks."""
+    return Scxml(
+        id="nested",
+        initial=["a"],
+        datamodel=[Datamodel(data=[
+            Data(id="x", expr="1"),
+            Data(id="y", expr="0"),
+        ])],
+        state=[
+            State(id="a", transition=[Transition(event="step", target=["b"], cond="x == 1")]),
+            State(id="b", transition=[Transition(event="finish", target=["c"], cond="y == 0")]),
+            State(id="c"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def test_and_condition():
+    """Handle boolean AND conditions."""
+    ctx = DocumentContext.from_doc(_make_logic_doc())
+    ctx.enqueue("to1")
+    ctx.microstep()
+    assert "t1" in ctx.configuration
+
+
+def test_or_condition():
+    """Handle boolean OR conditions."""
+    doc = _make_logic_doc()
+    ctx = DocumentContext.from_doc(doc)
+    ctx.data_model["b"] = 1
+    ctx.root_activation.local_data["b"] = 1
+    ctx.enqueue("to2")
+    ctx.microstep()
+    assert "t2" in ctx.configuration
+
+
+def test_not_condition():
+    """Handle boolean NOT conditions."""
+    ctx = DocumentContext.from_doc(_make_logic_doc())
+    ctx.enqueue("to3")
+    ctx.microstep()
+    assert "t3" in ctx.configuration
+
+
+def test_nested_boolean_condition():
+    """Evaluate nested boolean expressions."""
+    ctx = DocumentContext.from_doc(_make_logic_doc())
+    ctx.enqueue("to4")
+    ctx.microstep()
+    assert "t4" in ctx.configuration
+
+
+def test_nested_conditional_transitions():
+    """Transitions chained across multiple states."""
+    ctx = DocumentContext.from_doc(_make_nested_doc())
+    ctx.enqueue("step")
+    ctx.microstep()
+    assert "b" in ctx.configuration
+    ctx.enqueue("finish")
+    ctx.microstep()
+    assert "c" in ctx.configuration
+
