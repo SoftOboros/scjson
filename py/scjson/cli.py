@@ -8,7 +8,7 @@ Licensed under the BSD 1-Clause License.
 
 import os
 import sys
-import contextlib
+import logging
 from typing import TextIO
 import click
 from pathlib import Path
@@ -265,20 +265,21 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
         workdir.mkdir(parents=True, exist_ok=True)
         sink_path = workdir / "events.log"
         sink = open(sink_path, "w", encoding="utf-8")
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sink, force=True)
     ctx = (
         DocumentContext.from_xml_file(input_path)
         if is_xml
         else DocumentContext.from_json_file(input_path)
     )
     ctx.enqueue("start")
-    with contextlib.redirect_stdout(sink):
-        ctx.run()
-        for msg in JsonStreamDecoder(sys.stdin):
-            evt = msg.get("event") or msg.get("name")
-            data = msg.get("data")
-            if evt:
-                ctx.enqueue(evt, data)
-                ctx.run()
+    ctx.run()
+    for msg in JsonStreamDecoder(sys.stdin):
+        evt = msg.get("event") or msg.get("name")
+        data = msg.get("data")
+        if evt:
+            ctx.enqueue(evt, data)
+            ctx.run()
     if sink is not sys.stdout:
         sink.close()
 

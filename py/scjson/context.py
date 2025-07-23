@@ -12,6 +12,7 @@ Runtime execution context with onentry/onexit and history support.
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+import logging
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +26,9 @@ from .pydantic import (
 )
 from .events import Event, EventQueue
 from .activation import ActivationRecord, TransitionSpec
+
+
+logger = logging.getLogger(__name__)
 
 
 SCXMLNode = State | ScxmlParallelType | ScxmlFinalType | History | Scxml
@@ -72,12 +76,15 @@ class DocumentContext(BaseModel):
                 if trans.event is None or trans.event == evt.name:
                     if trans.cond is None or self._eval_condition(trans.cond, act):
                         self._fire_transition(act, trans)
-                        print(
-                            f"[microstep] {act.id} -> {','.join(trans.target)} on {evt.name}"
+                        logger.info(
+                            "[microstep] %s -> %s on %s",
+                            act.id,
+                            ",".join(trans.target),
+                            evt.name,
                         )
                         return
 
-        print(f"[microstep] consumed event: {evt.name}")
+        logger.info("[microstep] consumed event: %s", evt.name)
 
     # ------------------------------------------------------------------ #
     # Construction helpers
