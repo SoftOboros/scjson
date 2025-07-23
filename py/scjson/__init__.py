@@ -9,6 +9,15 @@ scjson conversion tools.
 """
 
 from .context import DocumentContext
+from .events import Event, EventQueue
+from .activation import ActivationRecord, TransitionSpec
 from .json_stream import JsonStreamDecoder
 
-__all__ = ["DocumentContext", "JsonStreamDecoder"]
+__all__ = [
+    "DocumentContext",
+    "JsonStreamDecoder",
+    "Event",
+    "EventQueue",
+    "ActivationRecord",
+    "TransitionSpec",
+]
