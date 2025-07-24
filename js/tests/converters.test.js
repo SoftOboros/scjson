@@ -94,3 +94,14 @@ test('empty final element survives cleanup', () => {
   expect(assign.content[0]).toHaveProperty('final');
   expect(assign.content[0].final).toEqual([{}]);
 });
+
+/**
+ * Root level transitions are ignored like the Python converter.
+ */
+test('root transitions are dropped', () => {
+  const xml =
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml"><transition target="s"/><state id="s"/></scxml>';
+  const obj = JSON.parse(xmlToJson(xml));
+  expect(obj).not.toHaveProperty('transition');
+  expect(obj.state[0].id).toBe('s');
+});
