@@ -1,15 +1,19 @@
-//! Agent Name: rust-lib
-//!
-//! Part of the scjson project.
-//! Developed by Softoboros Technology Inc.
-//! Licensed under the BSD 1-Clause License.
-//!
+/*!
+"""
+Agent Name: rust-lib
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+"""
+*/
+
 //! Library providing basic SCXML <-> scjson conversion.
 
 use serde_json::{Map, Number, Value};
 use thiserror::Error;
-use xmltree::{Element, XMLNode};
 use xmltree::Error as XmlWriteError;
+use xmltree::{Element, XMLNode};
 
 /// Attribute name mappings used during conversion.
 const ATTRIBUTE_MAP: &[(&str, &str)] = &[
@@ -21,10 +25,29 @@ const ATTRIBUTE_MAP: &[(&str, &str)] = &[
 
 /// Keys that should always be arrays in the output.
 const ARRAY_KEYS: &[&str] = &[
-    "assign", "cancel", "content", "data", "datamodel", "donedata", "final",
-    "finalize", "foreach", "history", "if_value", "initial", "invoke", "log",
-    "onentry", "onexit", "other_element", "parallel", "param", "raise_value",
-    "script", "send", "state",
+    "assign",
+    "cancel",
+    "content",
+    "data",
+    "datamodel",
+    "donedata",
+    "final",
+    "finalize",
+    "foreach",
+    "history",
+    "if_value",
+    "initial",
+    "invoke",
+    "log",
+    "onentry",
+    "onexit",
+    "other_element",
+    "parallel",
+    "param",
+    "raise_value",
+    "script",
+    "send",
+    "state",
 ];
 
 /// Errors produced by conversion routines.
@@ -41,15 +64,14 @@ pub enum ScjsonError {
 }
 
 fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
-    use serde_json::Value::{Array};
     match map.get_mut(key) {
-        Some(Array(arr)) => arr.push(val),
+        Some(Value::Array(arr)) => arr.push(val),
         Some(other) => {
             let old = other.take();
-            *other = Array(vec![old, val]);
+            *other = Value::Array(vec![old, val]);
         }
         None => {
-            map.insert(key.to_string(), Array(vec![val]));
+            map.insert(key.to_string(), Value::Array(vec![val]));
         }
     }
 }
@@ -76,8 +98,8 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                 if let Ok(n) = v.parse::<f64>() {
                     if (n.fract() - 0.0).abs() < f64::EPSILON {
                         map.insert("version".into(), Value::Number(Number::from(n as i64)));
-                    } else {
-                        map.insert("version".into(), Value::Number(Number::from_f64(n).unwrap()));
+                    } else if let Some(num) = Number::from_f64(n) {
+                        map.insert("version".into(), Value::Number(num));
                     }
                 } else {
                     map.insert("version".into(), Value::String(v.clone()));
@@ -103,7 +125,10 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
     }
 
     if elem.name == "assign" && !map.contains_key("type_value") {
-        map.insert("type_value".to_string(), Value::String("replacechildren".into()));
+        map.insert(
+            "type_value".to_string(),
+            Value::String("replacechildren".into()),
+        );
     }
     if elem.name == "send" {
         map.entry("type_value".to_string())
@@ -147,17 +172,7 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
     }
 
     if elem.name == "scxml" {
-        if let Some(v) = map.get("version") {
-            if let Some(s) = v.as_str() {
-                if let Ok(n) = s.parse::<f64>() {
-                    if (n.fract() - 0.0).abs() < f64::EPSILON {
-                        map.insert("version".into(), Value::Number(Number::from(n as i64)));
-                    } else {
-                        map.insert("version".into(), Value::Number(Number::from_f64(n).unwrap()));
-                    }
-                }
-            }
-        } else {
+        if !map.contains_key("version") {
             map.insert("version".into(), Value::Number(Number::from(1)));
         }
         map.entry("datamodel_attribute".to_string())
@@ -192,10 +207,8 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
     }
     let mut elem = Element::new(name);
     if name == "scxml" {
-        elem.attributes.insert(
-            "xmlns".into(),
-            "http://www.w3.org/2005/07/scxml".into(),
-        );
+        elem.attributes
+            .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
     }
     for (k, v) in map {
         if k == "content" {
@@ -251,361 +264,6 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             if let Some(val) = join_tokens(v) {
                 let attr = if k == "type_value" { "type" } else { k };
                 elem.attributes.insert(attr.into(), val);
-/// Recursively convert an [`xmltree::Element`] into a JSON [`Value`].
-fn element_to_value(elem: &Element) -> Value {
-    let mut obj = serde_json::Map::new();
-
-    for (k, v) in &elem.attributes {
-        if k == "xmlns" || k.starts_with("xmlns") {
-            continue;
-        }
-        let mut name = k.as_str();
-        for (attr, prop) in ATTRIBUTE_MAP {
-            if *attr == k.as_str() {
-                name = prop;
-                break;
-            }
-        }
-        if name == "version" {
-            if let Ok(n) = v.parse::<f64>() {
-                let val = if (n.fract() - 0.0).abs() < f64::EPSILON {
-                    Value::Number(Number::from(n as i64))
-                } else {
-                    Value::Number(Number::from_f64(n).unwrap())
-                };
-                obj.insert(name.to_string(), val);
-            } else {
-                obj.insert(name.to_string(), Value::String(v.clone()));
-            }
-        } else {
-            obj.insert(name.to_string(), Value::String(v.clone()));
-        }
-    }
-
-    let mut content: Vec<Value> = Vec::new();
-
-
-    for child in &elem.children {
-        match child {
-            XMLNode::Element(e) => {
-                let mut name = e.name.as_str();
-                if name == "else" {
-                    name = "else_value";
-                } else if name == "if" {
-                    name = "if_value";
-                } else if name == "raise" {
-                    name = "raise_value";
-                }
-                let val = 
-              (e);
-                match obj.get_mut(name) {
-                    Some(Value::Array(arr)) => arr.push(val),
-                    Some(prev) => {
-                        let old = prev.take();
-                        *prev = Value::Array(vec![old, val]);
-                    }
-                    None => {
-                        obj.insert(name.to_string(), val);
-                    }
-                }
-            }
-            XMLNode::Text(t) => {
-                if !t.trim().is_empty() {
-                    content.push(Value::String(t.clone()));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if !content.is_empty() {
-        obj.insert("content".into(), Value::Array(content));
-    }
-
-    Value::Object(obj)
-}
-
-fn split_token_attrs(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for k in keys {
-                if let Some(v) = map.get_mut(&k) {
-                    if (k == "initial" || k == "initial_attribute") && v.is_string() {
-                        let tokens: Vec<Value> = v
-                            .as_str()
-                            .unwrap()
-                            .split_whitespace()
-                            .map(|s| Value::String(s.to_string()))
-                            .collect();
-                        *v = Value::Array(tokens);
-                        continue;
-                    }
-                    if k == "transition" {
-                        let arr = if v.is_array() {
-                            v.as_array_mut().unwrap()
-                        } else {
-                            let old = v.take();
-                            *v = Value::Array(vec![old]);
-                            v.as_array_mut().unwrap()
-                        };
-                        for tr in arr.iter_mut() {
-                            if let Value::Object(trmap) = tr {
-                                if let Some(tgt) = trmap.get_mut("target") {
-                                    if let Some(s) = tgt.as_str() {
-                                        let tokens: Vec<Value> = s
-                                            .split_whitespace()
-                                            .map(|x| Value::String(x.to_string()))
-                                            .collect();
-                                        *tgt = Value::Array(tokens);
-                                    }
-                                }
-                                split_token_attrs(tr);
-                            }
-                        }
-                        continue;
-                    }
-                    split_token_attrs(v);
-                }
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                split_token_attrs(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn ensure_arrays(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            let keys: Vec<String> = map.keys().cloned().collect();
-            for k in keys {
-                if let Some(v) = map.get_mut(&k) {
-                    if ARRAY_KEYS.contains(&k.as_str()) {
-                        if v.is_array() {
-                            for item in v.as_array_mut().unwrap() {
-                                ensure_arrays(item);
-                            }
-                        } else {
-                            let mut arr = vec![v.take()];
-                            ensure_arrays(&mut arr[0]);
-                            *v = Value::Array(arr);
-                        }
-                        continue;
-                    }
-                    if k == "transition" {
-                        let arr = if v.is_array() {
-                            v.as_array_mut().unwrap()
-                        } else {
-                            let old = v.take();
-                            *v = Value::Array(vec![old]);
-                            v.as_array_mut().unwrap()
-                        };
-                        for tr in arr.iter_mut() {
-                            if let Value::Object(trmap) = tr {
-                                if let Some(tgt) = trmap.get_mut("target") {
-                                    if !tgt.is_array() {
-                                        *tgt = Value::Array(vec![tgt.take()]);
-                                    }
-                                }
-                                ensure_arrays(tr);
-                            }
-                        }
-                        continue;
-                    }
-                    ensure_arrays(v);
-                }
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                ensure_arrays(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn fix_assign_defaults(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            if let Some(assign_val) = map.get_mut("assign") {
-                let arr = if assign_val.is_array() {
-                    assign_val.as_array_mut().unwrap()
-                } else {
-                    let old = assign_val.take();
-                    *assign_val = Value::Array(vec![old]);
-                    assign_val.as_array_mut().unwrap()
-                };
-                for a in arr.iter_mut() {
-                    if let Value::Object(m) = a {
-                        if m.get("type_value").is_none() {
-                            m.insert(
-                                "type_value".to_string(),
-                                Value::String("replacechildren".to_string()),
-                            );
-                        }
-                        fix_assign_defaults(a);
-                    }
-                }
-            }
-            for v in map.values_mut() {
-                fix_assign_defaults(v);
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                fix_assign_defaults(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn fix_send_defaults(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            if let Some(send_val) = map.get_mut("send") {
-                let arr = if send_val.is_array() {
-                    send_val.as_array_mut().unwrap()
-                } else {
-                    let old = send_val.take();
-                    *send_val = Value::Array(vec![old]);
-                    send_val.as_array_mut().unwrap()
-                };
-                for s in arr.iter_mut() {
-                    if let Value::Object(m) = s {
-                        if m.get("type_value").is_none() {
-                            m.insert(
-                                "type_value".to_string(),
-                                Value::String("scxml".to_string()),
-                            );
-                        }
-                        if m.get("delay").is_none() {
-                            m.insert("delay".to_string(), Value::String("0s".to_string()));
-                        }
-                        fix_send_defaults(s);
-                    }
-                }
-            }
-            for v in map.values_mut() {
-                fix_send_defaults(v);
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                fix_send_defaults(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn reorder_scxml(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            for v in map.values_mut() {
-                reorder_scxml(v);
-            }
-            if let Some(v) = map.remove("datamodel") {
-                map.insert("datamodel".to_string(), v);
-            }
-            if let Some(v) = map.remove("version") {
-                map.insert("version".to_string(), v);
-            }
-            if let Some(v) = map.remove("datamodel_attribute") {
-                map.insert("datamodel_attribute".to_string(), v);
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                reorder_scxml(v);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn restore_keys(value: &Value) -> Value {
-    match value {
-        Value::Array(arr) => {
-            Value::Array(arr.iter().map(restore_keys).collect())
-        }
-        Value::Object(map) => {
-            let mut out = serde_json::Map::new();
-            for (k, v) in map {
-            let mut nk = k.to_string();
-            if nk == "if_value" {
-                nk = "if".to_string();
-            } else if nk == "raise_value" {
-                nk = "raise".to_string();
-            }
-            for (attr, prop) in ATTRIBUTE_MAP {
-                if *prop == nk {
-                    nk = format!("@_{}", attr);
-                    break;
-                }
-            }
-            if nk == "content" {
-                out.insert(nk, restore_keys(v));
-            } else if v.is_array()
-                && v.as_array().unwrap().iter().all(|x| !x.is_object())
-            {
-                let val = v
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|x| x.as_str().unwrap_or(""))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                if nk.starts_with("@_") {
-                    out.insert(nk.clone(), Value::String(val));
-                } else {
-                    out.insert(format!("@_{}", nk), Value::String(val));
-                }
-            } else if !v.is_object() {
-                if nk.starts_with("@_") {
-                    out.insert(nk.clone(), v.clone());
-                } else {
-                    out.insert(format!("@_{}", nk), v.clone());
-                }
-            } else {
-                out.insert(nk, restore_keys(v));
-            }
-            }
-            Value::Object(out)
-        }
-        _ => value.clone(),
-    }
-}
-
-fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
-    let obj = value.as_object().ok_or(ScjsonError::Unsupported)?;
-    let mut elem = Element::new(name);
-    for (k, v) in obj {
-        if k.starts_with("@_") {
-            if let Some(s) = v.as_str() {
-                elem.attributes.insert(k.trim_start_matches("@_").to_string(), s.to_string());
-            } else if let Some(n) = v.as_i64() {
-                elem.attributes.insert(k.trim_start_matches("@_").to_string(), n.to_string());
-            } else if let Some(f) = v.as_f64() {
-                elem.attributes.insert(k.trim_start_matches("@_").to_string(), f.to_string());
-            }
-            continue;
-        }
-        if k == "content" {
-            if let Value::Array(arr) = v {
-                let text = arr
-                    .iter()
-                    .filter_map(|x| x.as_str())
-                    .collect::<Vec<_>>()
-                    .join("");
-                if !text.is_empty() {
-                    elem.children.push(XMLNode::Text(text));
-                }
             }
             continue;
         }
@@ -621,7 +279,8 @@ fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
                         let child = map_to_element(child_name, obj);
                         elem.children.push(XMLNode::Element(child));
                     } else if let Value::String(text) = item {
-                        elem.children.push(XMLNode::Element(map_to_element(child_name, &Map::new())));
+                        elem.children
+                            .push(XMLNode::Element(map_to_element(child_name, &Map::new())));
                         elem.children.push(XMLNode::Text(text.clone()));
                     }
                 }
@@ -630,7 +289,8 @@ fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
                 if k == "version" {
                     elem.attributes.insert("version".into(), s.clone());
                 } else {
-                    elem.children.push(XMLNode::Element(map_to_element(k, &Map::new())));
+                    elem.children
+                        .push(XMLNode::Element(map_to_element(k, &Map::new())));
                     elem.children.push(XMLNode::Text(s.clone()));
                 }
             }
@@ -645,6 +305,32 @@ fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
     elem
 }
 
+fn remove_empty(value: &mut Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for k in keys {
+                if let Some(v) = map.get_mut(&k) {
+                    if remove_empty(v) {
+                        map.remove(&k);
+                    }
+                }
+            }
+            map.is_empty()
+        }
+        Value::Array(arr) => {
+            arr.retain(|v| {
+                let mut v = v.clone();
+                !remove_empty(&mut v)
+            });
+            arr.is_empty()
+        }
+        Value::Null => true,
+        Value::String(s) => s.is_empty(),
+        _ => false,
+    }
+}
+
 /// Convert an SCXML string to scjson.
 ///
 /// # Parameters
@@ -653,45 +339,20 @@ fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
 ///
 /// # Returns
 /// JSON string representing the document.
-pub fn xml_to_json(xml: &str, _omit_empty: bool) -> Result<String, ScjsonError> {
+pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     let root = Element::parse(xml.as_bytes())?;
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    let version = root
-        .attributes
-        .get("version")
-        .and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(1.0);
-    let datamodel = root
-        .attributes
-        .get("datamodel")
-        .map(|s| s.as_str())
-        .unwrap_or("null");
-    let mut obj = serde_json::Map::new();
-    let ver_value = if (version.fract() - 0.0).abs() < f64::EPSILON {
-        Value::Number(Number::from(version as i64))
-    } else {
-        Value::Number(Number::from_f64(version).unwrap())
-    };
-    obj.insert("version".into(), ver_value);
-    if !(omit_empty && datamodel == "null") {
-        obj.insert(
-            "datamodel_attribute".into(),
-            Value::String(datamodel.to_string()),
-        );
-    }
-    let value = Value::Object(obj);
+    let mut map = element_to_map(&root);
+    let mut value = Value::Object(map);
     if omit_empty {
-        Ok(serde_json::to_string_pretty(&value)?)
-    } else {
-        Ok(serde_json::to_string_pretty(&value)?)
+        remove_empty(&mut value);
     }
-
     Ok(serde_json::to_string_pretty(&value)?)
 }
 
-/// Convert a scjson string to SCXML.
+/// Convert a scjson string to SCXML using options.
 ///
 /// # Parameters
 /// - `json_str`: JSON input string.
@@ -699,27 +360,27 @@ pub fn xml_to_json(xml: &str, _omit_empty: bool) -> Result<String, ScjsonError> 
 ///
 /// # Returns
 /// XML string representing the document.
-pub fn json_to_xml(json_str: &str, omit_empty: bool) -> Result<String, ScjsonError> {
-    let v: Value = serde_json::from_str(json_str)?;
-    let obj = v.as_object().ok_or(ScjsonError::Unsupported)?;
-    let version = obj.get("version").and_then(|v| v.as_f64()).unwrap_or(1.0);
-    let datamodel = obj
-        .get("datamodel_attribute")
-        .and_then(|v| v.as_str())
-        .unwrap_or("null");
-
-    let mut root = Element::new("scxml");
-    root.attributes
-        .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
-    root.attributes
-        .insert("version".into(), version.to_string());
-    if !(omit_empty && datamodel == "null") {
-        root.attributes
-            .insert("datamodel".into(), datamodel.to_string());
+pub fn json_to_xml_opts(json_str: &str, omit_empty: bool) -> Result<String, ScjsonError> {
+    let mut v: Value = serde_json::from_str(json_str)?;
+    if omit_empty {
+        remove_empty(&mut v);
     }
+    let obj = v.as_object().ok_or(ScjsonError::Unsupported)?;
+    let elem = map_to_element("scxml", obj);
     let mut out = Vec::new();
     elem.write(&mut out)?;
     Ok(String::from_utf8(out).unwrap())
+}
+
+/// Convert a scjson string to SCXML.
+///
+/// # Parameters
+/// - `json_str`: JSON input string.
+///
+/// # Returns
+/// XML string representing the document.
+pub fn json_to_xml(json_str: &str) -> Result<String, ScjsonError> {
+    json_to_xml_opts(json_str, true)
 }
 
 #[cfg(test)]
@@ -731,7 +392,7 @@ mod tests {
         let xml = "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\"/>";
         let json = xml_to_json(xml, true).unwrap();
         assert!(json.contains("version"));
-        let xml_rt = json_to_xml(&json, true).unwrap();
+        let xml_rt = json_to_xml(&json).unwrap();
         assert!(xml_rt.contains("scxml"));
     }
 }
