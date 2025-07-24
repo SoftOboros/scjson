@@ -126,7 +126,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         Limit the run to a single language key from :data:`LANG_CMDS`.
     """
 
-    handler = SCXMLDocumentHandler()
+    handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
     scxml_files = sorted(TUTORIAL.rglob("*.scxml"))
     canonical = _canonical_json(scxml_files, handler)
     scxml_files = list(canonical.keys())
@@ -155,8 +155,11 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         json_dir.mkdir(parents=True, exist_ok=True)
         xml_dir.mkdir(parents=True, exist_ok=True)
         try:
+            json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
+            if lang == "python":
+                json_args.append("--skip-unknown")
             subprocess.run(
-                cmd + ["json", str(TUTORIAL), "-o", str(json_dir), "-r"],
+                cmd + json_args,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
