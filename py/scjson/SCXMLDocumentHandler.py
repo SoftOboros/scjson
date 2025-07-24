@@ -9,7 +9,7 @@ Utilities for loading, validating, and converting SCXML documents to and from
 their JSON representation.
 """
 
-from typing import Optional, Type, Union, Any, get_args, get_origin
+from typing import Optional, Type, Union, Any, get_args, get_origin, ForwardRef
 from enum import Enum
 from decimal import Decimal
 import xmlschema
@@ -18,6 +18,8 @@ from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
 from xsdata.formats.dataclass.serializers import XmlSerializer
+from xsdata.formats.dataclass.models.generics import AnyElement
+from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
 
 class SCXMLDocumentHandler:
@@ -38,6 +40,15 @@ class SCXMLDocumentHandler:
         )
         self.schema = xmlschema.XMLSchema(schema_path) if schema_path else None
         self.omit_empty = omit_empty
+
+    @staticmethod
+    def _resolve(cls: type) -> type:
+        """Resolve forward references to actual classes."""
+        if isinstance(cls, ForwardRef):
+            return getattr(dataclasses_module, cls.__forward_arg__)
+        if isinstance(cls, str):
+            return getattr(dataclasses_module, cls)
+        return cls
 
     def validate(self, xml_path: str) -> bool:
         if not self.schema:
@@ -100,18 +111,34 @@ class SCXMLDocumentHandler:
 
     def _to_dataclass(self, cls: type, data: Any):
         """Recursively build dataclass instance from dict."""
+        cls = self._resolve(cls)
         origin = get_origin(cls)
         if origin is list:
-            item_type = get_args(cls)[0]
+            item_type = self._resolve(get_args(cls)[0])
             return [self._to_dataclass(item_type, x) for x in data]
         if origin is Union:
             for arg in get_args(cls):
                 if arg is type(None):
                     continue
                 try:
-                    return self._to_dataclass(arg, data)
+                    return self._to_dataclass(self._resolve(arg), data)
                 except Exception:
                     pass
+            return data
+        if cls is object:
+            if isinstance(data, dict) and "qname" in data:
+                return AnyElement(
+                    qname=data.get("qname"),
+                    text=data.get("text"),
+                    tail=data.get("tail"),
+                    attributes=data.get("attributes", {}),
+                    children=[
+                        self._to_dataclass(object, c) if isinstance(c, dict) else c
+                        for c in data.get("children", [])
+                    ],
+                )
+            if isinstance(data, list):
+                return [self._to_dataclass(object, x) for x in data]
             return data
         if is_dataclass(cls):
             kwargs = {}

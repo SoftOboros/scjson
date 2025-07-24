@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import sys
+import argparse
 from os import sep
 from os.path import abspath, split as pathsplit
 from pathlib import Path
@@ -104,7 +105,6 @@ def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Pa
 
     result: dict[Path, dict] = {}
     for f in files:
-        print(f)
         data = f.read_text(encoding="utf-8")
         try:
             result[f] = json.loads(handler.xml_to_json(data))
@@ -113,13 +113,15 @@ def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Pa
     return result
 
 
-def main(out_dir: str | Path = "uber_out") -> None:
+def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
     """Run the uber test suite.
 
     Parameters
     ----------
     out_dir: str | Path, optional
         Directory where intermediate JSON and XML files will be written.
+    language: str | None, optional
+        Limit the run to a single language key from :data:`LANG_CMDS`.
     """
 
     handler = SCXMLDocumentHandler()
@@ -127,7 +129,18 @@ def main(out_dir: str | Path = "uber_out") -> None:
     canonical = _canonical_json(scxml_files, handler)
     scxml_files = list(canonical.keys())
     out_root = Path(out_dir)
-    for lang, cmd in LANG_CMDS.items():
+    if language:
+        lang_key = language.lower()
+        if lang_key in {"py", "python"}:
+            lang_key = "python"
+        languages = [lang_key]
+    else:
+        languages = list(LANG_CMDS.keys())
+    for lang in languages:
+        cmd = LANG_CMDS.get(lang)
+        if not cmd:
+            print(f"Skipping {lang}: unknown language")
+            continue
         if not _available(cmd):
             print(f"Skipping {lang}: executable not available")
             continue
@@ -139,6 +152,8 @@ def main(out_dir: str | Path = "uber_out") -> None:
             subprocess.run(
                 cmd + ["json", str(TUTORIAL), "-o", str(json_dir), "-r"],
                 check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
@@ -151,6 +166,8 @@ def main(out_dir: str | Path = "uber_out") -> None:
             subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
                 check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
@@ -160,11 +177,25 @@ def main(out_dir: str | Path = "uber_out") -> None:
                     continue
                 data = handler.xml_to_json(xpath.read_text())
                 assert json.loads(data) == canonical[src], f"{lang} XML mismatch: {rel}"
-            print(f"{lang} ok")
+        except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
+            print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
         except Exception as exc:  # pragma: no cover - external tools may fail
             print(f"Skipping {lang}: {exc}")
 
 
 if __name__ == "__main__":
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("uber_out")
-    main(target)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "out_dir",
+        nargs="?",
+        default="uber_out",
+        help="directory for intermediate files",
+    )
+    parser.add_argument(
+        "-l",
+        "--language",
+        dest="language",
+        help="limit testing to a single language",
+    )
+    opts = parser.parse_args()
+    main(Path(opts.out_dir), opts.language)
