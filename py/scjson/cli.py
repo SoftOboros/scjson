@@ -108,9 +108,22 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
-def json(path: Path, output: Path | None, recursive: bool, verify: bool, keep_empty: bool):
+@click.option(
+    "--fail-unknown/--skip-unknown",
+    "fail_unknown",
+    default=True,
+    help="Fail on unknown XML elements when converting",
+)
+def json(
+    path: Path,
+    output: Path | None,
+    recursive: bool,
+    verify: bool,
+    keep_empty: bool,
+    fail_unknown: bool,
+):
     """Convert a single SCXML file or all SCXML files in a directory."""
-    handler = SCXMLDocumentHandler(omit_empty=not keep_empty)
+    handler = SCXMLDocumentHandler(omit_empty=not keep_empty, fail_on_unknown_properties=fail_unknown)
 
     def convert_file(src: Path, dest: Path | None):
         try:
