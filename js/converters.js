@@ -36,7 +36,6 @@ const ARRAY_KEYS = new Set([
   'history',
   'if_value',
   'initial',
-  'initial_attribute',
   'invoke',
   'log',
   'onentry',
@@ -61,7 +60,22 @@ const ATTRIBUTE_MAP = {
 };
 
 /**
- * Collapse whitespace in string values recursively.
+ * Attributes whose whitespace should be collapsed.
+ */
+const COLLAPSE_ATTRS = new Set([
+  'expr',
+  'cond',
+  'event',
+  'target',
+  'delay',
+  'location',
+  'name',
+  'src',
+  'id',
+]);
+
+/**
+ * Collapse whitespace in attribute string values recursively.
  *
  * @param {object|Array|string} value - Value to normalise.
  * @returns {object|Array|string} Normalised value.
@@ -72,12 +86,13 @@ function collapseWhitespace(value) {
   }
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
-      value[k] = collapseWhitespace(v);
+      if ((k.endsWith('_attribute') || COLLAPSE_ATTRS.has(k)) && typeof v === 'string') {
+        value[k] = v.replace(/[\n\r\t]/g, ' ');
+      } else {
+        value[k] = collapseWhitespace(v);
+      }
     }
     return value;
-  }
-  if (typeof value === 'string') {
-    return value.replace(/[\n\r\t]/g, ' ');
   }
   return value;
 }
@@ -99,7 +114,7 @@ function splitTokenAttrs(value) {
   }
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
-      if (k === 'initial_attribute' && typeof v === 'string') {
+      if ((k === 'initial' || k === 'initial_attribute') && typeof v === 'string') {
         value[k] = v.trim().split(/\s+/);
         continue;
       }
@@ -186,11 +201,18 @@ function normaliseKeys(value) {
       if (k === '#text') {
         const text = normaliseKeys(v);
         if (text !== undefined) {
-          out.content = out.content || [];
-          if (Array.isArray(text)) {
-            out.content.push(...text);
+          if (Array.isArray(out.content)) {
+            if (Array.isArray(text)) {
+              out.content.push(...text);
+            } else {
+              out.content.push(text);
+            }
+          } else if (out.content !== undefined) {
+            out.content = Array.isArray(text)
+              ? [out.content, ...text]
+              : [out.content, text];
           } else {
-            out.content.push(text);
+            out.content = Array.isArray(text) ? text : [text];
           }
         }
         continue;
@@ -282,6 +304,122 @@ function fixScripts(value) {
 }
 
 /**
+ * Normalise nested SCXML documents within invoke content.
+ *
+ * XML parser output represents nested ``<scxml>`` elements as a key
+ * named ``scxml`` inside the ``content`` element. The reference
+ * Python implementation instead stores the nested machine under a
+ * ``content`` array. This helper replicates that behaviour.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixNestedScxml(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixNestedScxml);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'scxml')) {
+      const sub = value.scxml;
+      delete value.scxml;
+      const arr = Array.isArray(sub) ? sub : [sub];
+      arr.forEach(v => {
+        if (v.initial_attribute !== undefined && v.initial === undefined) {
+          v.initial = v.initial_attribute;
+          delete v.initial_attribute;
+        }
+        if (typeof v.version === 'string') {
+          const n = parseFloat(v.version);
+          if (!Number.isNaN(n)) v.version = n;
+        }
+        if (v.version === undefined) {
+          v.version = 1.0;
+        }
+        for (const k of Object.keys(v)) {
+          if (k === '@_xmlns' || k.startsWith('xmlns')) {
+            delete v[k];
+          }
+        }
+        if (v.datamodel_attribute === undefined) {
+          v.datamodel_attribute = 'null';
+        }
+        fixNestedScxml(v);
+      });
+      value.content = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixNestedScxml(v);
+    }
+  }
+}
+
+/**
+ * Apply default values for assign elements.
+ *
+ * The scjson schema expects ``assign`` elements to include a
+ * ``type_value`` attribute with a default of ``replacechildren``.
+ * This helper ensures the attribute is present when not specified in
+ * the original XML.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixAssignDefaults(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixAssignDefaults);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'assign')) {
+      const arr = Array.isArray(value.assign) ? value.assign : [value.assign];
+      arr.forEach(a => {
+        if (a.type_value === undefined) {
+          a.type_value = 'replacechildren';
+        }
+        fixAssignDefaults(a);
+      });
+      value.assign = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixAssignDefaults(v);
+    }
+  }
+}
+
+/**
+ * Apply default values for send elements.
+ *
+ * The SCXML specification defines ``type="scxml"`` and ``delay="0s"``
+ * as defaults. This mirrors the behaviour of the Python converter so
+ * round-trip conversions remain consistent.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixSendDefaults(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixSendDefaults);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'send')) {
+      const arr = Array.isArray(value.send) ? value.send : [value.send];
+      arr.forEach(s => {
+        if (s.type_value === undefined) {
+          s.type_value = 'scxml';
+        }
+        if (s.delay === undefined) {
+          s.delay = '0s';
+        }
+        fixSendDefaults(s);
+      });
+      value.send = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixSendDefaults(v);
+    }
+  }
+}
+
+/**
  * Remove nulls and empty containers from values recursively.
  *
  * @param {*} value - Candidate value.
@@ -303,7 +441,7 @@ function removeEmpty(value) {
   if (value === null) {
     return undefined;
   }
-  if (value === '') {
+  if (typeof value === 'string' && value.trim() === '') {
     return undefined;
   }
   return value;
@@ -323,7 +461,7 @@ const validate = ajv.compile(schema);
  * expected by the schema.
  */
 function xmlToJson(xmlStr, omitEmpty = true) {
-  const parser = new XMLParser({ ignoreAttributes: false });
+  const parser = new XMLParser({ ignoreAttributes: false, trimValues: false });
   let obj = parser.parse(xmlStr);
   if (obj.scxml) {
     obj = obj.scxml;
@@ -336,7 +474,14 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   }
   ensureArrays(obj);
   fixScripts(obj);
+  fixNestedScxml(obj);
+  fixAssignDefaults(obj);
+  fixSendDefaults(obj);
   obj = collapseWhitespace(obj);
+  if (obj.initial_attribute !== undefined && obj.initial === undefined) {
+    obj.initial = obj.initial_attribute;
+    delete obj.initial_attribute;
+  }
   for (const k of Object.keys(obj)) {
     if (k === '@_xmlns' || k.startsWith('xmlns')) {
       delete obj[k];
@@ -385,7 +530,53 @@ function jsonToXml(jsonStr) {
   if (!validate(obj)) {
     throw new Error('Invalid scjson');
   }
-  return builder.build({ scxml: obj });
+  function restoreKeys(value) {
+    if (Array.isArray(value)) {
+      return value.map(restoreKeys);
+    }
+    if (value && typeof value === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        let nk = k;
+        if (k === 'if_value') {
+          nk = 'if';
+        } else if (k === 'raise_value') {
+          nk = 'raise';
+        }
+        for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
+          if (prop === nk) {
+            nk = `@_${attr}`;
+            break;
+          }
+        }
+        if (nk === 'content') {
+          out[nk] = restoreKeys(v);
+        } else if (Array.isArray(v) && v.every(x => typeof x !== 'object')) {
+          const val = v.join(' ');
+          if (nk.startsWith('@_')) {
+            out[nk] = val;
+          } else {
+            out[`@_${nk}`] = val;
+          }
+        } else if (v === null || typeof v !== 'object') {
+          if (nk.startsWith('@_')) {
+            out[nk] = v;
+          } else {
+            out[`@_${nk}`] = v;
+          }
+        } else {
+          out[nk] = restoreKeys(v);
+        }
+      }
+      return out;
+    }
+    return value;
+  }
+  const restored = restoreKeys(obj);
+  if (restored['@_xmlns'] === undefined) {
+    restored['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
+  }
+  return builder.build({ scxml: restored });
 }
 
 module.exports = {
@@ -395,6 +586,9 @@ module.exports = {
   normaliseKeys,
   ensureArrays,
   fixScripts,
+  fixNestedScxml,
+  fixAssignDefaults,
+  fixSendDefaults,
   splitTokenAttrs,
   reorderScxml,
 };

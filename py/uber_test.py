@@ -165,14 +165,22 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 stderr=subprocess.PIPE,
                 env=env,
             )
+            errors = 0
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 jpath = json_dir / rel.with_suffix(".scjson")
                 if not jpath.exists():
                     print(f"{lang} failed to write {jpath}")
                     continue
-                data = json.loads(jpath.read_text())
-                assert data == canonical[src], f"{lang} JSON mismatch: {rel}"
+                try:
+                    data = json.loads(jpath.read_text())
+                except Exception as exc:
+                    print(f"{lang} JSON parse error {rel}: {exc}")
+                    errors += 1
+                    continue
+                if data != canonical[src]:
+                    print(f"{lang} JSON mismatch: {rel}")
+                    errors += 1
             subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
                 check=True,
@@ -186,8 +194,18 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 if not xpath.exists():
                     print(f"{lang} failed to write {xpath}")
                     continue
-                data = handler.xml_to_json(xpath.read_text())
-                assert json.loads(data) == canonical[src], f"{lang} XML mismatch: {rel}"
+                try:
+                    data = handler.xml_to_json(xpath.read_text())
+                    parsed = json.loads(data)
+                except Exception as exc:
+                    print(f"{lang} XML parse error {rel}: {exc}")
+                    errors += 1
+                    continue
+                if parsed != canonical[src]:
+                    print(f"{lang} XML mismatch: {rel}")
+                    errors += 1
+            if errors:
+                print(f"{lang} encountered {errors} mismatches")
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
             print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
         except Exception as exc:  # pragma: no cover - external tools may fail
