@@ -70,3 +70,38 @@ test('assign and send defaults are applied', () => {
   expect(entry.send[0].type_value).toBe('scxml');
   expect(entry.send[0].delay).toBe('0s');
 });
+
+/**
+ * Ensure empty ``else`` blocks are preserved.
+ */
+test('empty else becomes object', () => {
+  const xml =
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml"><state id="s"><onentry><if cond="true"><else/></if></onentry></state></scxml>';
+  const obj = JSON.parse(xmlToJson(xml));
+  const entry = obj.state[0].onentry[0];
+  expect(entry.if_value[0]).toHaveProperty('else_value');
+  expect(entry.if_value[0].else_value).toEqual({});
+});
+
+/**
+ * Preserve empty ``final`` elements nested in other actions.
+ */
+test('empty final element survives cleanup', () => {
+  const xml =
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml"><state id="s"><onentry><assign location="x"><scxml><final/></scxml></assign></onentry></state></scxml>';
+  const obj = JSON.parse(xmlToJson(xml));
+  const assign = obj.state[0].onentry[0].assign[0];
+  expect(assign.content[0]).toHaveProperty('final');
+  expect(assign.content[0].final).toEqual([{}]);
+});
+
+/**
+ * Root level transitions are ignored like the Python converter.
+ */
+test('root transitions are dropped', () => {
+  const xml =
+    '<scxml xmlns="http://www.w3.org/2005/07/scxml"><transition target="s"/><state id="s"/></scxml>';
+  const obj = JSON.parse(xmlToJson(xml));
+  expect(obj).not.toHaveProperty('transition');
+  expect(obj.state[0].id).toBe('s');
+});
