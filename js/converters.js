@@ -55,6 +55,21 @@ const ARRAY_KEYS = new Set([
 const ALWAYS_KEEP = new Set(['else_value', 'final']);
 
 /**
+ * Remove transition elements directly under the <scxml> root.
+ *
+ * The reference Python implementation ignores these top level
+ * transitions entirely. To maintain parity we drop them during
+ * conversion.
+ *
+ * @param {object} obj - Parsed SCXML object.
+ */
+function stripRootTransitions(obj) {
+  if (obj && typeof obj === 'object' && Array.isArray(obj.transition)) {
+    delete obj.transition;
+  }
+}
+
+/**
  * Map of attribute names to their scjson property equivalents.
  */
 const ATTRIBUTE_MAP = {
@@ -517,6 +532,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixScripts(obj);
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
+  stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
@@ -558,7 +574,9 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
-  return JSON.stringify(obj, null, 2);
+  let out = JSON.stringify(obj, null, 2);
+  out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
+  return out;
 }
 
 /**
@@ -592,7 +610,23 @@ function jsonToXml(jsonStr) {
             break;
           }
         }
-        if (nk === 'content') {
+        if (nk === 'script') {
+          if (Array.isArray(v)) {
+            out[nk] = v.map(item => {
+              if (
+                item &&
+                typeof item === 'object' &&
+                Array.isArray(item.content) &&
+                item.content.every(x => typeof x === 'string')
+              ) {
+                return item.content.join('');
+              }
+              return restoreKeys(item);
+            });
+          } else {
+            out[nk] = v;
+          }
+        } else if (nk === 'content') {
           out[nk] = restoreKeys(v);
         } else if (Array.isArray(v) && v.every(x => typeof x !== 'object')) {
           const val = v.join(' ');
@@ -634,5 +668,6 @@ module.exports = {
   fixSendDefaults,
   splitTokenAttrs,
   fixEmptyElse,
+  stripRootTransitions,
   reorderScxml,
 };
