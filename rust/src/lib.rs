@@ -649,7 +649,7 @@ fn build_element(name: &str, value: &Value) -> Result<Element, ScjsonError> {
 ///
 /// # Parameters
 /// - `xml`: XML input string.
-/// - `omit_empty`: Remove empty fields when true.
+/// - `omit_empty`: Remove empty fields when `true`.
 ///
 /// # Returns
 /// JSON string representing the document.
@@ -658,7 +658,29 @@ pub fn xml_to_json(xml: &str, _omit_empty: bool) -> Result<String, ScjsonError> 
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    let obj = element_to_map(&root);
+    let version = root
+        .attributes
+        .get("version")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(1.0);
+    let datamodel = root
+        .attributes
+        .get("datamodel")
+        .map(|s| s.as_str())
+        .unwrap_or("null");
+    let mut obj = serde_json::Map::new();
+    let ver_value = if (version.fract() - 0.0).abs() < f64::EPSILON {
+        Value::Number(Number::from(version as i64))
+    } else {
+        Value::Number(Number::from_f64(version).unwrap())
+    };
+    obj.insert("version".into(), ver_value);
+    if !(omit_empty && datamodel == "null") {
+        obj.insert(
+            "datamodel_attribute".into(),
+            Value::String(datamodel.to_string()),
+        );
+    }
     let value = Value::Object(obj);
     if omit_empty {
         Ok(serde_json::to_string_pretty(&value)?)
@@ -673,13 +695,28 @@ pub fn xml_to_json(xml: &str, _omit_empty: bool) -> Result<String, ScjsonError> 
 ///
 /// # Parameters
 /// - `json_str`: JSON input string.
+/// - `omit_empty`: Remove empty fields when `true`.
 ///
 /// # Returns
 /// XML string representing the document.
-pub fn json_to_xml(json_str: &str) -> Result<String, ScjsonError> {
+pub fn json_to_xml(json_str: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     let v: Value = serde_json::from_str(json_str)?;
     let obj = v.as_object().ok_or(ScjsonError::Unsupported)?;
-    let root = map_to_element("scxml", obj);
+    let version = obj.get("version").and_then(|v| v.as_f64()).unwrap_or(1.0);
+    let datamodel = obj
+        .get("datamodel_attribute")
+        .and_then(|v| v.as_str())
+        .unwrap_or("null");
+
+    let mut root = Element::new("scxml");
+    root.attributes
+        .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
+    root.attributes
+        .insert("version".into(), version.to_string());
+    if !(omit_empty && datamodel == "null") {
+        root.attributes
+            .insert("datamodel".into(), datamodel.to_string());
+    }
     let mut out = Vec::new();
     elem.write(&mut out)?;
     Ok(String::from_utf8(out).unwrap())
@@ -694,7 +731,7 @@ mod tests {
         let xml = "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\"/>";
         let json = xml_to_json(xml, true).unwrap();
         assert!(json.contains("version"));
-        let xml_rt = json_to_xml(&json).unwrap();
+        let xml_rt = json_to_xml(&json, true).unwrap();
         assert!(xml_rt.contains("scxml"));
     }
 }
