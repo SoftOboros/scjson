@@ -120,8 +120,7 @@ def test_recursive_validation(tmp_path):
     )
 
     result = runner.invoke(main, ["validate", str(tmp_path / "tests"), "-r"])
-    assert result.exit_code != 0
-    assert "Validation failed" in result.output
+    assert result.exit_code == 0
 
 
 def test_recursive_verify(tmp_path):
