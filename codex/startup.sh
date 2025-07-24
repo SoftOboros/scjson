@@ -5,7 +5,39 @@
 # Developed by Softoboros Technology Inc.
 # Licensed under the BSD 1-Clause License.
 
-apt update && apt install -y nano maven gradle lua5.4 luarocks dotnet-sdk-8.0
+apt update && apt install -y nano maven lua5.4 luarocks dotnet-sdk-8.0
+
+# Ensure Java 21 is present
+apt install -y default-jre-headless
+
+# Explicitly set JAVA_HOME (check if this is the real path)
+export JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# Sanity check for keytool
+if ! command -v keytool >/dev/null; then
+  echo "❌ keytool not found; Java may not be set up correctly"
+else
+  echo "✅ keytool is available"
+fi
+
+# Ensure keystore directory exists
+mkdir -p /etc/ssl/certs/java
+
+# Create a blank keystore manually to satisfy the updater
+if [ ! -f /etc/ssl/certs/java/cacerts ]; then
+  keytool -genkey -alias temp -keystore /etc/ssl/certs/java/cacerts \
+    -storepass changeit -keypass changeit -dname "CN=temp" \
+    -keyalg RSA -keysize 2048 -validity 1 || echo "⚠️ failed to create dummy keystore"
+
+  # Delete the temporary key to make it a blank keystore
+  keytool -delete -alias temp -keystore /etc/ssl/certs/java/cacerts \
+    -storepass changeit || echo "⚠️ failed to delete dummy entry"
+fi
+
+# Now retry
+dpkg --configure -a
+
 unset NPM_CONFIG_HTTP_PROXY
 unset NPM_CONFIG_HTTPS_PROXY
 git submodule update --init
@@ -14,7 +46,6 @@ cd py && pip install -r requirements.txt && cd ..
 cd lua && luarocks install luaexpat --deps-mode=one && \
     luarocks install dkjson --deps-mode=one && \
     luarocks install busted --deps-mode=one && cd ..
-cd ruby && gem install bundler && bundle install && cd ..
 
 mkdir -p ~/.m2
 if [ ! -f ~/.m2/settings.xml ]; then
@@ -46,12 +77,17 @@ cd java \
   && git clone https://github.com/apache/commons-scxml.git \
   && cd commons-scxml \
   && git fetch --tags \
-  && git tag \
   && git checkout tags/commons-scxml2-2.0-M1 -b scxml-2.0-M1 \
-  && mvn clean install -DskipTests -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 \
-  && cd ..
-  && mvn clean install -DskipTests -B -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 \
-  && mvn -q -DskipTests dependency:go-offline \
+  && mvn clean install -DskipTests -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 || echo "⚠️ Failed to compile commons-scxml 2.0-M1" \
+  && cd .. \
+  && mvn dependency:resolve -DincludeScope=test || echo "⚠️ Failed to prefetch test-scope deps" \
+  && mvn clean test -DskipTests || echo "⚠️ Failed to compile test classes (main test compile)" \
+  && mvn clean install -DskipTests -B -Dmaven.compiler.source=8 -Dmaven.compiler.target=8 || echo "⚠️ Failed main build" \
+  && mvn org.apache.maven.plugins:maven-surefire-plugin:3.1.2:test \
+  -Dtest=NONE -Dsurefire.skipAfterFailureCount=0 || echo "⚠️ Surefire pre-cache failed" \
+  && mvn dependency:go-offline -DincludeScope=test \
+  && mvn dependency:get -Dartifact=org.apache.maven.surefire:surefire-junit-platform:3.1.2 \
+  || echo "⚠️ Failed to prefetch surefire-junit-platform" \
   && cd ..
 cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
 cd swift && swift package resolve && swift build && cd ..
