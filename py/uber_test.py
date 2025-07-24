@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import argparse
+import os
 from os import sep
 from os.path import abspath, split as pathsplit
 from pathlib import Path
@@ -56,7 +57,7 @@ LANG_CMDS: dict[str, list[str]] = {
 }
 
 
-def _available(cmd: list[str]) -> bool:
+def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
     """Check if a CLI command is runnable.
 
     Parameters
@@ -80,6 +81,7 @@ def _available(cmd: list[str]) -> bool:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=True,
+            env=env,
         )
         return True
     except Exception:
@@ -141,7 +143,11 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         if not cmd:
             print(f"Skipping {lang}: unknown language")
             continue
-        if not _available(cmd):
+        env = None
+        if lang == "python":
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(ROOT / "py")
+        if not _available(cmd, env):
             print(f"Skipping {lang}: executable not available")
             continue
         json_dir = out_root / lang / "json"
@@ -154,6 +160,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
@@ -168,6 +175,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)

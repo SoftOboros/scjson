@@ -137,6 +137,26 @@ class SCXMLDocumentHandler:
                         for c in data.get("children", [])
                     ],
                 )
+            if isinstance(data, dict):
+                try:
+                    return self._to_dataclass(Scxml, data)
+                except Exception:
+                    pass
+            if isinstance(data, list):
+                return [self._to_dataclass(object, x) for x in data]
+            return data
+        if cls is object:
+            if isinstance(data, dict) and "qname" in data:
+                return AnyElement(
+                    qname=data.get("qname"),
+                    text=data.get("text"),
+                    tail=data.get("tail"),
+                    attributes=data.get("attributes", {}),
+                    children=[
+                        self._to_dataclass(object, c) if isinstance(c, dict) else c
+                        for c in data.get("children", [])
+                    ],
+                )
             if isinstance(data, list):
                 return [self._to_dataclass(object, x) for x in data]
             return data
