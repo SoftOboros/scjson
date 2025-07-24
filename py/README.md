@@ -106,6 +106,15 @@ During `asdict()` serialization the generated dataclasses may contain
 These conversions allow the JSON representation to be serialized by
 `json.dumps` and then converted back via the `_to_dataclass` helper.
 
+## Known Issues
+The following test vector fails - it is a test of UTF-8 encoding in scxml.
+```bash
+/py# python uber_test.py -l python 2>&1 | tee test.log
+Skipping /opt/scjson/tutorial/Tests/ecma/Custom/uscxml/test-enc-UTF8.scxml: Unknown property {http://www.w3.org/2005/07/scxml}scxml:{http://www.w3.org/2005/07/scxml}transition
+
+```
+Note: uber_test.py applies all scxml files in [Zhornyak's ScxmlEditor-Tutorial](https://alexzhornyak.github.io/ScxmlEditor-Tutorial/) which provides a robest set of scxml test vectors useful for standard compliance verification.  This is the only file in the test suite which fails to verify round-trip.
+
 ## Model Variants
 
 The Python package exposes four sets of generated models that mirror the
