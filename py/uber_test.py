@@ -15,6 +15,8 @@ directory by default.
 
 from __future__ import annotations
 
+from deepdiff import DeepDiff
+
 import json
 import shutil
 import subprocess
@@ -86,6 +88,26 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
         return True
     except Exception:
         return False
+
+
+def _diff_report(expected: dict, actual: dict) -> str:
+    """Create a human-readable diff between two dictionaries.
+
+    Parameters
+    ----------
+    expected: dict
+        Canonical structure produced by the Python implementation.
+    actual: dict
+        Structure produced by the language under test.
+
+    Returns
+    -------
+    str
+        Diff string suitable for console output.
+    """
+
+    diff = DeepDiff(expected, actual, verbose_level=1)
+    return diff.pretty()
 
 
 def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Path, dict]:
@@ -180,6 +202,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     continue
                 if data != canonical[src]:
                     print(f"{lang} JSON mismatch: {rel}")
+                    print(_diff_report(canonical[src], data))
                     errors += 1
             subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
@@ -203,6 +226,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     continue
                 if parsed != canonical[src]:
                     print(f"{lang} XML mismatch: {rel}")
+                    print(_diff_report(canonical[src], parsed))
                     errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatches")

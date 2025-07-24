@@ -50,6 +50,11 @@ const ARRAY_KEYS = new Set([
 ]);
 
 /**
+ * Keys that should never be pruned even when empty.
+ */
+const ALWAYS_KEEP = new Set(['else_value', 'final']);
+
+/**
  * Map of attribute names to their scjson property equivalents.
  */
 const ATTRIBUTE_MAP = {
@@ -272,6 +277,32 @@ function ensureArrays(obj) {
 }
 
 /**
+ * Convert ``else`` elements to the ``else_value`` schema key.
+ *
+ * Empty ``<else/>`` tags become an object literal so they survive
+ * subsequent calls to :func:`removeEmpty`.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixEmptyElse(value) {
+  if (Array.isArray(value)) {
+    value.forEach(v => fixEmptyElse(v));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'else') {
+        value.else_value = v === '' ? {} : v;
+        delete value.else;
+        fixEmptyElse(value.else_value);
+        continue;
+      }
+      fixEmptyElse(v);
+    }
+  }
+}
+
+/**
  * Normalise script elements after parsing.
  *
  * Ensures that each ``script`` entry is an object with a ``content`` array
@@ -324,6 +355,9 @@ function fixNestedScxml(value) {
       delete value.scxml;
       const arr = Array.isArray(sub) ? sub : [sub];
       arr.forEach(v => {
+        if (Object.prototype.hasOwnProperty.call(v, 'final') && v.final === '') {
+          v.final = [{}];
+        }
         if (v.initial_attribute !== undefined && v.initial === undefined) {
           v.initial = v.initial_attribute;
           delete v.initial_attribute;
@@ -422,21 +456,29 @@ function fixSendDefaults(value) {
 /**
  * Remove nulls and empty containers from values recursively.
  *
+ * Certain keys like ``final`` must always be preserved even when they
+ * would otherwise be considered empty. The caller provides the key so we
+ * can decide whether to keep an empty object.
+ *
  * @param {*} value - Candidate value.
+ * @param {string} [key] - Key name associated with ``value`` in the parent.
  * @returns {*} Sanitised value.
  */
-function removeEmpty(value) {
+function removeEmpty(value, key) {
   if (Array.isArray(value)) {
-    const arr = value.map(removeEmpty).filter(v => v !== undefined);
+    const arr = value.map(v => removeEmpty(v, key)).filter(v => v !== undefined);
     return arr.length > 0 ? arr : undefined;
   }
   if (value && typeof value === 'object') {
     const obj = {};
     for (const [k, v] of Object.entries(value)) {
-      const r = removeEmpty(v);
+      const r = removeEmpty(v, k);
       if (r !== undefined) obj[k] = r;
     }
-    return Object.keys(obj).length > 0 ? obj : undefined;
+    if (Object.keys(obj).length > 0 || ALWAYS_KEEP.has(key)) {
+      return obj;
+    }
+    return undefined;
   }
   if (value === null) {
     return undefined;
@@ -467,17 +509,18 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     obj = obj.scxml;
   }
   obj = normaliseKeys(obj);
+  fixNestedScxml(obj);
+  fixEmptyElse(obj);
   obj = collapseWhitespace(obj);
   splitTokenAttrs(obj);
-  if (omitEmpty) {
-    obj = removeEmpty(obj) || {};
-  }
   ensureArrays(obj);
   fixScripts(obj);
-  fixNestedScxml(obj);
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
   obj = collapseWhitespace(obj);
+  if (omitEmpty) {
+    obj = removeEmpty(obj) || {};
+  }
   if (obj.initial_attribute !== undefined && obj.initial === undefined) {
     obj.initial = obj.initial_attribute;
     delete obj.initial_attribute;
@@ -590,5 +633,6 @@ module.exports = {
   fixAssignDefaults,
   fixSendDefaults,
   splitTokenAttrs,
+  fixEmptyElse,
   reorderScxml,
 };
