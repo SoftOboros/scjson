@@ -106,7 +106,12 @@ def _diff_report(expected: dict, actual: dict) -> str:
         Diff string suitable for console output.
     """
 
-    diff = DeepDiff(expected, actual, verbose_level=1)
+    diff = DeepDiff(
+        expected,
+        actual,
+        verbose_level=1,
+        ignore_numeric_type_changes=True,
+    )
     return diff.pretty()
 
 
