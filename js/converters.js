@@ -48,9 +48,39 @@ const ARRAY_KEYS = new Set([
   'script',
   'send',
   'state',
-  'target',
-  'transition',
 ]);
+
+/**
+ * Map of attribute names to their scjson property equivalents.
+ */
+const ATTRIBUTE_MAP = {
+  datamodel: 'datamodel_attribute',
+  initial: 'initial_attribute',
+  type: 'type_value',
+  raise: 'raise_value',
+};
+
+/**
+ * Collapse whitespace in string values recursively.
+ *
+ * @param {object|Array|string} value - Value to normalise.
+ * @returns {object|Array|string} Normalised value.
+ */
+function collapseWhitespace(value) {
+  if (Array.isArray(value)) {
+    return value.map(collapseWhitespace);
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      value[k] = collapseWhitespace(v);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    return value.replace(/[\n\r\t]/g, ' ');
+  }
+  return value;
+}
 
 /**
  * Recursively rename XML parser keys to match the scjson schema.
@@ -80,7 +110,11 @@ function normaliseKeys(value) {
         }
         continue;
       }
-      const nk = k.startsWith('@_') ? k.slice(2) : k;
+      let nk = k;
+      if (k.startsWith('@_')) {
+        const attr = k.slice(2);
+        nk = ATTRIBUTE_MAP[attr] || attr;
+      }
       out[nk] = normaliseKeys(v);
     }
     return out;
@@ -107,10 +141,53 @@ function ensureArrays(obj) {
       }
       continue;
     }
+    if (k === 'transition' && v && typeof v === 'object') {
+      const arr = Array.isArray(v) ? v : [v];
+      arr.forEach(tr => {
+        if (tr.target !== undefined && !Array.isArray(tr.target)) {
+          tr.target = [tr.target];
+        }
+        ensureArrays(tr);
+      });
+      obj[k] = arr;
+      continue;
+    }
     if (Array.isArray(v)) {
       v.forEach(ensureArrays);
     } else if (typeof v === 'object') {
       ensureArrays(v);
+    }
+  }
+}
+
+/**
+ * Normalise script elements after parsing.
+ *
+ * Ensures that each ``script`` entry is an object with a ``content`` array
+ * as required by the schema.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixScripts(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixScripts);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'script') {
+        if (Array.isArray(v)) {
+          value[k] = v.map(s =>
+            typeof s === 'string' ? { content: [s] } : (fixScripts(s), s)
+          );
+        } else if (typeof v === 'string') {
+          value[k] = { content: [v] };
+        } else {
+          fixScripts(v);
+        }
+        continue;
+      }
+      fixScripts(v);
     }
   }
 }
@@ -167,8 +244,27 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     obj = removeEmpty(obj) || {};
   }
   ensureArrays(obj);
-  if (obj['@_xmlns']) {
-    delete obj['@_xmlns'];
+  fixScripts(obj);
+  obj = collapseWhitespace(obj);
+  for (const k of Object.keys(obj)) {
+    if (k === '@_xmlns' || k.startsWith('xmlns')) {
+      delete obj[k];
+    }
+  }
+  if (obj.datamodel !== undefined) {
+    if (typeof obj.datamodel === 'string') {
+      obj.datamodel_attribute = obj.datamodel;
+      delete obj.datamodel;
+    } else if (Array.isArray(obj.datamodel) &&
+               obj.datamodel.length === 1 &&
+               typeof obj.datamodel[0] === 'string') {
+      obj.datamodel_attribute = obj.datamodel[0];
+      delete obj.datamodel;
+    }
+  }
+  if (typeof obj.version === 'string') {
+    const n = parseFloat(obj.version);
+    if (!Number.isNaN(n)) obj.version = n;
   }
   if (obj.version === undefined) {
     obj.version = 1.0;
@@ -206,4 +302,5 @@ module.exports = {
   removeEmpty,
   normaliseKeys,
   ensureArrays,
+  fixScripts,
 };
