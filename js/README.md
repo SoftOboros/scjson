@@ -74,6 +74,14 @@ const { xmlToJson, jsonToXml } = require('scjson');
 import { xmlToJson, jsonToXml }from "scjson/browser"
 ```
 
+## Shared Converters
+Both the Node and browser builds use the same conversion logic exposed in
+`scjson/converters`. You can import these helpers directly if you need access to
+the utility functions used by the CLI and browser modules.
+```js
+import { xmlToJson, jsonToXml } from 'scjson/converters';
+```
+
 ## Axios Endpoint Example
 ```typescript
 import axios from "axios"

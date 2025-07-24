@@ -35,7 +35,8 @@
     "./browser": {
       "import": "./browser.mjs",
       "require": "./browser.cjs"
-    }
+    },
+    "./converters": "./converters.js"
   },
   "typesVersions": {
     "*": {
@@ -54,6 +55,7 @@
     "index.js",
     "browser.mjs",
     "browser.cjs",
+    "converters.js",
     "scjsonProps.ts",
     "types/scjson-browser.d.ts",
     "types/scjsonProps.d.ts",
