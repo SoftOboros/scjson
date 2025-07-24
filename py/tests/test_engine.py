@@ -9,6 +9,7 @@ Licensed under the BSD 1-Clause License.
 from decimal import Decimal
 from scjson.pydantic import Scxml, State, Transition, Datamodel, Data
 from scjson.context import DocumentContext
+from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
 
 def _make_doc():
@@ -263,3 +264,16 @@ def test_history_state_restore():
     ctx.enqueue("back")
     ctx.microstep()
     assert "p" in ctx.configuration and "s2" in ctx.configuration
+
+
+def test_xml_skip_unknown(tmp_path):
+    """Unknown elements are ignored when configured."""
+    xml = (
+        "<scxml xmlns='http://www.w3.org/2005/07/scxml'>"
+        "<state id='a'/><bogus/></scxml>"
+    )
+    path = tmp_path / "bad.scxml"
+    path.write_text(xml)
+    handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+    json_str = handler.xml_to_json(xml)
+    assert "bogus" not in json_str

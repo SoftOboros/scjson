@@ -106,6 +106,15 @@ During `asdict()` serialization the generated dataclasses may contain
 These conversions allow the JSON representation to be serialized by
 `json.dumps` and then converted back via the `_to_dataclass` helper.
 
+## Known Issues
+None at this time.
+
+Operational conformance testing is performed via [uber_test.py](https://github.com/SoftOboros/scjson/blob/engine/py/uber_test.py)
+```bash
+/py# python uber_test.py -l python 2>&1 | tee test.log
+```
+Note: [uber_test.py](https://github.com/SoftOboros/scjson/blob/main/py/uber_test.py) applies all scxml files in [Zhornyak's ScxmlEditor-Tutorial](https://alexzhornyak.github.io/ScxmlEditor-Tutorial/) which provides a robest set of scxml test vectors useful for standard compliance verification.  This is the only file in the test suite which fails to verify round-trip.
+
 ## Model Variants
 
 The Python package exposes four sets of generated models that mirror the

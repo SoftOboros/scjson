@@ -6,7 +6,11 @@ Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
 Utilities for loading, validating, and converting SCXML documents to and from
-their JSON representation.
+their JSON representation.  The underlying :class:`~xsdata.formats.dataclass.parsers.XmlParser`
+can enforce strict schema checking.  By default unknown XML elements raise an
+exception; set ``fail_on_unknown_properties=False`` when instantiating
+:class:`SCXMLDocumentHandler` to ignore and skip unrecognised fields during
+parsing.
 """
 
 from typing import Optional, Type, Union, Any, get_args, get_origin, ForwardRef
@@ -17,6 +21,7 @@ import json
 from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
@@ -29,10 +34,33 @@ class SCXMLDocumentHandler:
         schema_path: Optional[str] = None,
         pretty: bool = True,
         omit_empty: bool = True,
+        fail_on_unknown_properties: bool = True,
     ) -> None:
+        """Create a new document handler.
+
+        Parameters
+        ----------
+        model_class: Type, optional
+            Root dataclass for the SCXML schema.
+        schema_path: str | None, optional
+            Optional path to an XML Schema document for validation.
+        pretty: bool, optional
+            Pretty-print output when serialising.
+        omit_empty: bool, optional
+            Drop ``None`` or empty containers from JSON output.
+        fail_on_unknown_properties: bool, optional
+            When ``True`` (default) unexpected XML elements raise an exception
+            during parsing.  Set ``False`` to ignore them.
+
+        Returns
+        -------
+        None
+        """
         self.model_class = model_class
         self.schema_path = schema_path
-        self.parser = XmlParser()
+        self.parser = XmlParser(
+            config=ParserConfig(fail_on_unknown_properties=fail_on_unknown_properties)
+        )
         self.serializer = XmlSerializer(
             config=SerializerConfig(
                 pretty_print=pretty, encoding="utf-8", xml_declaration=True

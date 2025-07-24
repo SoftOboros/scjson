@@ -1,6 +1,6 @@
 [project]
 name = "scjson"
-version = "0.2.2"
+version = "0.2.3"
 description = "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education."
 readme = "README.md"
 requires-python = ">=3.8"
