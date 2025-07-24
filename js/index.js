@@ -9,94 +9,15 @@
 const fs = require('fs');
 const path = require('path');
 const { Command } = require('commander');
-const { XMLParser, XMLBuilder } = require('fast-xml-parser');
-const Ajv = require('ajv');
+const {
+  xmlToJson,
+  jsonToXml,
+} = require('./converters.js');
+
 
 const program = new Command();
-const schema = require('./scjson.schema.json');
 
-/**
- * Remove nulls and empty containers from values recursively.
- *
- * @param {*} value - Candidate value.
- * @returns {*} Sanitised value.
- */
-function removeEmpty(value) {
-  if (Array.isArray(value)) {
-    const arr = value.map(removeEmpty).filter(v => v !== undefined);
-    return arr.length > 0 ? arr : undefined;
-  }
-  if (value && typeof value === 'object') {
-    const obj = {};
-    for (const [k, v] of Object.entries(value)) {
-      const r = removeEmpty(v);
-      if (r !== undefined) obj[k] = r;
-    }
-    return Object.keys(obj).length > 0 ? obj : undefined;
-  }
-  if (value === null) {
-    return undefined;
-  }
-  if (value === '') {
-    return undefined;
-  }
-  return value;
-}
 
-const ajv = new Ajv({ useDefaults: true, strict: false });
-const validate = ajv.compile(schema);
-
-/**
- * Convert an SCXML string to scjson.
- *
- * @param {string} xmlStr - XML input.
- * @param {boolean} [omitEmpty=true] - Remove empty values when true.
- * @returns {string} JSON representation.
- *
- * Removes the XML namespace attribute and injects default values
- * expected by the schema.
- */
-function xmlToJson(xmlStr, omitEmpty = true) {
-  const parser = new XMLParser({ ignoreAttributes: false });
-  let obj = parser.parse(xmlStr);
-  if (obj.scxml) {
-    obj = obj.scxml;
-  }
-  if (omitEmpty) {
-    obj = removeEmpty(obj) || {};
-  }
-  if (obj['@_xmlns']) {
-    delete obj['@_xmlns'];
-  }
-  if (obj.version === undefined) {
-    obj.version = 1.0;
-  }
-  if (obj.datamodel_attribute === undefined) {
-    obj.datamodel_attribute = 'null';
-  }
-  if (!validate(obj)) {
-    throw new Error('Invalid scjson');
-  }
-  if (omitEmpty) {
-    obj = removeEmpty(obj) || {};
-  }
-  return JSON.stringify(obj, null, 2);
-}
-
-/**
- * Convert a scjson string to SCXML.
- *
- * @param {string} jsonStr - JSON input.
- * @returns {string} XML output.
- */
-function jsonToXml(jsonStr) {
-  const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
-  const obj = JSON.parse(jsonStr);
-  if (!validate(obj)) {
-    throw new Error('Invalid scjson');
-  }
-  return builder.build({ scxml: obj });
-}
 
 program
   .name('scjson')
