@@ -50,6 +50,36 @@ const ARRAY_KEYS: &[&str] = &[
     "state",
 ];
 
+/// Known SCXML element names used for conversion.
+const SCXML_ELEMS: &[&str] = &[
+    "scxml",
+    "state",
+    "parallel",
+    "final",
+    "history",
+    "transition",
+    "invoke",
+    "finalize",
+    "datamodel",
+    "data",
+    "onentry",
+    "onexit",
+    "log",
+    "send",
+    "cancel",
+    "raise",
+    "assign",
+    "script",
+    "foreach",
+    "param",
+    "if",
+    "elseif",
+    "else",
+    "content",
+    "donedata",
+    "initial",
+];
+
 /// Errors produced by conversion routines.
 #[derive(Debug, Error)]
 pub enum ScjsonError {
@@ -74,6 +104,32 @@ fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
             map.insert(key.to_string(), Value::Array(vec![val]));
         }
     }
+}
+
+fn any_element_to_value(elem: &Element) -> Value {
+    let mut map = Map::new();
+    map.insert("qname".into(), Value::String(elem.name.clone()));
+    let text = elem.get_text().map(|c| c.into_owned()).unwrap_or_default();
+    map.insert("text".into(), Value::String(text));
+    if !elem.attributes.is_empty() {
+        let mut attrs = Map::new();
+        for (k, v) in &elem.attributes {
+            attrs.insert(k.clone(), Value::String(v.clone()));
+        }
+        map.insert("attributes".into(), Value::Object(attrs));
+    }
+    if !elem.children.is_empty() {
+        let mut children = Vec::new();
+        for c in &elem.children {
+            if let XMLNode::Element(e) = c {
+                children.push(any_element_to_value(e));
+            }
+        }
+        if !children.is_empty() {
+            map.insert("children".into(), Value::Array(children));
+        }
+    }
+    Value::Object(map)
 }
 
 fn element_to_map(elem: &Element) -> Map<String, Value> {
@@ -144,20 +200,25 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
     for child in &elem.children {
         match child {
             XMLNode::Element(e) => {
-                let key = match e.name.as_str() {
-                    "if" => "if_value",
-                    "else" => "else_value",
-                    name => name,
-                };
-                let child_map = element_to_map(e);
-                let target_key = if e.name == "scxml" && elem.name != "scxml" {
-                    "content"
-                } else if elem.name == "content" && e.name == "scxml" {
-                    "content"
+                if SCXML_ELEMS.contains(&e.name.as_str()) {
+                    let key = match e.name.as_str() {
+                        "if" => "if_value",
+                        "else" => "else_value",
+                        name => name,
+                    };
+                    let child_map = element_to_map(e);
+                    let target_key = if e.name == "scxml" && elem.name != "scxml" {
+                        "content"
+                    } else if elem.name == "content" && e.name == "scxml" {
+                        "content"
+                    } else {
+                        key
+                    };
+                    append_child(&mut map, target_key, Value::Object(child_map));
                 } else {
-                    key
-                };
-                append_child(&mut map, target_key, Value::Object(child_map));
+                    let val = any_element_to_value(e);
+                    append_child(&mut map, "content", val);
+                }
             }
             XMLNode::Text(t) => {
                 if !t.trim().is_empty() {
@@ -211,12 +272,31 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             }
         }
     }
-    let mut elem = Element::new(name);
+    let mut elem_name = name.to_string();
+    if let Some(Value::String(q)) = map.get("qname") {
+        elem_name = q.clone();
+    }
+    let mut elem = Element::new(&elem_name);
     if name == "scxml" {
         elem.attributes
             .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
     }
+    if let Some(Value::String(text)) = map.get("text") {
+        if !text.is_empty() {
+            elem.children.push(XMLNode::Text(text.clone()));
+        }
+    }
+    if let Some(Value::Object(attrs)) = map.get("attributes") {
+        for (k, v) in attrs {
+            if let Some(s) = v.as_str() {
+                elem.attributes.insert(k.clone(), s.to_string());
+            }
+        }
+    }
     for (k, v) in map {
+        if ["qname", "text", "attributes"].contains(&k.as_str()) {
+            continue;
+        }
         if k == "content" {
             if let Value::Array(arr) = v {
                 if name == "invoke" {
