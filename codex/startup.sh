@@ -89,8 +89,25 @@ cd java \
   && mvn dependency:get -Dartifact=org.apache.maven.surefire:surefire-junit-platform:3.1.2 \
   || echo "⚠️ Failed to prefetch surefire-junit-platform" \
   && cd ..
-cd rust && cargo clean && cargo fetch && cargo build --locked && cd ..
-cd swift && swift package resolve && swift build && cd ..
-cd go && go mod verify && go mod download && go build -mod=readonly && cd ..
-cd csharp/ScjsonCli && dotnet restore && dotnet build --no-restore && cd ../..
-cd csharp/Scjson.Tests && dotnet restore && cd ../..
+cd rust \
+    && cargo clean \
+    && cargo fetch || echo "⚠️ rust fetch failed" \
+    && cargo build --locked || echo "⚠️ rust compile failed" \
+    && cd .. 
+cd swift \
+    && swift package resolve || echo "⚠️ swift resolve failed" \
+    && swift build || echo "⚠️ swift build failed" \
+    && cd ..
+cd go \
+    && go mod verify || echo "⚠️ go mod verify failed" \
+    && go mod download || echo "⚠️ go mod download failed" \
+    && go build -mod=readonly || echo "⚠️ go build -mod=readonly failed" \
+    && cd ..
+cd csharp/ScjsonCli \
+    && dotnet restore || echo "⚠️ dotnet restore failed" \
+    && dotnet build --no-restore || echo "⚠️ (Cli) dotnet build --no-restore failed" \
+    && cd ../..
+cd csharp/Scjson.Tests \
+    && dotnet restore || echo "⚠️ (Tests) dotnet restore failed" \
+    && cd ../..
+

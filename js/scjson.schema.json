@@ -130,12 +130,20 @@
         },
         "Content": {
             "properties": {
-                "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
-                    "title": "Other Attributes",
-                    "type": "object"
+                "content": {
+                    "anyOf": [
+                        {
+                            "items": {
+                                "$ref": "#/$defs/Scxml"
+                            },
+                            "type": "array"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Content"
                 },
                 "expr": {
                     "anyOf": [
@@ -149,10 +157,12 @@
                     "default": null,
                     "title": "Expr"
                 },
-                "content": {
-                    "items": {},
-                    "title": "Content",
-                    "type": "array"
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
                 }
             },
             "title": "Content",
@@ -1205,6 +1215,117 @@
             "title": "Script",
             "type": "object"
         },
+        "Scxml": {
+            "properties": {
+                "state": {
+                    "items": {
+                        "$ref": "#/$defs/State"
+                    },
+                    "title": "State",
+                    "type": "array"
+                },
+                "parallel": {
+                    "items": {
+                        "$ref": "#/$defs/Parallel"
+                    },
+                    "title": "Parallel",
+                    "type": "array"
+                },
+                "final": {
+                    "items": {
+                        "$ref": "#/$defs/Final"
+                    },
+                    "title": "Final",
+                    "type": "array"
+                },
+                "datamodel": {
+                    "items": {
+                        "$ref": "#/$defs/Datamodel"
+                    },
+                    "title": "Datamodel",
+                    "type": "array"
+                },
+                "script": {
+                    "items": {
+                        "$ref": "#/$defs/Script"
+                    },
+                    "title": "Script",
+                    "type": "array"
+                },
+                "other_element": {
+                    "items": {},
+                    "title": "Other Element",
+                    "type": "array"
+                },
+                "initial": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Initial",
+                    "type": "array"
+                },
+                "name": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Name"
+                },
+                "version": {
+                    "anyOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ],
+                    "default": "1.0",
+                    "title": "Version"
+                },
+                "datamodel_attribute": {
+                    "default": "null",
+                    "title": "Datamodel Attribute",
+                    "type": "string"
+                },
+                "binding": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/BindingDatatype"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "exmode": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/ExmodeDatatype"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null
+                },
+                "other_attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Other Attributes",
+                    "type": "object"
+                }
+            },
+            "title": "Scxml",
+            "type": "object"
+        },
         "Send": {
             "properties": {
                 "content": {
@@ -1588,6 +1709,7 @@
             "type": "string"
         }
     },
+    "$ref": "#/$defs/Scxml",
     "properties": {
         "state": {
             "items": {
@@ -1694,7 +1816,5 @@
             "title": "Other Attributes",
             "type": "object"
         }
-    },
-    "title": "Scxml",
-    "type": "object"
+    }
 }

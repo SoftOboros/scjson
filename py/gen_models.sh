@@ -51,3 +51,6 @@ xsdata generate \
         --unnest-classes \
         --relative-imports \
         ../xsd/scxml-strict.xsd 
+
+python patch_scxml_forward_ref.py --file ./scjson/pydantic/generated.py
+python patch_scxml_forward_ref.py --file ./scjson/pydantic_strict/generated.py
