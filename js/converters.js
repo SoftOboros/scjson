@@ -403,6 +403,72 @@ function fixNestedScxml(value) {
 }
 
 /**
+ * Convert a parsed XML element to the generic AnyElement structure.
+ *
+ * This mirrors the ``AnyElement`` objects produced by the Python
+ * implementation. Attribute keys beginning with ``@_`` are mapped to
+ * the ``attributes`` object. Nested elements become ``children``.
+ *
+ * @param {string} name - Element tag name.
+ * @param {object} node - Parsed value for the element.
+ * @returns {object} AnyElement-like representation.
+ */
+function toAnyElement(name, node) {
+  const out = { qname: name, text: '', attributes: {}, children: [] };
+  if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === '#text') {
+        out.text = String(v);
+      } else if (k.startsWith('@_')) {
+        out.attributes[k.slice(2)] = String(v);
+      } else {
+        const arr = Array.isArray(v) ? v : [v];
+        arr.forEach(ch => {
+          out.children.push(toAnyElement(k, ch));
+        });
+      }
+    }
+  } else if (node !== undefined) {
+    out.text = String(node);
+  }
+  return out;
+}
+
+/**
+ * Transform arbitrary XML content into ``AnyElement`` dictionaries.
+ *
+ * ``<content>`` and ``<data>`` elements may contain raw XML fragments.
+ * The Python converter represents these fragments as objects with the
+ * keys ``qname``, ``attributes``, ``children`` and ``text``. This helper
+ * replicates that behaviour for parity with the reference output.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixAnyContent(value) {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const v = value[i];
+      if (v && typeof v === 'object' && !('qname' in v) && Object.keys(v).length === 1) {
+        const key = Object.keys(v)[0];
+        value[i] = toAnyElement(key, v[key]);
+      } else {
+        fixAnyContent(v);
+      }
+    }
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'content' && Array.isArray(v)) {
+        fixAnyContent(v);
+      } else {
+        fixAnyContent(v);
+      }
+    }
+  }
+}
+
+/**
  * Apply default values for assign elements.
  *
  * The scjson schema expects ``assign`` elements to include a
@@ -533,6 +599,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   }
   obj = normaliseKeys(obj);
   fixNestedScxml(obj);
+  fixAnyContent(obj);
   fixEmptyElse(obj);
   obj = collapseWhitespace(obj);
   splitTokenAttrs(obj);
