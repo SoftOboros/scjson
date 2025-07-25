@@ -16,38 +16,53 @@ use xmltree::Error as XmlWriteError;
 use xmltree::{Element, XMLNode};
 
 /// Attribute name mappings used during conversion.
-const ATTRIBUTE_MAP: &[(&str, &str)] = &[
-    ("datamodel", "datamodel_attribute"),
-    ("initial", "initial_attribute"),
-    ("type", "type_value"),
-    ("raise", "raise_value"),
-];
+// const ATTRIBUTE_MAP: &[(&str, &str)] = &[
+//     ("datamodel", "datamodel_attribute"),
+//     ("initial", "initial_attribute"),
+//     ("type", "type_value"),
+//     ("raise", "raise_value"),
+// ];
+// NOTE: reserved for future use when attribute renaming is implemented.
 
 /// Keys that should always be arrays in the output.
-const ARRAY_KEYS: &[&str] = &[
-    "assign",
-    "cancel",
-    "content",
-    "data",
-    "datamodel",
-    "donedata",
-    "final",
-    "finalize",
-    "foreach",
-    "history",
-    "if_value",
-    "initial",
-    "invoke",
-    "log",
-    "onentry",
-    "onexit",
-    "other_element",
-    "parallel",
-    "param",
-    "raise_value",
-    "script",
-    "send",
-    "state",
+// const ARRAY_KEYS: &[&str] = &[
+//     "assign",
+//     "cancel",
+//     "content",
+//     "data",
+//     "datamodel",
+//     "donedata",
+//     "final",
+//     "finalize",
+//     "foreach",
+//     "history",
+//     "if_value",
+//     "initial",
+//     "invoke",
+//     "log",
+//     "onentry",
+//     "onexit",
+//     "other_element",
+//     "parallel",
+//     "param",
+//     "raise_value",
+//     "script",
+//     "send",
+//     "state",
+// ];
+// NOTE: may be reintroduced when enforcing array types during parsing.
+
+/// Attributes whose whitespace should be collapsed.
+const COLLAPSE_ATTRS: &[&str] = &[
+    "expr",
+    "cond",
+    "event",
+    "target",
+    "delay",
+    "location",
+    "name",
+    "src",
+    "id",
 ];
 
 /// Known SCXML element names used for conversion.
@@ -421,6 +436,38 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
     elem
 }
 
+/// Collapse newlines and tabs in attribute values recursively.
+///
+/// # Parameters
+/// - `value`: Mutable JSON value to normalise.
+fn collapse_whitespace(value: &mut Value) {
+    match value {
+        Value::Array(arr) => {
+            for v in arr {
+                collapse_whitespace(v);
+            }
+        }
+        Value::Object(map) => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for k in keys {
+                if let Some(v) = map.get_mut(&k) {
+                    if (k.ends_with("_attribute") || COLLAPSE_ATTRS.contains(&k.as_str()))
+                        && v.is_string()
+                    {
+                        if let Some(s) = v.as_str() {
+                            let collapsed = s.replace(['\n', '\r', '\t'], " ");
+                            *v = Value::String(collapsed);
+                        }
+                    } else {
+                        collapse_whitespace(v);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn remove_empty(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
@@ -460,8 +507,10 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    let mut map = element_to_map(&root);
+    // let mut map = element_to_map(&root); // retained for potential future mutations
+    let map = element_to_map(&root);
     let mut value = Value::Object(map);
+    collapse_whitespace(&mut value);
     if omit_empty {
         remove_empty(&mut value);
     }
