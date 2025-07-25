@@ -163,13 +163,15 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     .split_whitespace()
                     .map(|s| Value::String(s.to_string()))
                     .collect();
-                map.insert("initial".into(), Value::Array(vals));
+                if elem.name == "scxml" {
+                    map.insert("initial".into(), Value::Array(vals));
+                } else {
+                    map.insert("initial_attribute".into(), Value::Array(vals));
+                }
             }
             (_, "version") => {
                 if let Ok(n) = v.parse::<f64>() {
-                    if (n.fract() - 0.0).abs() < f64::EPSILON {
-                        map.insert("version".into(), Value::Number(Number::from(n as i64)));
-                    } else if let Some(num) = Number::from_f64(n) {
+                    if let Some(num) = Number::from_f64(n) {
                         map.insert("version".into(), Value::Number(num));
                     }
                 } else {
@@ -251,7 +253,10 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
 
     if elem.name == "scxml" {
         if !map.contains_key("version") {
-            map.insert("version".into(), Value::Number(Number::from(1)));
+            map.insert(
+                "version".into(),
+                Value::Number(Number::from_f64(1.0).unwrap()),
+            );
         }
         map.entry("datamodel_attribute".to_string())
             .or_insert_with(|| Value::String("null".into()));
