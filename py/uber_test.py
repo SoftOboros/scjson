@@ -18,6 +18,7 @@ from __future__ import annotations
 from deepdiff import DeepDiff
 
 import json
+import html
 import shutil
 import subprocess
 import sys
@@ -90,6 +91,116 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
         return False
 
 
+
+SCXML_NAMESPACE_KEYS = {
+    "xmlns", "xmlns:scxml", "xmlns:xsi", "xsi:schemaLocation"
+}
+
+SCXML_FORCE_STR_KEYS = {
+    "content", "expr", "event", "cond"
+}
+
+SCXML_FORCE_NUMERIC_KEYS = {
+    "version"
+}
+
+
+def _normalize_for_diff(obj, path="", field_key=None):
+    """
+    Recursively normalize SCXML-derived structures to enable deep structural comparison.
+
+    This function prepares parsed SCXML or SCJSON data for accurate diffing by removing
+    serialization artifacts and normalizing variations in formatting, typing, and tag structure.
+
+    Specifically, it:
+    - Strips XML namespaces (e.g., xmlns, xsi:schemaLocation)
+    - Inlines and flattens 'other_attributes' dictionaries
+    - Removes serialization noise like content: [{}] and other empty blocks
+    - Collapses singleton lists of primitives to scalars
+    - Converts numeric-looking strings in keys like 'version' to actual numbers
+    - Converts numbers to strings in keys like 'content', 'expr', etc.
+    - Unescapes HTML/XML entities and strips strings
+    - Tracks keys across list nesting using `field_key`
+
+    Parameters
+    ----------
+    obj : Any
+        The input structure (dict, list, or primitive) to normalize.
+    path : str
+        Dot-path to the current object, useful for debugging.
+    field_key : str or None
+        The last dictionary key used to reach this object — enables context-aware normalization.
+
+    Returns
+    -------
+    Any
+        A normalized version of the input, ready for diff comparison.
+    """
+
+    # Convert stringified numerics (like "1.0") to float or int
+    if isinstance(obj, str) and field_key in SCXML_FORCE_NUMERIC_KEYS:
+        try:
+            return float(obj) if "." in obj else int(obj)
+        except ValueError:
+            pass
+
+    # Convert numbers to string for string-dominant fields (e.g., expr)
+    if isinstance(obj, (int, float)) and field_key in SCXML_FORCE_STR_KEYS:
+        return str(obj)
+
+    # Remove empty object patterns
+    if obj in ({}, [{}], {"content": [{}]}):
+        return None
+
+    if isinstance(obj, dict):
+        new_dict = {}
+        for k, v in obj.items():
+            if k in SCXML_NAMESPACE_KEYS:
+                continue
+
+            # Inline other_attributes
+            if k == "other_attributes" and isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    new_dict[sub_k] = _normalize_for_diff(
+                        sub_v,
+                        f"{path}.{sub_k}" if path else sub_k,
+                        field_key=sub_k
+                    )
+                continue
+
+            # Skip empty content block
+            if k == "content" and v == [{}]:
+                continue
+
+            # Normalize numeric-looking strings or numeric-to-string fields
+            if k in SCXML_FORCE_NUMERIC_KEYS and isinstance(v, str):
+                try:
+                    v = float(v) if "." in v else int(v)
+                except ValueError:
+                    pass
+            elif k in SCXML_FORCE_STR_KEYS and isinstance(v, (int, float)):
+                v = str(v)
+
+            new_dict[k] = _normalize_for_diff(
+                v,
+                f"{path}.{k}" if path else k,
+                field_key=k
+            )
+        return new_dict
+
+    elif isinstance(obj, list):
+        # Collapse pattern: content: [ { content: "..." } ]
+        if len(obj) == 1 and isinstance(obj[0], dict) and list(obj[0].keys()) == ["content"] and isinstance(obj[0]["content"], str):
+            return _normalize_for_diff(obj[0]["content"], f"{path}[]", field_key="content")
+
+        return [_normalize_for_diff(i, f"{path}[]", field_key=field_key) for i in obj]
+
+    elif isinstance(obj, str):
+        return html.unescape(obj).strip()
+
+    return obj
+
+
 def _diff_report(expected: dict, actual: dict) -> str:
     """Create a human-readable diff between two dictionaries.
 
@@ -106,11 +217,13 @@ def _diff_report(expected: dict, actual: dict) -> str:
         Diff string suitable for console output.
     """
 
+
     diff = DeepDiff(
-        expected,
-        actual,
+        _normalize_for_diff(expected),
+        _normalize_for_diff(actual),
         verbose_level=1,
         ignore_numeric_type_changes=True,
+        ignore_order=True,
     )
     return diff.pretty()
 

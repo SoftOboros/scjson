@@ -49,6 +49,56 @@ const ARRAY_KEYS = new Set([
   'state',
 ]);
 
+/// Known SCXML structural fields that should be pulled out of `content[]`
+const STRUCTURAL_FIELDS = new Set([
+  'state', 'parallel', 'final', 'history',
+  'transition', 'onentry', 'onexit', 'invoke',
+  'datamodel', 'data', 'initial', 'script',
+  'log', 'assign', 'send', 'cancel',
+  'param', 'if', 'elseif', 'else',
+  'foreach', 'raise', 'content'
+]);
+
+/**
+ * Recursively convert an XML Element to SCJSON-compliant JS object.
+ */
+function convert(element) {
+  const result = {
+    tag: element.tagName,
+    ...Object.fromEntries(Array.from(element.attributes).map(attr => [attr.name, attr.value]))
+  };
+
+  // Initialize known structural containers if needed
+  STRUCTURAL_FIELDS.forEach(field => {
+    if (element.querySelector(field)) {
+      result[field] = [];
+    }
+  });
+
+  for (const child of element.children) {
+    const converted = convert(child);
+    const tag = child.tagName;
+
+    if (STRUCTURAL_FIELDS.has(tag)) {
+      // Attach to known field
+      result[tag] = result[tag] || [];
+      result[tag].push(converted);
+    } else {
+      // Fallback to generic 'content' array
+      result.content = result.content || [];
+      result.content.push(converted);
+    }
+  }
+
+  // Handle text content if present
+  const text = element.textContent?.trim();
+  if (text && element.children.length === 0) {
+    result.content = [text];
+  }
+
+  return result;
+}
+
 /**
  * Keys that should never be pruned even when empty.
  */
