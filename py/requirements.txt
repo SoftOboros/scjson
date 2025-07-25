@@ -48,7 +48,6 @@ rfc3986==2.0.0
 rich==14.0.0
 rpds-py==0.26.0
 ruff==0.12.3
-scjson==0.2.2
 tomli==2.2.1
 toposort==1.10
 twine==6.1.0

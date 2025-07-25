@@ -1,6 +1,6 @@
 {
   "name": "scjson",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
   "keywords": [
     "scjson",
