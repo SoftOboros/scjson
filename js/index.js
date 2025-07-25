@@ -127,9 +127,19 @@ function convertDirectoryXml(inputDir, outputDir, recursive, verify, keepEmpty) 
 function convertScxmlFile(src, dest, verify, keepEmpty) {
   const xmlStr = fs.readFileSync(src, 'utf8');
   try {
-    const jsonStr = xmlToJson(xmlStr, !keepEmpty);
+    const { result: jsonStr, valid, errors } = xmlToJson(xmlStr, !keepEmpty);
+    if (!valid) {
+      console.warn(
+        `Validation failed in xmlToJson for ${src}: ${JSON.stringify(errors, null, 2)}`,
+      );
+    }
     if (verify) {
-      jsonToXml(jsonStr);
+      const { valid: xmlValid, errors: xmlErrors } = jsonToXml(jsonStr);
+      if (!xmlValid) {
+        console.warn(
+          `Validation failed in jsonToXml for ${src}: ${JSON.stringify(xmlErrors, null, 2)}`,
+        );
+      }
     } else {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, jsonStr);
@@ -157,9 +167,19 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
 function convertScjsonFile(src, dest, verify) {
   const jsonStr = fs.readFileSync(src, 'utf8');
   try {
-    const xmlStr = jsonToXml(jsonStr);
+    const { result: xmlStr, valid, errors } = jsonToXml(jsonStr);
+    if (!valid) {
+      console.warn(
+        `Validation failed in jsonToXml for ${src}: ${JSON.stringify(errors, null, 2)}`,
+      );
+    }
     if (verify) {
-      xmlToJson(xmlStr);
+      const { valid: jsonValid, errors: jsonErrors } = xmlToJson(xmlStr);
+      if (!jsonValid) {
+        console.warn(
+          `Validation failed in xmlToJson for ${src}: ${JSON.stringify(jsonErrors, null, 2)}`,
+        );
+      }
     } else {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, xmlStr);
@@ -188,12 +208,14 @@ program
     const out = opts.output ? path.resolve(opts.output) : src;
 
     if (fs.statSync(src).isDirectory()) {
-      convertDirectoryJson(src, out, opts.recursive, opts.verify, opts.keepEmpty);
+      const success = convertDirectoryJson(src, out, opts.recursive, opts.verify, opts.keepEmpty);
+      if (opts.verify && !success) process.exitCode = 1;
     } else {
       const dest = opts.output && !opts.output.endsWith('.json') && !opts.output.endsWith('.scjson')
         ? path.join(out, path.basename(src).replace(/\.scxml$/, '.scjson'))
         : (opts.output || src.replace(/\.scxml$/, '.scjson'));
-      convertScxmlFile(src, dest, opts.verify, opts.keepEmpty);
+      const success = convertScxmlFile(src, dest, opts.verify, opts.keepEmpty);
+      if (opts.verify && !success) process.exitCode = 1;
     }
   });
 
@@ -209,12 +231,14 @@ program
     const out = opts.output ? path.resolve(opts.output) : src;
 
     if (fs.statSync(src).isDirectory()) {
-      convertDirectoryXml(src, out, opts.recursive, opts.verify, opts.keepEmpty);
+      const success = convertDirectoryXml(src, out, opts.recursive, opts.verify, opts.keepEmpty);
+      if (opts.verify && !success) process.exitCode = 1;
     } else {
       const dest = opts.output && !opts.output.endsWith('.xml') && !opts.output.endsWith('.scxml')
         ? path.join(out, path.basename(src).replace(/\.scjson$/, '.scxml'))
         : (opts.output || src.replace(/\.scjson$/, '.scxml'));
-      convertScjsonFile(src, dest, opts.verify, opts.keepEmpty);
+      const success = convertScjsonFile(src, dest, opts.verify, opts.keepEmpty);
+      if (opts.verify && !success) process.exitCode = 1;
     }
   });
 

@@ -13,7 +13,11 @@ declare module 'scjson/browser' {
    * @returns Validated SCJSON as pretty-printed JSON string.
    * @throws Error if validation fails.
    */
-  export function xmlToJson(xmlStr: string, omitEmpty?: boolean): string;
+  export function xmlToJson(xmlStr: string, omitEmpty?: boolean): {
+    result: string;
+    valid: boolean;
+    errors: object[] | null;
+  };
 
   /**
    * Converts SCJSON (as JSON string) to SCXML (as XML string).
@@ -21,5 +25,9 @@ declare module 'scjson/browser' {
    * @returns Valid SCXML string.
    * @throws Error if validation fails.
    */
-  export function jsonToXml(jsonStr: string): string;
+  export function jsonToXml(jsonStr: string): {
+    result: string;
+    valid: boolean;
+    errors: object[] | null;
+  };
 }
