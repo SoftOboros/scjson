@@ -92,7 +92,7 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     .split_whitespace()
                     .map(|s| Value::String(s.to_string()))
                     .collect();
-                map.insert("initial_attribute".into(), Value::Array(vals));
+                map.insert("initial".into(), Value::Array(vals));
             }
             (_, "version") => {
                 if let Ok(n) = v.parse::<f64>() {
@@ -111,15 +111,18 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
             (_, "type") => {
                 map.insert("type_value".into(), Value::String(v.clone()));
             }
+            (_, "raise") => {
+                map.insert("raise_value".into(), Value::String(v.clone()));
+            }
             ("send", "delay") => {
                 map.insert("delay".into(), Value::String(v.clone()));
             }
             ("send", "event") => {
-                map.insert("event_attribute".into(), Value::String(v.clone()));
+                map.insert("event".into(), Value::String(v.clone()));
             }
             (_, "xmlns") => {}
             _ => {
-                map.insert(format!("{}_attribute", k), Value::String(v.clone()));
+                map.insert(k.clone(), Value::String(v.clone()));
             }
         }
     }
@@ -157,9 +160,8 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                 append_child(&mut map, target_key, Value::Object(child_map));
             }
             XMLNode::Text(t) => {
-                let trimmed = t.trim();
-                if !trimmed.is_empty() {
-                    text_items.push(Value::String(trimmed.to_string()));
+                if !t.trim().is_empty() {
+                    text_items.push(Value::String(t.to_string()));
                 }
             }
             _ => {}
@@ -184,11 +186,15 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
 fn join_tokens(v: &Value) -> Option<String> {
     match v {
         Value::Array(arr) => {
-            let parts: Vec<String> = arr
-                .iter()
-                .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                .collect();
-            Some(parts.join(" "))
+            if arr.iter().all(|x| x.is_string()) {
+                let parts: Vec<String> = arr
+                    .iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect();
+                Some(parts.join(" "))
+            } else {
+                None
+            }
         }
         Value::String(s) => Some(s.clone()),
         _ => None,
@@ -237,7 +243,16 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                         match item {
                             Value::String(s) => elem.children.push(XMLNode::Text(s.clone())),
                             Value::Object(obj) => {
-                                let child = map_to_element("scxml", obj);
+                                let child_name = if obj.contains_key("state")
+                                    || obj.contains_key("final")
+                                    || obj.contains_key("version")
+                                    || obj.contains_key("datamodel_attribute")
+                                {
+                                    "scxml"
+                                } else {
+                                    "content"
+                                };
+                                let child = map_to_element(child_name, obj);
                                 elem.children.push(XMLNode::Element(child));
                             }
                             _ => {}
@@ -254,17 +269,38 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             }
             continue;
         }
-        if k == "event_attribute" {
+        if k == "datamodel_attribute" {
             if let Some(val) = join_tokens(v) {
-                elem.attributes.insert("event".into(), val);
+                elem.attributes.insert("datamodel".into(), val);
             }
             continue;
         }
-        if k == "type_value" || k == "delay" || (name == "transition" && k == "target") {
+        if k == "type_value" {
             if let Some(val) = join_tokens(v) {
-                let attr = if k == "type_value" { "type" } else { k };
-                elem.attributes.insert(attr.into(), val);
+                elem.attributes.insert("type".into(), val);
             }
+            continue;
+        }
+        if k == "raise_value" {
+            if let Some(val) = join_tokens(v) {
+                elem.attributes.insert("raise".into(), val);
+            }
+            continue;
+        }
+        if name == "transition" && k == "target" {
+            if let Some(val) = join_tokens(v) {
+                elem.attributes.insert("target".into(), val);
+            }
+            continue;
+        }
+        if k == "delay" || k == "event" || k == "initial" {
+            if let Some(val) = join_tokens(v) {
+                elem.attributes.insert(k.clone(), val);
+                continue;
+            }
+        }
+        if let Some(val) = join_tokens(v) {
+            elem.attributes.insert(k.clone(), val);
             continue;
         }
         match v {
