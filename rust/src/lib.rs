@@ -315,18 +315,29 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
         if k == "content" {
             if let Value::Array(arr) = v {
                 if name == "invoke" {
-                    let mut c_elem = Element::new("content");
                     for item in arr {
                         match item {
-                            Value::String(s) => c_elem.children.push(XMLNode::Text(s.clone())),
+                            Value::String(s) => {
+                                let mut c = Element::new("content");
+                                c.children.push(XMLNode::Text(s.clone()));
+                                elem.children.push(XMLNode::Element(c));
+                            }
                             Value::Object(obj) => {
-                                let child = map_to_element("scxml", obj);
-                                c_elem.children.push(XMLNode::Element(child));
+                                let child_name = if obj.contains_key("state")
+                                    || obj.contains_key("final")
+                                    || obj.contains_key("version")
+                                    || obj.contains_key("datamodel_attribute")
+                                {
+                                    "scxml"
+                                } else {
+                                    "content"
+                                };
+                                let child = map_to_element(child_name, obj);
+                                elem.children.push(XMLNode::Element(child));
                             }
                             _ => {}
                         }
                     }
-                    elem.children.push(XMLNode::Element(c_elem));
                 } else if name == "script" {
                     for item in arr {
                         if let Value::String(s) = item {
