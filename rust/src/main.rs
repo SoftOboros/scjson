@@ -7,7 +7,7 @@
 //! Command line interface for scjson conversions.
 
 use clap::{Parser, Subcommand};
-use scjson::{json_to_xml, xml_to_json};
+use scjson::{json_to_xml_opts, xml_to_json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -67,7 +67,7 @@ fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty:
     match xml_to_json(&xml, !keep_empty) {
         Ok(json) => {
             if verify {
-                if json_to_xml(&json).is_ok() {
+                if json_to_xml_opts(&json, true).is_ok() {
                     println!("Verified {}", src.display());
                 } else {
                     eprintln!("Failed to verify {}", src.display());
@@ -84,9 +84,16 @@ fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty:
     }
 }
 
-fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, _keep_empty: bool) {
+/// Convert a scjson file to SCXML.
+///
+/// # Parameters
+/// - `src`: Source JSON file path.
+/// - `dest`: Optional output file path.
+/// - `verify`: When `true`, only validate the round trip.
+/// - `keep_empty`: Preserve empty fields when `true`.
+fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty: bool) {
     let json = fs::read_to_string(src).expect("read json");
-    match json_to_xml(&json) {
+    match json_to_xml_opts(&json, !keep_empty) {
         Ok(xml) => {
             if verify {
                 if xml_to_json(&xml, true).is_ok() {
@@ -136,9 +143,9 @@ where
 fn validate_file(path: &Path) -> bool {
     let data = fs::read_to_string(path).expect("read file");
     let res = if path.extension().and_then(|s| s.to_str()) == Some("scxml") {
-        xml_to_json(&data, true).and_then(|j| json_to_xml(&j))
+        xml_to_json(&data, true).and_then(|j| json_to_xml_opts(&j, true))
     } else if path.extension().and_then(|s| s.to_str()) == Some("scjson") {
-        json_to_xml(&data).and_then(|x| xml_to_json(&x, true))
+        json_to_xml_opts(&data, true).and_then(|x| xml_to_json(&x, true))
     } else {
         return true;
     };
