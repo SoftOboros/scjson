@@ -570,7 +570,7 @@ const validate = ajv.compile(schema);
  *
  * @param {string} xmlStr - XML input.
  * @param {boolean} [omitEmpty=true] - Remove empty values when true.
- * @returns {string} JSON representation.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
  *
  * Removes the XML namespace attribute and injects default values
  * expected by the schema.
@@ -626,33 +626,27 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     obj.datamodel_attribute = 'null';
   }
   reorderScxml(obj);
-  if (!validate(obj)) {
-    const err = new Error('Invalid scjson');
-    err.errors = validate.errors;
-    console.warn('Validation failed in xmlToJson:', JSON.stringify(err.errors, null, 2));
-  }
+  const valid = validate(obj);
+  const errors = valid ? null : validate.errors;
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
-  return out;
+  return { result: out, valid, errors };
 }
 
 /**
  * Convert a scjson string to SCXML.
  *
  * @param {string} jsonStr - JSON input.
- * @returns {string} XML output.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
  */
 function jsonToXml(jsonStr) {
   const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
   const obj = JSON.parse(jsonStr);
-  if (!validate(obj)) {
-    const err = new Error('Invalid scjson');
-    err.errors = validate.errors;
-    console.warn('Validation failed in jsonToXml:', JSON.stringify(err.errors, null, 2));
-  }
+  const valid = validate(obj);
+  const errors = valid ? null : validate.errors;
   function restoreKeys(value) {
     if (Array.isArray(value)) {
       return value.map(restoreKeys);
@@ -717,7 +711,7 @@ function jsonToXml(jsonStr) {
   if (restored['@_xmlns'] === undefined) {
     restored['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
-  return builder.build({ scxml: restored });
+  return { result: builder.build({ scxml: restored }), valid, errors };
 }
 
 module.exports = {
