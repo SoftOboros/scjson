@@ -627,7 +627,9 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   }
   reorderScxml(obj);
   if (!validate(obj)) {
-    throw new Error('Invalid scjson');
+    const err = new Error('Invalid scjson');
+    err.errors = validate.errors;
+    console.warn('Validation failed in xmlToJson:', JSON.stringify(err.errors, null, 2));
   }
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
@@ -647,7 +649,9 @@ function jsonToXml(jsonStr) {
   const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
   const obj = JSON.parse(jsonStr);
   if (!validate(obj)) {
-    throw new Error('Invalid scjson');
+    const err = new Error('Invalid scjson');
+    err.errors = validate.errors;
+    console.warn('Validation failed in jsonToXml:', JSON.stringify(err.errors, null, 2));
   }
   function restoreKeys(value) {
     if (Array.isArray(value)) {

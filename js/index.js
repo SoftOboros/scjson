@@ -94,8 +94,14 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
       fs.writeFileSync(dest, jsonStr);
     }
     if (verify) console.log(`Verified ${src}`);
+    return true;
   } catch (e) {
-    console.error(`Failed to convert ${src}: ${e.message}`);
+    if (e.errors) {
+      console.error(`Failed to convert ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
+    } else {
+      console.error(`Failed to convert ${src}: ${e.message}`);
+    }
+    return false;
   }
 }
 
@@ -110,8 +116,14 @@ function convertScjsonFile(src, dest, verify) {
       fs.writeFileSync(dest, xmlStr);
     }
     if (verify) console.log(`Verified ${src}`);
+    return true;
   } catch (e) {
-    console.error(`Failed to convert ${src}: ${e.message}`);
+    if (e.errors) {
+      console.error(`Failed to convert ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
+    } else {
+      console.error(`Failed to convert ${src}: ${e.message}`);
+    }
+    return false;
   }
 }
 
