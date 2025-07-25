@@ -652,6 +652,22 @@ function jsonToXml(jsonStr) {
       return value.map(restoreKeys);
     }
     if (value && typeof value === 'object') {
+      if (
+        Object.keys(value).length === 1 &&
+        Array.isArray(value.content) &&
+        value.content.length === 1 &&
+        value.content[0] &&
+        typeof value.content[0] === 'object' &&
+        (
+          value.content[0].state ||
+          value.content[0].parallel ||
+          value.content[0].final ||
+          value.content[0].datamodel ||
+          value.content[0].datamodel_attribute !== undefined
+        )
+      ) {
+        return { scxml: restoreKeys(value.content[0]) };
+      }
       const out = {};
       for (const [k, v] of Object.entries(value)) {
         let nk = k;
@@ -685,7 +701,28 @@ function jsonToXml(jsonStr) {
             out[nk] = v;
           }
         } else if (nk === 'content') {
-          out[nk] = restoreKeys(v);
+          if (Array.isArray(v)) {
+            out[nk] = v.map(item => {
+              if (
+                item &&
+                typeof item === 'object' &&
+                (item.state || item.parallel || item.final || item.datamodel ||
+                 item.datamodel_attribute !== undefined)
+              ) {
+                return { scxml: restoreKeys(item) };
+              }
+              return restoreKeys(item);
+            });
+          } else if (
+            v &&
+            typeof v === 'object' &&
+            (v.state || v.parallel || v.final || v.datamodel ||
+             v.datamodel_attribute !== undefined)
+          ) {
+            out[nk] = { scxml: restoreKeys(v) };
+          } else {
+            out[nk] = restoreKeys(v);
+          }
         } else if (Array.isArray(v) && v.every(x => typeof x !== 'object')) {
           const val = v.join(' ');
           if (nk.startsWith('@_')) {
