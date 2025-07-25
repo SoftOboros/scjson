@@ -499,6 +499,14 @@ function removeEmpty(value, key) {
     return undefined;
   }
   if (typeof value === 'string' && value.trim() === '') {
+    if (
+      key &&
+      (key.endsWith('_attribute') ||
+       key.endsWith('_value') ||
+       ['expr', 'cond', 'event', 'target', 'id', 'name', 'label'].includes(key))
+    ) {
+      return '';
+    }
     return undefined;
   }
   return value;
@@ -603,6 +611,8 @@ function jsonToXml(jsonStr) {
           nk = 'if';
         } else if (k === 'raise_value') {
           nk = 'raise';
+        } else if (k === 'else_value') {
+          nk = 'else';
         }
         for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
           if (prop === nk) {
