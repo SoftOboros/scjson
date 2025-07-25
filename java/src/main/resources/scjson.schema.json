@@ -1,6 +1,7 @@
 {
     "$defs": {
         "Assign": {
+            "description": "update a datamodel location with an expression or value.",
             "properties": {
                 "location": {
                     "title": "Location",
@@ -87,6 +88,7 @@
             "type": "string"
         },
         "Cancel": {
+            "description": "cancel a pending `<send>` operation.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -129,6 +131,7 @@
             "type": "object"
         },
         "Content": {
+            "description": "inline payload used by `<send>` and `<invoke>`.",
             "properties": {
                 "content": {
                     "anyOf": [
@@ -169,6 +172,7 @@
             "type": "object"
         },
         "Data": {
+            "description": "represents a single datamodel variable.",
             "properties": {
                 "id": {
                     "title": "Id",
@@ -218,6 +222,7 @@
             "type": "object"
         },
         "Datamodel": {
+            "description": "container for one or more `<data>` elements.",
             "properties": {
                 "data": {
                     "items": {
@@ -243,6 +248,7 @@
             "type": "object"
         },
         "Donedata": {
+            "description": "payload returned when a `<final>` state is reached.",
             "properties": {
                 "content": {
                     "anyOf": [
@@ -274,6 +280,7 @@
             "type": "object"
         },
         "Else": {
+            "description": "fallback branch for `<if>` conditions.",
             "properties": {
                 "other_attributes": {
                     "additionalProperties": {
@@ -287,6 +294,7 @@
             "type": "object"
         },
         "Elseif": {
+            "description": "conditional branch following an `<if>`.",
             "properties": {
                 "cond": {
                     "title": "Cond",
@@ -316,6 +324,7 @@
             "type": "string"
         },
         "Final": {
+            "description": "marks a terminal state in the machine.",
             "properties": {
                 "onentry": {
                     "items": {
@@ -367,6 +376,7 @@
             "type": "object"
         },
         "Finalize": {
+            "description": "executed after an `<invoke>` completes.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -441,6 +451,7 @@
             "type": "object"
         },
         "Foreach": {
+            "description": "iterate over items within executable content.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -539,6 +550,7 @@
             "type": "object"
         },
         "History": {
+            "description": "pseudostate remembering previous active children.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -586,6 +598,7 @@
             "type": "object"
         },
         "HistoryTypeDatatype": {
+            "description": "type of `<history>` state: `shallow` or `deep`.",
             "enum": [
                 "shallow",
                 "deep"
@@ -594,6 +607,7 @@
             "type": "string"
         },
         "If": {
+            "description": "conditional execution block.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -697,6 +711,7 @@
             "type": "object"
         },
         "Initial": {
+            "description": "starting state within a compound state.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -721,6 +736,7 @@
             "type": "object"
         },
         "Invoke": {
+            "description": "run an external process or machine.",
             "properties": {
                 "content": {
                     "items": {
@@ -841,6 +857,7 @@
             "type": "object"
         },
         "Log": {
+            "description": "diagnostic output statement.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -883,6 +900,7 @@
             "type": "object"
         },
         "Onentry": {
+            "description": "actions performed when entering a state.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -957,6 +975,7 @@
             "type": "object"
         },
         "Onexit": {
+            "description": "actions performed when leaving a state.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -1031,6 +1050,7 @@
             "type": "object"
         },
         "Parallel": {
+            "description": "coordinates concurrent regions.",
             "properties": {
                 "onentry": {
                     "items": {
@@ -1117,6 +1137,7 @@
             "type": "object"
         },
         "Param": {
+            "description": "parameter passed to `<invoke>` or `<send>`.",
             "properties": {
                 "other_element": {
                     "items": {},
@@ -1166,6 +1187,7 @@
             "type": "object"
         },
         "Raise": {
+            "description": "raise an internal event.",
             "properties": {
                 "event": {
                     "title": "Event",
@@ -1186,6 +1208,7 @@
             "type": "object"
         },
         "Script": {
+            "description": "inline executable script.",
             "properties": {
                 "src": {
                     "anyOf": [
@@ -1216,6 +1239,7 @@
             "type": "object"
         },
         "Scxml": {
+            "description": "root element of an SCJSON document.",
             "properties": {
                 "state": {
                     "items": {
@@ -1327,6 +1351,7 @@
             "type": "object"
         },
         "Send": {
+            "description": "dispatch an external event.",
             "properties": {
                 "content": {
                     "items": {
@@ -1477,6 +1502,7 @@
             "type": "object"
         },
         "State": {
+            "description": "basic state node.",
             "properties": {
                 "onentry": {
                     "items": {
@@ -1584,6 +1610,7 @@
             "type": "object"
         },
         "Transition": {
+            "description": "edge between states triggered by events.",
             "properties": {
                 "other_element": {
                     "items": {},

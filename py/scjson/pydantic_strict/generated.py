@@ -56,6 +56,8 @@ class ExmodeDatatype(Enum):
 
 
 class HistoryTypeDatatype(Enum):
+    """type of `<history>` state: `shallow` or `deep`."""
+
     SHALLOW = "shallow"
     DEEP = "deep"
 
@@ -201,6 +203,7 @@ class ScxmlScriptType(BaseModel):
 
 
 class Cancel(ScxmlCancelType):
+    """cancel a pending `<send>` operation."""
 
     class Meta:
         name = "cancel"
@@ -210,6 +213,7 @@ class Cancel(ScxmlCancelType):
 
 
 class Content(ScxmlContentType):
+    """inline payload used by `<send>` and `<invoke>`."""
 
     class Meta:
         name = "content"
@@ -219,6 +223,7 @@ class Content(ScxmlContentType):
 
 
 class Data(ScxmlDataType):
+    """represents a single datamodel variable."""
 
     class Meta:
         name = "data"
@@ -228,6 +233,7 @@ class Data(ScxmlDataType):
 
 
 class Else(ScxmlElseType):
+    """fallback branch for `<if>` conditions."""
 
     class Meta:
         name = "else"
@@ -237,6 +243,7 @@ class Else(ScxmlElseType):
 
 
 class Elseif(ScxmlElseifType):
+    """conditional branch following an `<if>`."""
 
     class Meta:
         name = "elseif"
@@ -246,6 +253,7 @@ class Elseif(ScxmlElseifType):
 
 
 class Log(ScxmlLogType):
+    """diagnostic output statement."""
 
     class Meta:
         name = "log"
@@ -255,6 +263,7 @@ class Log(ScxmlLogType):
 
 
 class Param(ScxmlParamType):
+    """parameter passed to `<invoke>` or `<send>`."""
 
     class Meta:
         name = "param"
@@ -264,6 +273,7 @@ class Param(ScxmlParamType):
 
 
 class Raise(ScxmlRaiseType):
+    """raise an internal event."""
 
     class Meta:
         name = "raise"
@@ -273,6 +283,7 @@ class Raise(ScxmlRaiseType):
 
 
 class Script(ScxmlScriptType):
+    """inline executable script."""
 
     class Meta:
         name = "script"
@@ -304,6 +315,7 @@ class ScxmlAssignType(BaseModel):
 
 
 class Assign(ScxmlAssignType):
+    """update a datamodel location with an expression or value."""
 
     class Meta:
         name = "assign"
@@ -394,6 +406,7 @@ class ScxmlSendType(BaseModel):
 
 
 class Datamodel(ScxmlDatamodelType):
+    """container for one or more `<data>` elements."""
 
     class Meta:
         name = "datamodel"
@@ -403,6 +416,7 @@ class Datamodel(ScxmlDatamodelType):
 
 
 class Donedata(ScxmlDonedataType):
+    """payload returned when a `<final>` state is reached."""
 
     class Meta:
         name = "donedata"
@@ -412,6 +426,7 @@ class Donedata(ScxmlDonedataType):
 
 
 class Send(ScxmlSendType):
+    """dispatch an external event."""
 
     class Meta:
         name = "send"
@@ -488,6 +503,7 @@ class ScxmlIfType(BaseModel):
 
 
 class If(ScxmlIfType):
+    """conditional execution block."""
 
     class Meta:
         name = "if"
@@ -554,6 +570,7 @@ class ScxmlForeachType(BaseModel):
 
 
 class Foreach(ScxmlForeachType):
+    """iterate over items within executable content."""
 
     class Meta:
         name = "foreach"
@@ -793,6 +810,7 @@ class ScxmlTransitionType(BaseModel):
 
 
 class Finalize(ScxmlFinalizeType):
+    """executed after an `<invoke>` completes."""
 
     class Meta:
         name = "finalize"
@@ -802,6 +820,7 @@ class Finalize(ScxmlFinalizeType):
 
 
 class Onentry(ScxmlOnentryType):
+    """actions performed when entering a state."""
 
     class Meta:
         name = "onentry"
@@ -811,6 +830,7 @@ class Onentry(ScxmlOnentryType):
 
 
 class Onexit(ScxmlOnexitType):
+    """actions performed when leaving a state."""
 
     class Meta:
         name = "onexit"
@@ -820,6 +840,7 @@ class Onexit(ScxmlOnexitType):
 
 
 class Transition(ScxmlTransitionType):
+    """edge between states triggered by events."""
 
     class Meta:
         name = "transition"
@@ -940,6 +961,7 @@ class ScxmlInvokeType(BaseModel):
 
 
 class Final(ScxmlFinalType):
+    """marks a terminal state in the machine."""
 
     class Meta:
         name = "final"
@@ -949,6 +971,7 @@ class Final(ScxmlFinalType):
 
 
 class History(ScxmlHistoryType):
+    """pseudostate remembering previous active children."""
 
     class Meta:
         name = "history"
@@ -958,6 +981,7 @@ class History(ScxmlHistoryType):
 
 
 class Initial(ScxmlInitialType):
+    """starting state within a compound state."""
 
     class Meta:
         name = "initial"
@@ -967,6 +991,7 @@ class Initial(ScxmlInitialType):
 
 
 class Invoke(ScxmlInvokeType):
+    """run an external process or machine."""
 
     class Meta:
         name = "invoke"
@@ -1035,6 +1060,7 @@ class ScxmlStateType(BaseModel):
 
 
 class State(ScxmlStateType):
+    """basic state node."""
 
     class Meta:
         name = "state"
@@ -1091,6 +1117,7 @@ class ScxmlParallelType(BaseModel):
 
 
 class Parallel(ScxmlParallelType):
+    """coordinates concurrent regions."""
 
     class Meta:
         name = "parallel"
@@ -1152,6 +1179,7 @@ class ScxmlScxmlType(BaseModel):
 
 
 class Scxml(ScxmlScxmlType):
+    """root element of an SCJSON document."""
 
     class Meta:
         name = "scxml"
