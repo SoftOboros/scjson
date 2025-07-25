@@ -508,12 +508,59 @@ function fixSendDefaults(value) {
         if (s.delay === undefined) {
           s.delay = '0s';
         }
+        fixSendContent(s);
         fixSendDefaults(s);
       });
       value.send = arr;
     }
     for (const v of Object.values(value)) {
       fixSendDefaults(v);
+    }
+  }
+}
+
+/**
+ * Normalise inline content elements under ``send``.
+ *
+ * ``<content>`` children inside ``<send>`` should always be objects with a
+ * ``content`` array according to the scjson schema. The fast-xml-parser library
+ * collapses simple text nodes to strings which leads to mismatches when
+ * compared with the Python implementation. This helper wraps such strings in an
+ * object structure.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixSendContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixSendContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'send')) {
+      const arr = Array.isArray(value.send) ? value.send : [value.send];
+      arr.forEach(s => {
+        if (Object.prototype.hasOwnProperty.call(s, 'content')) {
+          const cArr = Array.isArray(s.content) ? s.content : [s.content];
+          s.content = cArr.map(c => {
+            if (typeof c !== 'object') {
+              return { content: [String(c)] };
+            }
+            if (c && typeof c === 'object') {
+              if (typeof c.content === 'string' || typeof c.content === 'number' || typeof c.content === 'boolean') {
+                c.content = [String(c.content)];
+              }
+              fixSendContent(c);
+              return c;
+            }
+            return c;
+          });
+        }
+        fixSendContent(s);
+      });
+      value.send = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixSendContent(v);
     }
   }
 }
@@ -576,7 +623,11 @@ const validate = ajv.compile(schema);
  * expected by the schema.
  */
 function xmlToJson(xmlStr, omitEmpty = true) {
-  const parser = new XMLParser({ ignoreAttributes: false, trimValues: false });
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    trimValues: false,
+    parseTagValue: false,
+  });
   let obj = parser.parse(xmlStr);
   if (obj.scxml) {
     obj = obj.scxml;
@@ -590,6 +641,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixScripts(obj);
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
+  fixSendContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
   if (omitEmpty) {
@@ -761,6 +813,7 @@ module.exports = {
   fixNestedScxml,
   fixAssignDefaults,
   fixSendDefaults,
+  fixSendContent,
   splitTokenAttrs,
   fixEmptyElse,
   stripRootTransitions,
