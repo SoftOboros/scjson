@@ -6,6 +6,10 @@
  * Licensed under the BSD 1-Clause License.
  */
 
+/**
+ * @file Command line interface for converting SCXML and scjson files.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const { Command } = require('commander');
@@ -63,6 +67,16 @@ program
     }
   });
 
+/**
+ * Convert all SCXML files in a directory to scjson.
+ *
+ * @param {string} inputDir - Directory containing SCXML files.
+ * @param {string} outputDir - Destination directory for scjson output.
+ * @param {boolean} recursive - Recurse into subdirectories when true.
+ * @param {boolean} verify - Verify conversion without writing output.
+ * @param {boolean} keepEmpty - Keep null or empty elements when true.
+ * @returns {boolean} True if all files converted successfully.
+ */
 function convertDirectoryJson(inputDir, outputDir, recursive, verify, keepEmpty) {
   const pattern = recursive ? '**/*.scxml' : '*.scxml';
   const files = require('glob').sync(pattern, { cwd: inputDir, nodir: true });
@@ -70,14 +84,23 @@ function convertDirectoryJson(inputDir, outputDir, recursive, verify, keepEmpty)
   files.forEach(f => {
     const src = path.join(inputDir, f);
     const dest = path.join(outputDir, f.replace(/\.scxml$/, '.scjson'));
-    success = convertScxmlFile(src, dest, verify, keepEmpty) && success;
+    if (!convertScxmlFile(src, dest, verify, keepEmpty)) {
+      success = false;
+    }
   });
-  if (verify && !success) {
-    process.exitCode = 1;
-  }
   return success;
 }
 
+/**
+ * Convert all scjson files in a directory to SCXML.
+ *
+ * @param {string} inputDir - Directory containing scjson files.
+ * @param {string} outputDir - Destination directory for SCXML output.
+ * @param {boolean} recursive - Recurse into subdirectories when true.
+ * @param {boolean} verify - Verify conversion without writing output.
+ * @param {boolean} keepEmpty - Keep null or empty elements when true.
+ * @returns {boolean} True if all files converted successfully.
+ */
 function convertDirectoryXml(inputDir, outputDir, recursive, verify, keepEmpty) {
   const pattern = recursive ? '**/*.scjson' : '*.scjson';
   const files = require('glob').sync(pattern, { cwd: inputDir, nodir: true });
@@ -85,14 +108,22 @@ function convertDirectoryXml(inputDir, outputDir, recursive, verify, keepEmpty) 
   files.forEach(f => {
     const src = path.join(inputDir, f);
     const dest = path.join(outputDir, f.replace(/\.scjson$/, '.scxml'));
-    success = convertScjsonFile(src, dest, verify, keepEmpty) && success;
+    if (!convertScjsonFile(src, dest, verify, keepEmpty)) {
+      success = false;
+    }
   });
-  if (verify && !success) {
-    process.exitCode = 1;
-  }
   return success;
 }
 
+/**
+ * Convert a single SCXML file to scjson.
+ *
+ * @param {string} src - Path to the source SCXML file.
+ * @param {string} dest - Output path for the scjson file.
+ * @param {boolean} verify - Verify conversion without writing output.
+ * @param {boolean} keepEmpty - Keep null or empty elements when true.
+ * @returns {boolean} True if the conversion succeeded.
+ */
 function convertScxmlFile(src, dest, verify, keepEmpty) {
   const xmlStr = fs.readFileSync(src, 'utf8');
   try {
@@ -125,6 +156,14 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
   }
 }
 
+/**
+ * Convert a single scjson file to SCXML.
+ *
+ * @param {string} src - Path to the source scjson file.
+ * @param {string} dest - Output path for the SCXML file.
+ * @param {boolean} verify - Verify conversion without writing output.
+ * @returns {boolean} True if the conversion succeeded.
+ */
 function convertScjsonFile(src, dest, verify) {
   const jsonStr = fs.readFileSync(src, 'utf8');
   try {
