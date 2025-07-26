@@ -1,4 +1,11 @@
+#!/usr/bin/env bash
+#
+#  Update pydantic and typescript data models from fresh w3c xsd download
+#
+#
+# remove any old xsd files 
 rm ../xsd/*.xsd
+# get the fresh set of xsd from w3c
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-attribs.xsd		 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-contentmodels.xsd	 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-copyright.xsd	 
@@ -19,7 +26,7 @@ wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-profile-mi
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-profile-xpath.xsd	 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-strict.xsd	 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml.xsd
-
+# Generate pydantic model
 xsdata generate \
         --output pydantic  \
         --package scjson.pydantic.generated \
@@ -27,7 +34,7 @@ xsdata generate \
         --unnest-classes \
         --relative-imports \
         ../xsd/scxml.xsd
-        
+# generate dataclasses model for conversion
 xsdata generate \
         --output dataclasses  \
         --package scjson.dataclasses.generated \
@@ -35,7 +42,7 @@ xsdata generate \
         --unnest-classes \
         --relative-imports \
         ../xsd/scxml.xsd 
-
+# Generate strict pydantic models 
 xsdata generate \
         --output pydantic  \
         --package scjson.pydantic_strict.generated \
@@ -43,7 +50,7 @@ xsdata generate \
         --unnest-classes \
         --relative-imports \
         ../xsd/scxml-strict.xsd
-        
+# Generate strict dataclasses models 
 xsdata generate \
         --output dataclasses  \
         --package scjson.dataclasses_strict.generated \
@@ -51,6 +58,6 @@ xsdata generate \
         --unnest-classes \
         --relative-imports \
         ../xsd/scxml-strict.xsd 
-
+# Patch pydantic models for forward references in schema (see script)
 python patch_scxml_forward_ref.py --file ./scjson/pydantic/generated.py
 python patch_scxml_forward_ref.py --file ./scjson/pydantic_strict/generated.py

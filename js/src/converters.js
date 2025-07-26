@@ -12,7 +12,7 @@
 
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const Ajv = require('ajv');
-const schema = require('./scjson.schema.json');
+const schema = require('../scjson.schema.json');
 
 /**
  * Keys that should always be represented as arrays.
