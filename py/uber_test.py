@@ -228,6 +228,42 @@ def _diff_report(expected: dict, actual: dict) -> str:
     return diff.pretty()
 
 
+def _verify_with_python(
+    json_path: Path, canonical: dict, handler: SCXMLDocumentHandler
+) -> None:
+    """Round-trip the SCJSON file using Python and compare to canonical.
+
+    Parameters
+    ----------
+    json_path : Path
+        Path to the SCJSON file produced by the language under test.
+    canonical : dict
+        Canonical structure produced by the Python implementation.
+    handler : SCXMLDocumentHandler
+        Converter used for round-tripping the JSON structure.
+
+    Returns
+    -------
+    None
+        This function only prints diagnostic output.
+    """
+
+    try:
+        original_text = json_path.read_text(encoding="utf-8")
+        round_trip = json.loads(
+            handler.xml_to_json(handler.json_to_xml(original_text))
+        )
+    except Exception as exc:  # pragma: no cover - debugging aid
+        print(f"Python failed to round-trip {json_path}: {exc}")
+        return
+
+    if round_trip == canonical:
+        print(f"Python round-trip matches canonical for {json_path.name}")
+    else:
+        print(f"Python round-trip mismatch for {json_path.name}")
+        print(_diff_report(canonical, round_trip))
+
+
 def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Path, dict]:
     """Convert SCXML files to canonical JSON.
 
@@ -321,6 +357,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 if data != canonical[src]:
                     print(f"{lang} JSON mismatch: {rel}")
                     print(_diff_report(canonical[src], data))
+                    _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
             subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
@@ -345,6 +382,9 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 if parsed != canonical[src]:
                     print(f"{lang} XML mismatch: {rel}")
                     print(_diff_report(canonical[src], parsed))
+                    jpath = json_dir / rel.with_suffix(".scjson")
+                    if jpath.exists():
+                        _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatches")
