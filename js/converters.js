@@ -177,11 +177,8 @@ function collapseWhitespace(value) {
  *
  * @param {object|Array} value - Parsed value to adjust in place.
  */
-function splitTokenAttrs(value) {
-  if (Array.isArray(value)) {
-    value.forEach(splitTokenAttrs);
-    return;
-  }
+function splitTokenAttrs(value, parent) {
+  if (Array.isArray(value)) return value.forEach(v => splitTokenAttrs(v, parent));
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if ((k === 'initial' || k === 'initial_attribute') && typeof v === 'string') {
@@ -189,17 +186,20 @@ function splitTokenAttrs(value) {
         continue;
       }
       if (k === 'transition') {
-        const arr = Array.isArray(v) ? v : [v];
-        arr.forEach(tr => {
-          if (typeof tr.target === 'string') {
-            tr.target = tr.target.trim().split(/\s+/);
-          }
-          splitTokenAttrs(tr);
-        });
-        value[k] = arr;
+        if (parent !== 'history') {
+          const arr = Array.isArray(v) ? v : [v];
+          arr.forEach(tr => {
+            if (typeof tr.target === 'string') tr.target = tr.target.trim().split(/\s+/);
+            splitTokenAttrs(tr, k);
+          });
+          value[k] = arr;
+        } else {
+          if (typeof v.target === 'string') v.target = v.target.trim().split(/\s+/);
+          splitTokenAttrs(v, k);
+        }
         continue;
       }
-      splitTokenAttrs(v);
+      splitTokenAttrs(v, k);
     }
   }
 }
@@ -308,36 +308,30 @@ function normaliseKeys(value) {
  *
  * @param {object} obj - Parsed object to adjust in place.
  */
-function ensureArrays(obj) {
-  if (!obj || typeof obj !== 'object') {
-    return;
-  }
+function ensureArrays(obj, parent) {
+  if (!obj || typeof obj !== 'object') return;
   for (const [k, v] of Object.entries(obj)) {
     if (ARRAY_KEYS.has(k) && v !== undefined) {
-      if (Array.isArray(v)) {
-        v.forEach(ensureArrays);
-      } else {
-        obj[k] = [v];
-        ensureArrays(obj[k][0]);
-      }
+      Array.isArray(v)
+        ? v.forEach(o => ensureArrays(o, k))
+        : (obj[k] = [v], ensureArrays(obj[k][0], k));
       continue;
     }
     if (k === 'transition' && v && typeof v === 'object') {
-      const arr = Array.isArray(v) ? v : [v];
-      arr.forEach(tr => {
-        if (tr.target !== undefined && !Array.isArray(tr.target)) {
-          tr.target = [tr.target];
-        }
-        ensureArrays(tr);
-      });
-      obj[k] = arr;
+      if (parent !== 'history') {
+        const arr = Array.isArray(v) ? v : [v];
+        arr.forEach(tr => {
+          if (tr.target !== undefined && !Array.isArray(tr.target)) tr.target = [tr.target];
+          ensureArrays(tr, k);
+        });
+        obj[k] = arr;
+      } else {
+        if (v.target !== undefined && !Array.isArray(v.target)) v.target = [v.target];
+        ensureArrays(v, k);
+      }
       continue;
     }
-    if (Array.isArray(v)) {
-      v.forEach(ensureArrays);
-    } else if (typeof v === 'object') {
-      ensureArrays(v);
-    }
+    Array.isArray(v) ? v.forEach(o => ensureArrays(o, k)) : typeof v === 'object' && ensureArrays(v, k);
   }
 }
 
