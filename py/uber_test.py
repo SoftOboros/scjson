@@ -231,6 +231,23 @@ def _diff_report(expected: dict, actual: dict) -> str:
     return diff.pretty()
 
 
+def _count_error_lines(output: str) -> int:
+    """Count lines containing the word ``error``.
+
+    Parameters
+    ----------
+    output : str
+        Combined stdout and stderr text captured from a subprocess.
+
+    Returns
+    -------
+    int
+        Number of lines that include ``error`` (case-insensitive).
+    """
+
+    return sum(1 for line in output.splitlines() if "error" in line.lower())
+
+
 def _verify_with_python(
     json_path: Path, canonical: dict, handler: SCXMLDocumentHandler
 ) -> None:
@@ -337,13 +354,15 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
             json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
             if lang == "python":
                 json_args.append("--skip-unknown")
-            subprocess.run(
+            result = subprocess.run(
                 cmd + json_args,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                text=True,
             )
+            error_lines = _count_error_lines(result.stdout + result.stderr)
             errors = 0
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
@@ -362,13 +381,15 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     print(_diff_report(canonical[src], data))
                     _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
-            subprocess.run(
+            result = subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                text=True,
             )
+            error_lines += _count_error_lines(result.stdout + result.stderr)
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 xpath = xml_dir / rel
@@ -391,6 +412,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatches")
+            if error_lines:
+                print(f"{lang} emitted {error_lines} error lines")
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
             print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
         except Exception as exc:  # pragma: no cover - external tools may fail
