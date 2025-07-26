@@ -231,26 +231,28 @@ def _diff_report(expected: dict, actual: dict) -> str:
     return diff.pretty()
 
 
-def _count_error_lines(output: str) -> int:
-    """Count lines containing the word ``error``.
+def _diff_line_count(diff: str) -> int:
+    """Count the number of lines in a diff string.
 
     Parameters
     ----------
-    output : str
-        Combined stdout and stderr text captured from a subprocess.
+    diff : str
+        Text produced by :func:`_diff_report`.
 
     Returns
     -------
     int
-        Number of lines that include ``error`` (case-insensitive).
+        The total line count of the diff output.
     """
 
-    return sum(1 for line in output.splitlines() if "error" in line.lower())
+    if not diff:
+        return 0
+    return diff.count("\n") + 1
 
 
 def _verify_with_python(
     json_path: Path, canonical: dict, handler: SCXMLDocumentHandler
-) -> None:
+) -> int:
     """Round-trip the SCJSON file using Python and compare to canonical.
 
     Parameters
@@ -264,8 +266,8 @@ def _verify_with_python(
 
     Returns
     -------
-    None
-        This function only prints diagnostic output.
+    int
+        Number of diff lines produced when mismatches are detected.
     """
 
     try:
@@ -275,13 +277,16 @@ def _verify_with_python(
         )
     except Exception as exc:  # pragma: no cover - debugging aid
         print(f"Python failed to round-trip {json_path}: {exc}")
-        return
+        return 0
 
     if round_trip == canonical:
         print(f"Python round-trip matches canonical for {json_path.name}")
+        return 0
     else:
         print(f"Python round-trip mismatch for {json_path.name}")
-        print(_diff_report(canonical, round_trip))
+        diff = _diff_report(canonical, round_trip)
+        print(diff)
+        return _diff_line_count(diff)
 
 
 def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Path, dict]:
@@ -354,7 +359,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
             json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
             if lang == "python":
                 json_args.append("--skip-unknown")
-            result = subprocess.run(
+            subprocess.run(
                 cmd + json_args,
                 check=True,
                 stdout=subprocess.PIPE,
@@ -362,8 +367,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 env=env,
                 text=True,
             )
-            error_lines = _count_error_lines(result.stdout + result.stderr)
             errors = 0
+            mismatch_items = 0
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 jpath = json_dir / rel.with_suffix(".scjson")
@@ -378,8 +383,10 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     continue
                 if data != canonical[src]:
                     print(f"{lang} JSON mismatch: {rel}")
-                    print(_diff_report(canonical[src], data))
-                    _verify_with_python(jpath, canonical[src], handler)
+                    diff = _diff_report(canonical[src], data)
+                    print(diff)
+                    mismatch_items += _diff_line_count(diff)
+                    mismatch_items += _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
             result = subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
@@ -389,7 +396,6 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 env=env,
                 text=True,
             )
-            error_lines += _count_error_lines(result.stdout + result.stderr)
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 xpath = xml_dir / rel
@@ -405,15 +411,17 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     continue
                 if parsed != canonical[src]:
                     print(f"{lang} XML mismatch: {rel}")
-                    print(_diff_report(canonical[src], parsed))
+                    diff = _diff_report(canonical[src], parsed)
+                    print(diff)
+                    mismatch_items += _diff_line_count(diff)
                     jpath = json_dir / rel.with_suffix(".scjson")
                     if jpath.exists():
-                        _verify_with_python(jpath, canonical[src], handler)
+                        mismatch_items += _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
             if errors:
-                print(f"{lang} encountered {errors} mismatches")
-            if error_lines:
-                print(f"{lang} emitted {error_lines} error lines")
+                print(
+                    f"{lang} encountered {errors} mismatching files and {mismatch_items} mismatched items."
+                )
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
             print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
         except Exception as exc:  # pragma: no cover - external tools may fail
