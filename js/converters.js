@@ -566,6 +566,59 @@ function fixSendContent(value) {
 }
 
 /**
+ * Remove namespace URIs from ``qname`` fields.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function stripQnameNs(value) {
+  if (Array.isArray(value)) {
+    value.forEach(stripQnameNs);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'qname' && typeof v === 'string') {
+        value[k] = v.replace(/^\{[^}]+\}/, '');
+        continue;
+      }
+      stripQnameNs(v);
+    }
+  }
+}
+
+/**
+ * Collapse nested ``content`` wrappers created during parsing.
+ *
+ * A ``content`` array may contain a single object with its own
+ * ``content`` array when the original XML element only held text.
+ * This helper flattens that structure so that round-tripping through
+ * XML does not introduce spurious elements.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function flattenContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(flattenContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (
+      Array.isArray(value.content) &&
+      value.content.length === 1 &&
+      value.content[0] &&
+      typeof value.content[0] === 'object' &&
+      Object.keys(value.content[0]).length === 1 &&
+      Array.isArray(value.content[0].content) &&
+      value.content[0].content.every(x => typeof x !== 'object')
+    ) {
+      value.content = [value.content[0].content.join('')];
+    }
+    for (const v of Object.values(value)) {
+      flattenContent(v);
+    }
+  }
+}
+/**
  * Remove nulls and empty containers from values recursively.
  *
  * Certain keys like ``final`` must always be preserved even when they
@@ -642,6 +695,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
   fixSendContent(obj);
+  flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
   if (omitEmpty) {
@@ -677,6 +731,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   if (obj.datamodel_attribute === undefined) {
     obj.datamodel_attribute = 'null';
   }
+  stripQnameNs(obj);
   reorderScxml(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
@@ -697,6 +752,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
 function jsonToXml(jsonStr) {
   const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
   const obj = JSON.parse(jsonStr);
+  flattenContent(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
   function restoreKeys(value) {
@@ -730,12 +786,12 @@ function jsonToXml(jsonStr) {
         } else if (k === 'else_value') {
           nk = 'else';
         }
-        for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
-          if (prop === nk) {
-            nk = `@_${attr}`;
-            break;
-          }
+      for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
+        if (prop === nk) {
+          nk = `@_${attr}`;
+          break;
         }
+      }
         if (nk === 'script') {
           if (Array.isArray(v)) {
             out[nk] = v.map(item => {
@@ -763,6 +819,15 @@ function jsonToXml(jsonStr) {
               ) {
                 return { scxml: restoreKeys(item) };
               }
+              if (
+                item &&
+                typeof item === 'object' &&
+                Object.keys(item).length === 1 &&
+                Array.isArray(item.content) &&
+                item.content.every(x => typeof x !== 'object')
+              ) {
+                return item.content.join('');
+              }
               return restoreKeys(item);
             });
           } else if (
@@ -772,6 +837,14 @@ function jsonToXml(jsonStr) {
              v.datamodel_attribute !== undefined)
           ) {
             out[nk] = { scxml: restoreKeys(v) };
+          } else if (
+            v &&
+            typeof v === 'object' &&
+            Object.keys(v).length === 1 &&
+            Array.isArray(v.content) &&
+            v.content.every(x => typeof x !== 'object')
+          ) {
+            out[nk] = v.content.join('');
           } else {
             out[nk] = restoreKeys(v);
           }
@@ -790,6 +863,31 @@ function jsonToXml(jsonStr) {
           }
         } else {
           out[nk] = restoreKeys(v);
+        }
+      }
+      if (
+        Array.isArray(out.content) &&
+        out.content.every(x => typeof x !== 'object')
+      ) {
+        const others = Object.keys(out).filter(
+          k => k !== 'content' && !k.startsWith('@_')
+        );
+        const attrs = Object.keys(out).filter(k => k.startsWith('@_'));
+        const sendAttrs = [
+          '@_event',
+          '@_eventexpr',
+          '@_target',
+          '@_targetexpr',
+          '@_type',
+          '@_type_value',
+          '@_delay',
+          '@_delayexpr',
+          '@_namelist',
+        ];
+        const isSend = attrs.some(a => sendAttrs.includes(a));
+        if (others.length === 0 && !isSend) {
+          out['#text'] = out.content.join('');
+          delete out.content;
         }
       }
       return out;
@@ -814,8 +912,10 @@ module.exports = {
   fixAssignDefaults,
   fixSendDefaults,
   fixSendContent,
+  flattenContent,
   splitTokenAttrs,
   fixEmptyElse,
   stripRootTransitions,
+  stripQnameNs,
   reorderScxml,
 };
