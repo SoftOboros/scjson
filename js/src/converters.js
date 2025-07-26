@@ -602,10 +602,17 @@ function flattenContent(value) {
       value.content[0] &&
       typeof value.content[0] === 'object' &&
       Object.keys(value.content[0]).length === 1 &&
-      Array.isArray(value.content[0].content) &&
-      value.content[0].content.every(x => typeof x !== 'object')
+      Array.isArray(value.content[0].content)
     ) {
-      value.content = [value.content[0].content.join('')];
+      if (value.content[0].content.every(x => typeof x !== 'object')) {
+        value.content = [value.content[0].content.join('')];
+      } else if (
+        value.content[0].content.length === 1 &&
+        value.content[0].content[0] &&
+        typeof value.content[0].content[0] === 'object'
+      ) {
+        value.content = [value.content[0].content[0]];
+      }
     }
     for (const v of Object.values(value)) {
       flattenContent(v);
@@ -741,8 +748,9 @@ function xmlToJson(xmlStr, omitEmpty = true) {
  * Convert a scjson string to SCXML.
  *
  * Removes empty objects so that the generated XML does not include spurious
- * `<content/>` elements. The function validates the input against the SCJSON
- * schema before conversion.
+ * `<content/>` elements. Nested SCXML documents are also normalised after
+ * restoring attribute names to ensure no stray wrapper nodes remain. The
+ * function validates the input against the SCJSON schema before conversion.
  *
  * @param {string} jsonStr - JSON input.
  * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
@@ -898,10 +906,11 @@ function jsonToXml(jsonStr) {
     return value;
   }
   const restored = restoreKeys(obj);
-  if (restored['@_xmlns'] === undefined) {
-    restored['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
+  const cleaned = removeEmpty(restored) || {};
+  if (cleaned['@_xmlns'] === undefined) {
+    cleaned['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
-  return { result: builder.build({ scxml: restored }), valid, errors };
+  return { result: builder.build({ scxml: cleaned }), valid, errors };
 }
 
 module.exports = {
