@@ -193,9 +193,6 @@ def _normalize_for_diff(obj, path="", field_key=None):
         if len(obj) == 1 and isinstance(obj[0], dict) and list(obj[0].keys()) == ["content"] and isinstance(obj[0]["content"], str):
             return _normalize_for_diff(obj[0]["content"], f"{path}[]", field_key="content")
 
-        if len(obj) == 1:
-            return _normalize_for_diff(obj[0], f"{path}[]", field_key=field_key)
-
         return [_normalize_for_diff(i, f"{path}[]", field_key=field_key) for i in obj]
 
     elif isinstance(obj, str):
