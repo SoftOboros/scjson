@@ -322,7 +322,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         Limit the run to a single language key from :data:`LANG_CMDS`.
     """
 
-    handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+    handler = SCXMLDocumentHandler()
     scxml_files = sorted(TUTORIAL.rglob("*.scxml"))
     canonical = _canonical_json(scxml_files, handler)
     scxml_files = list(canonical.keys())

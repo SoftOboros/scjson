@@ -746,13 +746,22 @@ function xmlToJson(xmlStr, omitEmpty = true) {
 /**
  * Convert a scjson string to SCXML.
  *
+ * Removes empty objects so that the generated XML does not include spurious
+ * `<content/>` elements. The function validates the input against the SCJSON
+ * schema before conversion.
+ *
  * @param {string} jsonStr - JSON input.
  * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
  */
 function jsonToXml(jsonStr) {
-  const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
-  const obj = JSON.parse(jsonStr);
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    format: true,
+    suppressEmptyNode: true,
+  });
+  let obj = JSON.parse(jsonStr);
   flattenContent(obj);
+  obj = removeEmpty(obj) || {};
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
   function restoreKeys(value) {
