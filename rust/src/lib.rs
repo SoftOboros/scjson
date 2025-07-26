@@ -16,38 +16,83 @@ use xmltree::Error as XmlWriteError;
 use xmltree::{Element, XMLNode};
 
 /// Attribute name mappings used during conversion.
-const ATTRIBUTE_MAP: &[(&str, &str)] = &[
-    ("datamodel", "datamodel_attribute"),
-    ("initial", "initial_attribute"),
-    ("type", "type_value"),
-    ("raise", "raise_value"),
-];
+// const ATTRIBUTE_MAP: &[(&str, &str)] = &[
+//     ("datamodel", "datamodel_attribute"),
+//     ("initial", "initial_attribute"),
+//     ("type", "type_value"),
+//     ("raise", "raise_value"),
+// ];
+// NOTE: reserved for future use when attribute renaming is implemented.
 
 /// Keys that should always be arrays in the output.
-const ARRAY_KEYS: &[&str] = &[
-    "assign",
-    "cancel",
-    "content",
-    "data",
-    "datamodel",
-    "donedata",
+// const ARRAY_KEYS: &[&str] = &[
+//     "assign",
+//     "cancel",
+//     "content",
+//     "data",
+//     "datamodel",
+//     "donedata",
+//     "final",
+//     "finalize",
+//     "foreach",
+//     "history",
+//     "if_value",
+//     "initial",
+//     "invoke",
+//     "log",
+//     "onentry",
+//     "onexit",
+//     "other_element",
+//     "parallel",
+//     "param",
+//     "raise_value",
+//     "script",
+//     "send",
+//     "state",
+// ];
+// NOTE: may be reintroduced when enforcing array types during parsing.
+
+/// Attributes whose whitespace should be collapsed.
+const COLLAPSE_ATTRS: &[&str] = &[
+    "expr",
+    "cond",
+    "event",
+    "target",
+    "delay",
+    "location",
+    "name",
+    "src",
+    "id",
+];
+
+/// Known SCXML element names used for conversion.
+const SCXML_ELEMS: &[&str] = &[
+    "scxml",
+    "state",
+    "parallel",
     "final",
-    "finalize",
-    "foreach",
     "history",
-    "if_value",
-    "initial",
+    "transition",
     "invoke",
-    "log",
+    "finalize",
+    "datamodel",
+    "data",
     "onentry",
     "onexit",
-    "other_element",
-    "parallel",
-    "param",
-    "raise_value",
-    "script",
+    "log",
     "send",
-    "state",
+    "cancel",
+    "raise",
+    "assign",
+    "script",
+    "foreach",
+    "param",
+    "if",
+    "elseif",
+    "else",
+    "content",
+    "donedata",
+    "initial",
 ];
 
 /// Errors produced by conversion routines.
@@ -76,6 +121,32 @@ fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
     }
 }
 
+fn any_element_to_value(elem: &Element) -> Value {
+    let mut map = Map::new();
+    map.insert("qname".into(), Value::String(elem.name.clone()));
+    let text = elem.get_text().map(|c| c.into_owned()).unwrap_or_default();
+    map.insert("text".into(), Value::String(text));
+    if !elem.attributes.is_empty() {
+        let mut attrs = Map::new();
+        for (k, v) in &elem.attributes {
+            attrs.insert(k.clone(), Value::String(v.clone()));
+        }
+        map.insert("attributes".into(), Value::Object(attrs));
+    }
+    if !elem.children.is_empty() {
+        let mut children = Vec::new();
+        for c in &elem.children {
+            if let XMLNode::Element(e) = c {
+                children.push(any_element_to_value(e));
+            }
+        }
+        if !children.is_empty() {
+            map.insert("children".into(), Value::Array(children));
+        }
+    }
+    Value::Object(map)
+}
+
 fn element_to_map(elem: &Element) -> Map<String, Value> {
     let mut map = Map::new();
     for (k, v) in &elem.attributes {
@@ -92,13 +163,15 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     .split_whitespace()
                     .map(|s| Value::String(s.to_string()))
                     .collect();
-                map.insert("initial".into(), Value::Array(vals));
+                if elem.name == "scxml" {
+                    map.insert("initial".into(), Value::Array(vals));
+                } else {
+                    map.insert("initial_attribute".into(), Value::Array(vals));
+                }
             }
             (_, "version") => {
                 if let Ok(n) = v.parse::<f64>() {
-                    if (n.fract() - 0.0).abs() < f64::EPSILON {
-                        map.insert("version".into(), Value::Number(Number::from(n as i64)));
-                    } else if let Some(num) = Number::from_f64(n) {
+                    if let Some(num) = Number::from_f64(n) {
                         map.insert("version".into(), Value::Number(num));
                     }
                 } else {
@@ -144,20 +217,25 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
     for child in &elem.children {
         match child {
             XMLNode::Element(e) => {
-                let key = match e.name.as_str() {
-                    "if" => "if_value",
-                    "else" => "else_value",
-                    name => name,
-                };
-                let child_map = element_to_map(e);
-                let target_key = if e.name == "scxml" && elem.name != "scxml" {
-                    "content"
-                } else if elem.name == "content" && e.name == "scxml" {
-                    "content"
+                if SCXML_ELEMS.contains(&e.name.as_str()) {
+                    let key = match e.name.as_str() {
+                        "if" => "if_value",
+                        "else" => "else_value",
+                        name => name,
+                    };
+                    let child_map = element_to_map(e);
+                    let target_key = if e.name == "scxml" && elem.name != "scxml" {
+                        "content"
+                    } else if elem.name == "content" && e.name == "scxml" {
+                        "content"
+                    } else {
+                        key
+                    };
+                    append_child(&mut map, target_key, Value::Object(child_map));
                 } else {
-                    key
-                };
-                append_child(&mut map, target_key, Value::Object(child_map));
+                    let val = any_element_to_value(e);
+                    append_child(&mut map, "content", val);
+                }
             }
             XMLNode::Text(t) => {
                 if !t.trim().is_empty() {
@@ -175,7 +253,10 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
 
     if elem.name == "scxml" {
         if !map.contains_key("version") {
-            map.insert("version".into(), Value::Number(Number::from(1)));
+            map.insert(
+                "version".into(),
+                Value::Number(Number::from_f64(1.0).unwrap()),
+            );
         }
         map.entry("datamodel_attribute".to_string())
             .or_insert_with(|| Value::String("null".into()));
@@ -211,27 +292,57 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             }
         }
     }
-    let mut elem = Element::new(name);
+    let mut elem_name = name.to_string();
+    if let Some(Value::String(q)) = map.get("qname") {
+        elem_name = q.clone();
+    }
+    let mut elem = Element::new(&elem_name);
     if name == "scxml" {
         elem.attributes
             .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
     }
+    if let Some(Value::String(text)) = map.get("text") {
+        if !text.is_empty() {
+            elem.children.push(XMLNode::Text(text.clone()));
+        }
+    }
+    if let Some(Value::Object(attrs)) = map.get("attributes") {
+        for (k, v) in attrs {
+            if let Some(s) = v.as_str() {
+                elem.attributes.insert(k.clone(), s.to_string());
+            }
+        }
+    }
     for (k, v) in map {
+        if ["qname", "text", "attributes"].contains(&k.as_str()) {
+            continue;
+        }
         if k == "content" {
             if let Value::Array(arr) = v {
                 if name == "invoke" {
-                    let mut c_elem = Element::new("content");
                     for item in arr {
                         match item {
-                            Value::String(s) => c_elem.children.push(XMLNode::Text(s.clone())),
+                            Value::String(s) => {
+                                let mut c = Element::new("content");
+                                c.children.push(XMLNode::Text(s.clone()));
+                                elem.children.push(XMLNode::Element(c));
+                            }
                             Value::Object(obj) => {
-                                let child = map_to_element("scxml", obj);
-                                c_elem.children.push(XMLNode::Element(child));
+                                let child_name = if obj.contains_key("state")
+                                    || obj.contains_key("final")
+                                    || obj.contains_key("version")
+                                    || obj.contains_key("datamodel_attribute")
+                                {
+                                    "scxml"
+                                } else {
+                                    "content"
+                                };
+                                let child = map_to_element(child_name, obj);
+                                elem.children.push(XMLNode::Element(child));
                             }
                             _ => {}
                         }
                     }
-                    elem.children.push(XMLNode::Element(c_elem));
                 } else if name == "script" {
                     for item in arr {
                         if let Value::String(s) = item {
@@ -341,6 +452,38 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
     elem
 }
 
+/// Collapse newlines and tabs in attribute values recursively.
+///
+/// # Parameters
+/// - `value`: Mutable JSON value to normalise.
+fn collapse_whitespace(value: &mut Value) {
+    match value {
+        Value::Array(arr) => {
+            for v in arr {
+                collapse_whitespace(v);
+            }
+        }
+        Value::Object(map) => {
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for k in keys {
+                if let Some(v) = map.get_mut(&k) {
+                    if (k.ends_with("_attribute") || COLLAPSE_ATTRS.contains(&k.as_str()))
+                        && v.is_string()
+                    {
+                        if let Some(s) = v.as_str() {
+                            let collapsed = s.replace(['\n', '\r', '\t'], " ");
+                            *v = Value::String(collapsed);
+                        }
+                    } else {
+                        collapse_whitespace(v);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 fn remove_empty(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
@@ -380,8 +523,10 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    let mut map = element_to_map(&root);
+    // let mut map = element_to_map(&root); // retained for potential future mutations
+    let map = element_to_map(&root);
     let mut value = Value::Object(map);
+    collapse_whitespace(&mut value);
     if omit_empty {
         remove_empty(&mut value);
     }

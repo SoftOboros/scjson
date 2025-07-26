@@ -14,7 +14,7 @@ fn create_scxml() -> String {
 
 fn create_scjson() -> String {
     let obj = serde_json::json!({
-        "version": 1,
+        "version": 1.0,
         "datamodel_attribute": "null"
     });
     serde_json::to_string_pretty(&obj).unwrap()
@@ -59,7 +59,7 @@ fn single_json_conversion() {
     assert!(out_path.exists());
     let data: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(out_path).unwrap()).unwrap();
-    assert_eq!(data["version"], 1);
+    assert_eq!(data["version"], 1.0);
 }
 
 #[test]

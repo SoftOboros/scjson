@@ -26,6 +26,7 @@ from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
+from xml.etree import ElementTree as ET
 
 class SCXMLDocumentHandler:
     def __init__(
@@ -126,7 +127,20 @@ class SCXMLDocumentHandler:
         return obj
 
     def xml_to_json(self, xml_str: str) -> str:
-        """Convert SCXML string to canonical JSON."""
+        """Convert SCXML string to canonical JSON.
+
+        This method tolerates documents that omit the default SCXML namespace by
+        inserting it prior to parsing.  Such files are technically invalid but
+        appear in the W3C test suite.
+        """
+        try:
+            root = ET.fromstring(xml_str)
+        except Exception:
+            # Let the parser raise a more descriptive error later
+            root = None
+        if root is not None and root.tag == "scxml" and "xmlns" not in root.attrib:
+            root.attrib["xmlns"] = "http://www.w3.org/2005/07/scxml"
+            xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
         if hasattr(model, "model_dump"):
             data = model.model_dump()

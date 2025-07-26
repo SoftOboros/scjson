@@ -177,11 +177,8 @@ function collapseWhitespace(value) {
  *
  * @param {object|Array} value - Parsed value to adjust in place.
  */
-function splitTokenAttrs(value) {
-  if (Array.isArray(value)) {
-    value.forEach(splitTokenAttrs);
-    return;
-  }
+function splitTokenAttrs(value, parent) {
+  if (Array.isArray(value)) return value.forEach(v => splitTokenAttrs(v, parent));
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if ((k === 'initial' || k === 'initial_attribute') && typeof v === 'string') {
@@ -189,17 +186,20 @@ function splitTokenAttrs(value) {
         continue;
       }
       if (k === 'transition') {
-        const arr = Array.isArray(v) ? v : [v];
-        arr.forEach(tr => {
-          if (typeof tr.target === 'string') {
-            tr.target = tr.target.trim().split(/\s+/);
-          }
-          splitTokenAttrs(tr);
-        });
-        value[k] = arr;
+        if (parent !== 'history') {
+          const arr = Array.isArray(v) ? v : [v];
+          arr.forEach(tr => {
+            if (typeof tr.target === 'string') tr.target = tr.target.trim().split(/\s+/);
+            splitTokenAttrs(tr, k);
+          });
+          value[k] = arr;
+        } else {
+          if (typeof v.target === 'string') v.target = v.target.trim().split(/\s+/);
+          splitTokenAttrs(v, k);
+        }
         continue;
       }
-      splitTokenAttrs(v);
+      splitTokenAttrs(v, k);
     }
   }
 }
@@ -308,36 +308,30 @@ function normaliseKeys(value) {
  *
  * @param {object} obj - Parsed object to adjust in place.
  */
-function ensureArrays(obj) {
-  if (!obj || typeof obj !== 'object') {
-    return;
-  }
+function ensureArrays(obj, parent) {
+  if (!obj || typeof obj !== 'object') return;
   for (const [k, v] of Object.entries(obj)) {
     if (ARRAY_KEYS.has(k) && v !== undefined) {
-      if (Array.isArray(v)) {
-        v.forEach(ensureArrays);
-      } else {
-        obj[k] = [v];
-        ensureArrays(obj[k][0]);
-      }
+      Array.isArray(v)
+        ? v.forEach(o => ensureArrays(o, k))
+        : (obj[k] = [v], ensureArrays(obj[k][0], k));
       continue;
     }
     if (k === 'transition' && v && typeof v === 'object') {
-      const arr = Array.isArray(v) ? v : [v];
-      arr.forEach(tr => {
-        if (tr.target !== undefined && !Array.isArray(tr.target)) {
-          tr.target = [tr.target];
-        }
-        ensureArrays(tr);
-      });
-      obj[k] = arr;
+      if (parent !== 'history') {
+        const arr = Array.isArray(v) ? v : [v];
+        arr.forEach(tr => {
+          if (tr.target !== undefined && !Array.isArray(tr.target)) tr.target = [tr.target];
+          ensureArrays(tr, k);
+        });
+        obj[k] = arr;
+      } else {
+        if (v.target !== undefined && !Array.isArray(v.target)) v.target = [v.target];
+        ensureArrays(v, k);
+      }
       continue;
     }
-    if (Array.isArray(v)) {
-      v.forEach(ensureArrays);
-    } else if (typeof v === 'object') {
-      ensureArrays(v);
-    }
+    Array.isArray(v) ? v.forEach(o => ensureArrays(o, k)) : typeof v === 'object' && ensureArrays(v, k);
   }
 }
 
@@ -508,6 +502,7 @@ function fixSendDefaults(value) {
         if (s.delay === undefined) {
           s.delay = '0s';
         }
+        fixSendContent(s);
         fixSendDefaults(s);
       });
       value.send = arr;
@@ -518,6 +513,105 @@ function fixSendDefaults(value) {
   }
 }
 
+/**
+ * Normalise inline content elements under ``send``.
+ *
+ * ``<content>`` children inside ``<send>`` should always be objects with a
+ * ``content`` array according to the scjson schema. The fast-xml-parser library
+ * collapses simple text nodes to strings which leads to mismatches when
+ * compared with the Python implementation. This helper wraps such strings in an
+ * object structure.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixSendContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixSendContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'send')) {
+      const arr = Array.isArray(value.send) ? value.send : [value.send];
+      arr.forEach(s => {
+        if (Object.prototype.hasOwnProperty.call(s, 'content')) {
+          const cArr = Array.isArray(s.content) ? s.content : [s.content];
+          s.content = cArr.map(c => {
+            if (typeof c !== 'object') {
+              return { content: [String(c)] };
+            }
+            if (c && typeof c === 'object') {
+              if (typeof c.content === 'string' || typeof c.content === 'number' || typeof c.content === 'boolean') {
+                c.content = [String(c.content)];
+              }
+              fixSendContent(c);
+              return c;
+            }
+            return c;
+          });
+        }
+        fixSendContent(s);
+      });
+      value.send = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixSendContent(v);
+    }
+  }
+}
+
+/**
+ * Remove namespace URIs from ``qname`` fields.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function stripQnameNs(value) {
+  if (Array.isArray(value)) {
+    value.forEach(stripQnameNs);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'qname' && typeof v === 'string') {
+        value[k] = v.replace(/^\{[^}]+\}/, '');
+        continue;
+      }
+      stripQnameNs(v);
+    }
+  }
+}
+
+/**
+ * Collapse nested ``content`` wrappers created during parsing.
+ *
+ * A ``content`` array may contain a single object with its own
+ * ``content`` array when the original XML element only held text.
+ * This helper flattens that structure so that round-tripping through
+ * XML does not introduce spurious elements.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function flattenContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(flattenContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (
+      Array.isArray(value.content) &&
+      value.content.length === 1 &&
+      value.content[0] &&
+      typeof value.content[0] === 'object' &&
+      Object.keys(value.content[0]).length === 1 &&
+      Array.isArray(value.content[0].content) &&
+      value.content[0].content.every(x => typeof x !== 'object')
+    ) {
+      value.content = [value.content[0].content.join('')];
+    }
+    for (const v of Object.values(value)) {
+      flattenContent(v);
+    }
+  }
+}
 /**
  * Remove nulls and empty containers from values recursively.
  *
@@ -570,13 +664,17 @@ const validate = ajv.compile(schema);
  *
  * @param {string} xmlStr - XML input.
  * @param {boolean} [omitEmpty=true] - Remove empty values when true.
- * @returns {string} JSON representation.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
  *
  * Removes the XML namespace attribute and injects default values
  * expected by the schema.
  */
 function xmlToJson(xmlStr, omitEmpty = true) {
-  const parser = new XMLParser({ ignoreAttributes: false, trimValues: false });
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    trimValues: false,
+    parseTagValue: false,
+  });
   let obj = parser.parse(xmlStr);
   if (obj.scxml) {
     obj = obj.scxml;
@@ -590,6 +688,8 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixScripts(obj);
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
+  fixSendContent(obj);
+  flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
   if (omitEmpty) {
@@ -625,35 +725,60 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   if (obj.datamodel_attribute === undefined) {
     obj.datamodel_attribute = 'null';
   }
+  stripQnameNs(obj);
   reorderScxml(obj);
-  if (!validate(obj)) {
-    throw new Error('Invalid scjson');
-  }
+  const valid = validate(obj);
+  const errors = valid ? null : validate.errors;
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
-  return out;
+  return { result: out, valid, errors };
 }
 
 /**
  * Convert a scjson string to SCXML.
  *
+ * Removes empty objects so that the generated XML does not include spurious
+ * `<content/>` elements. The function validates the input against the SCJSON
+ * schema before conversion.
+ *
  * @param {string} jsonStr - JSON input.
- * @returns {string} XML output.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
  */
 function jsonToXml(jsonStr) {
-  const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
-  const obj = JSON.parse(jsonStr);
-  if (!validate(obj)) {
-    throw new Error('Invalid scjson');
-  }
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    format: true,
+    suppressEmptyNode: true,
+  });
+  let obj = JSON.parse(jsonStr);
+  flattenContent(obj);
+  obj = removeEmpty(obj) || {};
+  const valid = validate(obj);
+  const errors = valid ? null : validate.errors;
   function restoreKeys(value) {
     if (Array.isArray(value)) {
       return value.map(restoreKeys);
     }
     if (value && typeof value === 'object') {
+      if (
+        Object.keys(value).length === 1 &&
+        Array.isArray(value.content) &&
+        value.content.length === 1 &&
+        value.content[0] &&
+        typeof value.content[0] === 'object' &&
+        (
+          value.content[0].state ||
+          value.content[0].parallel ||
+          value.content[0].final ||
+          value.content[0].datamodel ||
+          value.content[0].datamodel_attribute !== undefined
+        )
+      ) {
+        return { scxml: restoreKeys(value.content[0]) };
+      }
       const out = {};
       for (const [k, v] of Object.entries(value)) {
         let nk = k;
@@ -664,12 +789,12 @@ function jsonToXml(jsonStr) {
         } else if (k === 'else_value') {
           nk = 'else';
         }
-        for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
-          if (prop === nk) {
-            nk = `@_${attr}`;
-            break;
-          }
+      for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
+        if (prop === nk) {
+          nk = `@_${attr}`;
+          break;
         }
+      }
         if (nk === 'script') {
           if (Array.isArray(v)) {
             out[nk] = v.map(item => {
@@ -687,7 +812,45 @@ function jsonToXml(jsonStr) {
             out[nk] = v;
           }
         } else if (nk === 'content') {
-          out[nk] = restoreKeys(v);
+          if (Array.isArray(v)) {
+            out[nk] = v.map(item => {
+              if (
+                item &&
+                typeof item === 'object' &&
+                (item.state || item.parallel || item.final || item.datamodel ||
+                 item.datamodel_attribute !== undefined)
+              ) {
+                return { scxml: restoreKeys(item) };
+              }
+              if (
+                item &&
+                typeof item === 'object' &&
+                Object.keys(item).length === 1 &&
+                Array.isArray(item.content) &&
+                item.content.every(x => typeof x !== 'object')
+              ) {
+                return item.content.join('');
+              }
+              return restoreKeys(item);
+            });
+          } else if (
+            v &&
+            typeof v === 'object' &&
+            (v.state || v.parallel || v.final || v.datamodel ||
+             v.datamodel_attribute !== undefined)
+          ) {
+            out[nk] = { scxml: restoreKeys(v) };
+          } else if (
+            v &&
+            typeof v === 'object' &&
+            Object.keys(v).length === 1 &&
+            Array.isArray(v.content) &&
+            v.content.every(x => typeof x !== 'object')
+          ) {
+            out[nk] = v.content.join('');
+          } else {
+            out[nk] = restoreKeys(v);
+          }
         } else if (Array.isArray(v) && v.every(x => typeof x !== 'object')) {
           const val = v.join(' ');
           if (nk.startsWith('@_')) {
@@ -705,6 +868,31 @@ function jsonToXml(jsonStr) {
           out[nk] = restoreKeys(v);
         }
       }
+      if (
+        Array.isArray(out.content) &&
+        out.content.every(x => typeof x !== 'object')
+      ) {
+        const others = Object.keys(out).filter(
+          k => k !== 'content' && !k.startsWith('@_')
+        );
+        const attrs = Object.keys(out).filter(k => k.startsWith('@_'));
+        const sendAttrs = [
+          '@_event',
+          '@_eventexpr',
+          '@_target',
+          '@_targetexpr',
+          '@_type',
+          '@_type_value',
+          '@_delay',
+          '@_delayexpr',
+          '@_namelist',
+        ];
+        const isSend = attrs.some(a => sendAttrs.includes(a));
+        if (others.length === 0 && !isSend) {
+          out['#text'] = out.content.join('');
+          delete out.content;
+        }
+      }
       return out;
     }
     return value;
@@ -713,7 +901,7 @@ function jsonToXml(jsonStr) {
   if (restored['@_xmlns'] === undefined) {
     restored['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
-  return builder.build({ scxml: restored });
+  return { result: builder.build({ scxml: restored }), valid, errors };
 }
 
 module.exports = {
@@ -726,8 +914,11 @@ module.exports = {
   fixNestedScxml,
   fixAssignDefaults,
   fixSendDefaults,
+  fixSendContent,
+  flattenContent,
   splitTokenAttrs,
   fixEmptyElse,
   stripRootTransitions,
+  stripQnameNs,
   reorderScxml,
 };

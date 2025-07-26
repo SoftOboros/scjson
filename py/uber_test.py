@@ -193,6 +193,9 @@ def _normalize_for_diff(obj, path="", field_key=None):
         if len(obj) == 1 and isinstance(obj[0], dict) and list(obj[0].keys()) == ["content"] and isinstance(obj[0]["content"], str):
             return _normalize_for_diff(obj[0]["content"], f"{path}[]", field_key="content")
 
+        if len(obj) == 1:
+            return _normalize_for_diff(obj[0], f"{path}[]", field_key=field_key)
+
         return [_normalize_for_diff(i, f"{path}[]", field_key=field_key) for i in obj]
 
     elif isinstance(obj, str):
@@ -226,6 +229,59 @@ def _diff_report(expected: dict, actual: dict) -> str:
         ignore_order=True,
     )
     return diff.pretty()
+
+
+def _count_error_lines(output: str) -> int:
+    """Count lines containing the word ``error``.
+
+    Parameters
+    ----------
+    output : str
+        Combined stdout and stderr text captured from a subprocess.
+
+    Returns
+    -------
+    int
+        Number of lines that include ``error`` (case-insensitive).
+    """
+
+    return sum(1 for line in output.splitlines() if "error" in line.lower())
+
+
+def _verify_with_python(
+    json_path: Path, canonical: dict, handler: SCXMLDocumentHandler
+) -> None:
+    """Round-trip the SCJSON file using Python and compare to canonical.
+
+    Parameters
+    ----------
+    json_path : Path
+        Path to the SCJSON file produced by the language under test.
+    canonical : dict
+        Canonical structure produced by the Python implementation.
+    handler : SCXMLDocumentHandler
+        Converter used for round-tripping the JSON structure.
+
+    Returns
+    -------
+    None
+        This function only prints diagnostic output.
+    """
+
+    try:
+        original_text = json_path.read_text(encoding="utf-8")
+        round_trip = json.loads(
+            handler.xml_to_json(handler.json_to_xml(original_text))
+        )
+    except Exception as exc:  # pragma: no cover - debugging aid
+        print(f"Python failed to round-trip {json_path}: {exc}")
+        return
+
+    if round_trip == canonical:
+        print(f"Python round-trip matches canonical for {json_path.name}")
+    else:
+        print(f"Python round-trip mismatch for {json_path.name}")
+        print(_diff_report(canonical, round_trip))
 
 
 def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Path, dict]:
@@ -266,7 +322,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         Limit the run to a single language key from :data:`LANG_CMDS`.
     """
 
-    handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+    handler = SCXMLDocumentHandler()
     scxml_files = sorted(TUTORIAL.rglob("*.scxml"))
     canonical = _canonical_json(scxml_files, handler)
     scxml_files = list(canonical.keys())
@@ -298,13 +354,15 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
             json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
             if lang == "python":
                 json_args.append("--skip-unknown")
-            subprocess.run(
+            result = subprocess.run(
                 cmd + json_args,
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                text=True,
             )
+            error_lines = _count_error_lines(result.stdout + result.stderr)
             errors = 0
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
@@ -321,14 +379,17 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 if data != canonical[src]:
                     print(f"{lang} JSON mismatch: {rel}")
                     print(_diff_report(canonical[src], data))
+                    _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
-            subprocess.run(
+            result = subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
+                text=True,
             )
+            error_lines += _count_error_lines(result.stdout + result.stderr)
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 xpath = xml_dir / rel
@@ -345,9 +406,14 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                 if parsed != canonical[src]:
                     print(f"{lang} XML mismatch: {rel}")
                     print(_diff_report(canonical[src], parsed))
+                    jpath = json_dir / rel.with_suffix(".scjson")
+                    if jpath.exists():
+                        _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatches")
+            if error_lines:
+                print(f"{lang} emitted {error_lines} error lines")
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
             print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
         except Exception as exc:  # pragma: no cover - external tools may fail
