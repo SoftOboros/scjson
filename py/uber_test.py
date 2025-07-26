@@ -369,6 +369,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
             )
             errors = 0
             mismatch_items = 0
+            scjson_errors = 0
+            scjson_mismatch_items = 0
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 jpath = json_dir / rel.with_suffix(".scjson")
@@ -385,9 +387,18 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     print(f"{lang} JSON mismatch: {rel}")
                     diff = _diff_report(canonical[src], data)
                     print(diff)
-                    mismatch_items += _diff_line_count(diff)
-                    mismatch_items += _verify_with_python(jpath, canonical[src], handler)
+                    lines = _diff_line_count(diff)
+                    mismatch_items += lines
+                    scjson_mismatch_items += lines
+                    diff_lines = _verify_with_python(jpath, canonical[src], handler)
+                    mismatch_items += diff_lines
+                    scjson_mismatch_items += diff_lines
+                    scjson_errors += 1
                     errors += 1
+            if scjson_errors:
+                print(
+                    f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items."
+                )
             result = subprocess.run(
                 cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"],
                 check=True,
@@ -420,7 +431,7 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     errors += 1
             if errors:
                 print(
-                    f"{lang} encountered {errors} mismatching files and {mismatch_items} mismatched items."
+                    f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items."
                 )
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
             print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
