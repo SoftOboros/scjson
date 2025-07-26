@@ -6,6 +6,11 @@ This file defines agents and their respective roles for the `scjson` project. Ea
 ## Python Configuration
 Python is setup with all modules specified.  Do not run pip or poetry.
 
+## Javascript Configuration
+The package.json for js directory specifies dist/index.js as the entrypoint.  Therefore
+the package needs to be cpiled with 'npm run build' prior to execution via node
+or testing after changes with uber_test.py.
+
 
 ## Documentation and Attribution Requirements
 

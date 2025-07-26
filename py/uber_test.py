@@ -41,7 +41,7 @@ TUTORIAL = ROOT / "tutorial"
 
 LANG_CMDS: dict[str, list[str]] = {
     "python": [sys.executable, "-m", "scjson"],
-    "javascript": ["node", str(ROOT / "js" / "bin" / "scjson.js")],
+    "javascript": ["node", str(ROOT / "js" )],
     "ruby": ["ruby", str(ROOT / "ruby" / "bin" / "scjson")],
     "lua": ["lua5.4", str(ROOT / "lua" / "bin" / "scjson")],
     "go": [str(ROOT / "go" / "go")],
