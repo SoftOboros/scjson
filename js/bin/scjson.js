@@ -7,5 +7,5 @@
  * Licensed under the BSD 1-Clause License.
  */
 
-const { program } = require('../index.js');
+const { program } = require('../dist/index.js');
 program.parse(process.argv);

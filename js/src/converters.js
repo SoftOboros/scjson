@@ -438,7 +438,7 @@ function fixNestedScxml(value) {
         }
         fixNestedScxml(v);
       });
-      value.content = arr;
+      value.content = [{ content: arr }];
     }
     for (const v of Object.values(value)) {
       fixNestedScxml(v);
@@ -560,6 +560,54 @@ function fixSendContent(value) {
 }
 
 /**
+ * Normalise inline content elements under ``donedata``.
+ *
+ * ``<content>`` children inside ``<donedata>`` should always be objects with a
+ * ``content`` array so that round-trips match the reference Python
+ * implementation. Strings are wrapped in an object accordingly.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixDonedataContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixDonedataContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'donedata')) {
+      const arr = Array.isArray(value.donedata) ? value.donedata : [value.donedata];
+      arr.forEach(d => {
+        if (Object.prototype.hasOwnProperty.call(d, 'content')) {
+          const cArr = Array.isArray(d.content) ? d.content : [d.content];
+          d.content = cArr.map(c => {
+            if (typeof c !== 'object') {
+              return { content: [String(c)] };
+            }
+            if (c && typeof c === 'object') {
+              if (
+                typeof c.content === 'string' ||
+                typeof c.content === 'number' ||
+                typeof c.content === 'boolean'
+              ) {
+                c.content = [String(c.content)];
+              }
+              fixDonedataContent(c);
+              return c;
+            }
+            return c;
+          });
+        }
+        fixDonedataContent(d);
+      });
+      value.donedata = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixDonedataContent(v);
+    }
+  }
+}
+
+/**
  * Convert arbitrary objects parsed under ``<data>`` elements into
  * canonical content structures.
  *
@@ -646,6 +694,44 @@ function fixDataContent(value) {
       fixDataContent(v);
     }
   }
+}
+
+/**
+ * Convert a canonical content object back into XML element format.
+ *
+ * ``jsonToXml`` relies on this helper to rebuild inline XML stored under
+ * ``<data>`` elements. Objects with ``qname``, ``attributes``, and ``children``
+ * fields are translated to the structure expected by ``fast-xml-parser``.
+ *
+ * @param {object} node - Canonical content object.
+ * @returns {object} XML builder structure keyed by element name.
+ */
+function restoreDataNode(node) {
+  const out = {};
+  if (node.attributes) {
+    for (const [k, v] of Object.entries(node.attributes)) {
+      out[`@_${k}`] = v;
+    }
+  }
+  if (node.text !== undefined && node.text !== '') {
+    out['#text'] = node.text;
+  }
+  if (Array.isArray(node.children)) {
+    node.children.forEach(c => {
+      const r = restoreDataNode(c);
+      const [ck, cv] = Object.entries(r)[0];
+      if (out[ck]) {
+        if (Array.isArray(out[ck])) {
+          out[ck].push(cv);
+        } else {
+          out[ck] = [out[ck], cv];
+        }
+      } else {
+        out[ck] = cv;
+      }
+    });
+  }
+  return { [node.qname]: out };
 }
 
 /**
@@ -787,6 +873,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
   fixSendContent(obj);
+  fixDonedataContent(obj);
   fixDataContent(obj);
   flattenContent(obj);
   stripRootTransitions(obj);
@@ -866,6 +953,9 @@ function jsonToXml(jsonStr) {
       return value.map(restoreKeys);
     }
     if (value && typeof value === 'object') {
+      if (Object.prototype.hasOwnProperty.call(value, 'qname')) {
+        return restoreDataNode(value);
+      }
       if (
         Object.keys(value).length === 1 &&
         Array.isArray(value.content) &&
@@ -1019,6 +1109,8 @@ module.exports = {
   fixAssignDefaults,
   fixSendDefaults,
   fixSendContent,
+  fixDonedataContent,
+  restoreDataNode,
   flattenContent,
   splitTokenAttrs,
   fixEmptyElse,
