@@ -560,6 +560,95 @@ function fixSendContent(value) {
 }
 
 /**
+ * Convert arbitrary objects parsed under ``<data>`` elements into
+ * canonical content structures.
+ *
+ * The fast-xml-parser library represents child elements of ``<data>`` as
+ * direct properties on the data object. This helper converts those
+ * properties to the schema's ``content`` array with ``qname``,
+ * ``attributes`` and ``children`` fields so that round-trips match the
+ * Python implementation.
+ *
+ * @param {string} name - Element name.
+ * @param {*} node - Parsed element value.
+ * @returns {object} Canonical content object.
+ */
+function convertDataNode(name, node) {
+  if (Array.isArray(node)) {
+    return node.map(n => convertDataNode(name, n));
+  }
+  if (node && typeof node === 'object') {
+    const attrs = {};
+    const children = [];
+    let text = '';
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'content') {
+        if (Array.isArray(v)) {
+          if (v.every(x => typeof x !== 'object')) {
+            text += v.join('');
+          } else {
+            v.forEach(sub => {
+              if (typeof sub === 'object' && Object.keys(sub).length === 1) {
+                const [ck, cv] = Object.entries(sub)[0];
+                const c = convertDataNode(ck, cv);
+                Array.isArray(c) ? children.push(...c) : children.push(c);
+              }
+            });
+          }
+        } else if (typeof v === 'string') {
+          text += v;
+        }
+        continue;
+      }
+      if (v && typeof v === 'object') {
+        const c = convertDataNode(k, v);
+        Array.isArray(c) ? children.push(...c) : children.push(c);
+      } else {
+        attrs[k] = String(v);
+      }
+    }
+    const out = { qname: name, text };
+    if (children.length) out.children = children;
+    if (Object.keys(attrs).length) out.attributes = attrs;
+    if (out.text === undefined) out.text = '';
+    return out;
+  }
+  return { qname: name, text: String(node) };
+}
+
+/**
+ * Recursively normalise ``<data>`` elements that contain inline XML.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixDataContent(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixDataContent);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'data')) {
+      const arr = Array.isArray(value.data) ? value.data : [value.data];
+      arr.forEach(d => {
+        const content = [];
+        for (const [k, v] of Object.entries(d)) {
+          if (!['id', 'src', 'expr', 'otherAttributes', 'content'].includes(k)) {
+            const c = convertDataNode(k, v);
+            Array.isArray(c) ? content.push(...c) : content.push(c);
+            delete d[k];
+          }
+        }
+        if (content.length) d.content = content;
+      });
+      value.data = arr;
+    }
+    for (const v of Object.values(value)) {
+      fixDataContent(v);
+    }
+  }
+}
+
+/**
  * Remove namespace URIs from ``qname`` fields.
  *
  * @param {object|Array} value - Parsed object to adjust in place.
@@ -651,10 +740,10 @@ function removeEmpty(value, key) {
   }
   if (typeof value === 'string' && value.trim() === '') {
     if (
-      key &&
-      (key.endsWith('_attribute') ||
-       key.endsWith('_value') ||
-       ['expr', 'cond', 'event', 'target', 'id', 'name', 'label'].includes(key))
+       key &&
+       (key.endsWith('_attribute') ||
+        key.endsWith('_value') ||
+        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(key))
     ) {
       return '';
     }
@@ -696,6 +785,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
   fixSendContent(obj);
+  fixDataContent(obj);
   flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
@@ -738,6 +828,8 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   const errors = valid ? null : validate.errors;
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
+    fixDataContent(obj);
+    stripQnameNs(obj);
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
