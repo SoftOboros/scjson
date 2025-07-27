@@ -535,19 +535,33 @@ function fixSendContent(value) {
       arr.forEach(s => {
         if (Object.prototype.hasOwnProperty.call(s, 'content')) {
           const cArr = Array.isArray(s.content) ? s.content : [s.content];
-          s.content = cArr.map(c => {
+          const mapped = cArr.map(c => {
             if (typeof c !== 'object') {
-              return { content: [String(c)] };
+              const sVal = String(c).trim();
+              return sVal ? { content: [{ content: [sVal] }] } : null;
             }
             if (c && typeof c === 'object') {
               if (typeof c.content === 'string' || typeof c.content === 'number' || typeof c.content === 'boolean') {
                 c.content = [String(c.content)];
               }
-              fixSendContent(c);
+              if (Array.isArray(c.content)) {
+                c.content = c.content
+                  .map(i => (typeof i === 'string' ? i.trim() : i))
+                  .filter(i => i !== '' && i !== null && i !== undefined);
+                if (c.content.length === 0) delete c.content;
+              }
+              // Convert raw XML objects into canonical content structures
+              if (!c.qname && !c.expr && !c.content && Object.keys(c).length === 1) {
+                const [k, v] = Object.entries(c)[0];
+                c = { content: [convertDataNode(k, v)] };
+              } else {
+                fixSendContent(c);
+              }
               return c;
             }
-            return c;
-          });
+            return null;
+          }).filter(x => x !== null);
+          s.content = mapped;
         }
         fixSendContent(s);
       });
@@ -579,9 +593,10 @@ function fixDonedataContent(value) {
       arr.forEach(d => {
         if (Object.prototype.hasOwnProperty.call(d, 'content')) {
           const cArr = Array.isArray(d.content) ? d.content : [d.content];
-          d.content = cArr.map(c => {
+          const mapped = cArr.map(c => {
             if (typeof c !== 'object') {
-              return { content: [String(c)] };
+              const s = String(c).trim();
+              return s ? { content: [s] } : null;
             }
             if (c && typeof c === 'object') {
               if (
@@ -591,11 +606,19 @@ function fixDonedataContent(value) {
               ) {
                 c.content = [String(c.content)];
               }
-              fixDonedataContent(c);
+              // Convert raw XML objects into canonical content structures
+              if (!c.qname && !c.expr && !c.content && Object.keys(c).length === 1) {
+                const [k, v] = Object.entries(c)[0];
+                c = { content: [convertDataNode(k, v)] };
+              } else {
+                fixDonedataContent(c);
+              }
               return c;
             }
-            return c;
+            return null;
           });
+          const clean = mapped.filter(x => x !== null);
+          d.content = clean.length === 1 ? clean[0] : clean;
         }
         fixDonedataContent(d);
       });
@@ -731,6 +754,9 @@ function restoreDataNode(node) {
       }
     });
   }
+  if (!node.qname.includes(':') && !node.qname.startsWith('{') && node.qname !== 'scxml') {
+    out['@_xmlns'] = '';
+  }
   return { [node.qname]: out };
 }
 
@@ -777,17 +803,12 @@ function flattenContent(value) {
       value.content[0] &&
       typeof value.content[0] === 'object' &&
       Object.keys(value.content[0]).length === 1 &&
-      Array.isArray(value.content[0].content)
+      Array.isArray(value.content[0].content) &&
+      value.content[0].content.length === 1 &&
+      value.content[0].content[0] &&
+      typeof value.content[0].content[0] === 'object'
     ) {
-      if (value.content[0].content.every(x => typeof x !== 'object')) {
-        value.content = [value.content[0].content.join('')];
-      } else if (
-        value.content[0].content.length === 1 &&
-        value.content[0].content[0] &&
-        typeof value.content[0].content[0] === 'object'
-      ) {
-        value.content = [value.content[0].content[0]];
-      }
+      value.content = [value.content[0].content[0]];
     }
     for (const v of Object.values(value)) {
       flattenContent(v);
@@ -830,8 +851,9 @@ function removeEmpty(value, key) {
       if (
         base.endsWith('_attribute') ||
         base.endsWith('_value') ||
-        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(key))
-      {
+        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(key) ||
+        key === '@_xmlns'
+      ) {
         return '';
       }
     }
@@ -957,7 +979,7 @@ function jsonToXml(jsonStr) {
         return restoreDataNode(value);
       }
       if (
-        Object.keys(value).length === 1 &&
+        Object.keys(value).every(k => k === 'content' || k.endsWith('_value') || k === 'location' || k === 'expr' || k === 'src') &&
         Array.isArray(value.content) &&
         value.content.length === 1 &&
         value.content[0] &&
@@ -970,7 +992,14 @@ function jsonToXml(jsonStr) {
           value.content[0].datamodel_attribute !== undefined
         )
       ) {
-        return { scxml: restoreKeys(value.content[0]) };
+        const outObj = {};
+        for (const [k, v] of Object.entries(value)) {
+          if (k !== 'content') {
+            outObj[k.startsWith('@_') ? k : `@_${k}`] = v;
+          }
+        }
+        outObj.scxml = restoreKeys(value.content[0]);
+        return outObj;
       }
       const out = {};
       for (const [k, v] of Object.entries(value)) {
