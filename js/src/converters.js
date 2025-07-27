@@ -102,7 +102,7 @@ function convert(element) {
 /**
  * Keys that should never be pruned even when empty.
  */
-const ALWAYS_KEEP = new Set(['else_value', 'final']);
+const ALWAYS_KEEP = new Set(['else_value', 'else', 'final']);
 
 /**
  * Remove transition elements directly under the <scxml> root.
@@ -650,13 +650,15 @@ function removeEmpty(value, key) {
     return undefined;
   }
   if (typeof value === 'string' && value.trim() === '') {
-    if (
-      key &&
-      (key.endsWith('_attribute') ||
-       key.endsWith('_value') ||
-       ['expr', 'cond', 'event', 'target', 'id', 'name', 'label'].includes(key))
-    ) {
-      return '';
+    if (key) {
+      const base = key.startsWith('@_') ? key.slice(2) : key;
+      if (
+        base.endsWith('_attribute') ||
+        base.endsWith('_value') ||
+        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label'].includes(base)
+      ) {
+        return '';
+      }
     }
     return undefined;
   }
