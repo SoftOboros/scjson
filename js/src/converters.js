@@ -362,6 +362,70 @@ function fixEmptyElse(value) {
 }
 
 /**
+ * Normalise empty ``onentry`` and ``onexit`` elements.
+ *
+ * The XML parser represents empty tags as an empty string. The Python
+ * reference output preserves these elements as empty objects so they
+ * survive subsequent cleaning steps. This helper mirrors that behaviour.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixEmptyOnentry(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixEmptyOnentry);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (
+        (k === 'onentry' || k === 'onexit') &&
+        Array.isArray(v) &&
+        v.length === 1 &&
+        typeof v[0] === 'string' &&
+        v[0].trim() === ''
+      ) {
+        value[k] = [{}];
+        continue;
+      }
+      fixEmptyOnentry(v);
+    }
+  }
+}
+
+/**
+ * Decode HTML entities in string values.
+ *
+ * Fast XML parser leaves character references intact. This helper matches the
+ * Python implementation by converting entities like ``&#xA;`` to their literal
+ * characters.
+ *
+ * @param {object|Array|string} value - Parsed value to normalise.
+ * @returns {object|Array|string} Normalised value.
+ */
+function decodeEntities(value) {
+  if (Array.isArray(value)) {
+    return value.map(decodeEntities);
+  }
+  if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      value[k] = decodeEntities(v);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    return value
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/&#([0-9]+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+  return value;
+}
+
+/**
  * Normalise script elements after parsing.
  *
  * Ensures that each ``script`` entry is an object with a ``content`` array
@@ -880,7 +944,10 @@ function flattenContent(value) {
 function removeEmpty(value, key) {
   if (Array.isArray(value)) {
     const arr = value.map(v => removeEmpty(v, key)).filter(v => v !== undefined);
-    return arr.length > 0 ? arr : undefined;
+    if (arr.length > 0 || ALWAYS_KEEP.has(key)) {
+      return arr;
+    }
+    return undefined;
   }
   if (value && typeof value === 'object') {
     const obj = {};
@@ -966,6 +1033,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     obj = obj.scxml;
   }
   obj = normaliseKeys(obj);
+  obj = decodeEntities(obj);
   fixNestedScxml(obj);
   fixEmptyElse(obj);
   obj = collapseWhitespace(obj);
@@ -978,6 +1046,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixSendContent(obj);
   fixDonedataContent(obj);
   fixDataContent(obj);
+  fixEmptyOnentry(obj);
   fixSendContent(obj);
   flattenContent(obj);
   stripRootTransitions(obj);
@@ -1260,10 +1329,12 @@ module.exports = {
   fixSendContent,
   fixDonedataContent,
   fixOtherAttributes,
+  decodeEntities,
   restoreDataNode,
   flattenContent,
   splitTokenAttrs,
   fixEmptyElse,
+  fixEmptyOnentry,
   stripRootTransitions,
   stripQnameNs,
   reorderScxml,
