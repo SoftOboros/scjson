@@ -186,7 +186,7 @@ function splitTokenAttrs(value, parent) {
         continue;
       }
       if (k === 'transition') {
-        if (parent !== 'history') {
+        if (parent !== 'history' && parent !== 'initial') {
           const arr = Array.isArray(v) ? v : [v];
           arr.forEach(tr => {
             if (typeof tr.target === 'string') tr.target = tr.target.trim().split(/\s+/);
@@ -318,7 +318,7 @@ function ensureArrays(obj, parent) {
       continue;
     }
     if (k === 'transition' && v && typeof v === 'object') {
-      if (parent !== 'history') {
+      if (parent !== 'history' && parent !== 'initial') {
         const arr = Array.isArray(v) ? v : [v];
         arr.forEach(tr => {
           if (tr.target !== undefined && !Array.isArray(tr.target)) tr.target = [tr.target];
@@ -557,6 +557,8 @@ function fixSendContent(value) {
               } else {
                 fixSendContent(c);
               }
+              if (c.qname && c.version !== undefined) delete c.version;
+              if (c.qname && c.datamodel_attribute !== undefined) delete c.datamodel_attribute;
               return c;
             }
             return null;
@@ -613,6 +615,8 @@ function fixDonedataContent(value) {
               } else {
                 fixDonedataContent(c);
               }
+              if (c.qname && c.version !== undefined) delete c.version;
+              if (c.qname && c.datamodel_attribute !== undefined) delete c.datamodel_attribute;
               return c;
             }
             return null;
@@ -806,7 +810,8 @@ function flattenContent(value) {
       Array.isArray(value.content[0].content) &&
       value.content[0].content.length === 1 &&
       value.content[0].content[0] &&
-      typeof value.content[0].content[0] === 'object'
+      typeof value.content[0].content[0] === 'object' &&
+      !Object.prototype.hasOwnProperty.call(value.content[0].content[0], 'qname')
     ) {
       value.content = [value.content[0].content[0]];
     }
