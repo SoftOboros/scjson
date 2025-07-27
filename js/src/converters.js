@@ -745,7 +745,7 @@ function removeEmpty(value, key) {
         base.endsWith('_attribute') ||
         base.endsWith('_value') ||
         ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(key))
-      ) {
+      {
         return '';
       }
     }
