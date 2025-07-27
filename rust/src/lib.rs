@@ -54,15 +54,7 @@ use xmltree::{Element, XMLNode};
 
 /// Attributes whose whitespace should be collapsed.
 const COLLAPSE_ATTRS: &[&str] = &[
-    "expr",
-    "cond",
-    "event",
-    "target",
-    "delay",
-    "location",
-    "name",
-    "src",
-    "id",
+    "expr", "cond", "event", "target", "delay", "location", "name", "src", "id",
 ];
 
 /// Known SCXML element names used for conversion.
@@ -212,6 +204,12 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
         map.entry("delay".to_string())
             .or_insert_with(|| Value::String("0s".into()));
     }
+    if elem.name == "invoke" {
+        map.entry("type_value".to_string())
+            .or_insert_with(|| Value::String("scxml".into()));
+        map.entry("autoforward".to_string())
+            .or_insert_with(|| Value::String("false".into()));
+    }
 
     let mut text_items = Vec::new();
     for child in &elem.children {
@@ -221,6 +219,7 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     let key = match e.name.as_str() {
                         "if" => "if_value",
                         "else" => "else_value",
+                        "raise" => "raise_value",
                         name => name,
                     };
                     let child_map = element_to_map(e);
@@ -231,7 +230,11 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     } else {
                         key
                     };
-                    append_child(&mut map, target_key, Value::Object(child_map));
+                    if (elem.name == "initial" || elem.name == "history") && e.name == "transition" {
+                        map.insert(target_key.to_string(), Value::Object(child_map));
+                    } else {
+                        append_child(&mut map, target_key, Value::Object(child_map));
+                    }
                 } else {
                     let val = any_element_to_value(e);
                     append_child(&mut map, "content", val);
@@ -260,6 +263,14 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
         }
         map.entry("datamodel_attribute".to_string())
             .or_insert_with(|| Value::String("null".into()));
+    } else if elem.name == "donedata" {
+        if let Some(Value::Array(arr)) = map.get_mut("content") {
+            if arr.len() == 1 {
+                if let Some(item) = arr.pop() {
+                    map.insert("content".into(), item);
+                }
+            }
+        }
     }
     map
 }
@@ -300,6 +311,11 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
     if name == "scxml" {
         elem.attributes
             .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
+    } else if !elem_name.contains(':')
+        && !elem_name.contains('{')
+        && !SCXML_ELEMS.contains(&elem_name.as_str())
+    {
+        elem.attributes.insert("xmlns".into(), String::new());
     }
     if let Some(Value::String(text)) = map.get("text") {
         if !text.is_empty() {
@@ -318,58 +334,83 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             continue;
         }
         if k == "content" {
-            if let Value::Array(arr) = v {
-                if name == "invoke" {
-                    for item in arr {
-                        match item {
-                            Value::String(s) => {
-                                let mut c = Element::new("content");
-                                c.children.push(XMLNode::Text(s.clone()));
-                                elem.children.push(XMLNode::Element(c));
+            match v {
+                Value::Array(arr) => {
+                    if name == "invoke" {
+                        for item in arr {
+                            match item {
+                                Value::String(s) => {
+                                    let mut c = Element::new("content");
+                                    c.children.push(XMLNode::Text(s.clone()));
+                                    elem.children.push(XMLNode::Element(c));
+                                }
+                                Value::Object(obj) => {
+                                    let child_name = if obj.contains_key("state")
+                                        || obj.contains_key("final")
+                                        || obj.contains_key("version")
+                                        || obj.contains_key("datamodel_attribute")
+                                    {
+                                        "scxml"
+                                    } else {
+                                        "content"
+                                    };
+                                    let child = map_to_element(child_name, obj);
+                                    elem.children.push(XMLNode::Element(child));
+                                }
+                                _ => {}
                             }
-                            Value::Object(obj) => {
-                                let child_name = if obj.contains_key("state")
-                                    || obj.contains_key("final")
-                                    || obj.contains_key("version")
-                                    || obj.contains_key("datamodel_attribute")
-                                {
-                                    "scxml"
-                                } else {
-                                    "content"
-                                };
-                                let child = map_to_element(child_name, obj);
-                                elem.children.push(XMLNode::Element(child));
-                            }
-                            _ => {}
                         }
-                    }
-                } else if name == "script" {
-                    for item in arr {
-                        if let Value::String(s) = item {
-                            elem.children.push(XMLNode::Text(s.clone()));
-                        }
-                    }
-                } else {
-                    for item in arr {
-                        match item {
-                            Value::String(s) => elem.children.push(XMLNode::Text(s.clone())),
-                            Value::Object(obj) => {
-                                let child_name = if obj.contains_key("state")
-                                    || obj.contains_key("final")
-                                    || obj.contains_key("version")
-                                    || obj.contains_key("datamodel_attribute")
-                                {
-                                    "scxml"
-                                } else {
-                                    "content"
-                                };
-                                let child = map_to_element(child_name, obj);
-                                elem.children.push(XMLNode::Element(child));
+                    } else if name == "script" {
+                        for item in arr {
+                            if let Value::String(s) = item {
+                                elem.children.push(XMLNode::Text(s.clone()));
                             }
-                            _ => {}
+                        }
+                    } else {
+                        for item in arr {
+                            match item {
+                                Value::String(s) => elem.children.push(XMLNode::Text(s.clone())),
+                                Value::Object(obj) => {
+                                    let child_name = if obj.contains_key("state")
+                                        || obj.contains_key("final")
+                                        || obj.contains_key("version")
+                                        || obj.contains_key("datamodel_attribute")
+                                    {
+                                        "scxml"
+                                    } else {
+                                        "content"
+                                    };
+                                    let child = map_to_element(child_name, obj);
+                                    elem.children.push(XMLNode::Element(child));
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }
+                Value::Object(obj) => {
+                    let child_name = if obj.contains_key("state")
+                        || obj.contains_key("final")
+                        || obj.contains_key("version")
+                        || obj.contains_key("datamodel_attribute")
+                    {
+                        "scxml"
+                    } else {
+                        "content"
+                    };
+                    let child = map_to_element(child_name, obj);
+                    elem.children.push(XMLNode::Element(child));
+                }
+                Value::String(s) => {
+                    if name == "script" {
+                        elem.children.push(XMLNode::Text(s.clone()));
+                    } else {
+                        let mut c = Element::new("content");
+                        c.children.push(XMLNode::Text(s.clone()));
+                        elem.children.push(XMLNode::Element(c));
+                    }
+                }
+                _ => {}
             }
             continue;
         }
@@ -395,8 +436,8 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
         if k == "raise_value" {
             if let Some(val) = join_tokens(v) {
                 elem.attributes.insert("raise".into(), val);
+                continue;
             }
-            continue;
         }
         if name == "transition" && k == "target" {
             if let Some(val) = join_tokens(v) {
@@ -419,6 +460,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                 let child_name = match k.as_str() {
                     "if_value" => "if",
                     "else_value" => "else",
+                    "raise_value" => "raise",
                     other => other,
                 };
                 for item in arr {
@@ -431,6 +473,16 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                         elem.children.push(XMLNode::Text(text.clone()));
                     }
                 }
+            }
+            Value::Object(obj) => {
+                let child_name = match k.as_str() {
+                    "if_value" => "if",
+                    "else_value" => "else",
+                    "raise_value" => "raise",
+                    other => other,
+                };
+                let child = map_to_element(child_name, obj);
+                elem.children.push(XMLNode::Element(child));
             }
             Value::String(s) => {
                 if k == "version" {
