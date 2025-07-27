@@ -6,7 +6,7 @@
  * Licensed under the BSD 1-Clause License.
  */
 
-const { xmlToJson } = require('../converters.js');
+const { xmlToJson } = require('../dist/converters.js');
 
 /**
  * Basic test ensuring that script elements are normalised correctly.
