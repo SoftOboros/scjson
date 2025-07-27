@@ -896,6 +896,27 @@ function stripQnameNs(value) {
 }
 
 /**
+ * Recursively remove ``xmlns`` attributes from nested objects.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function stripXmlns(value) {
+  if (Array.isArray(value)) {
+    value.forEach(stripXmlns);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const k of Object.keys(value)) {
+      if (k === '@_xmlns' || k.startsWith('xmlns')) {
+        delete value[k];
+      } else {
+        stripXmlns(value[k]);
+      }
+    }
+  }
+}
+
+/**
  * Collapse nested ``content`` wrappers created during parsing.
  *
  * A ``content`` array may contain a single object with its own
@@ -1087,6 +1108,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   stripQnameNs(obj);
   reorderScxml(obj);
   stripNestedDataAttrs(obj);
+  stripXmlns(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
   if (omitEmpty) {
@@ -1094,6 +1116,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     fixDataContent(obj);
     stripQnameNs(obj);
     stripNestedDataAttrs(obj);
+    stripXmlns(obj);
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
@@ -1339,4 +1362,5 @@ module.exports = {
   stripQnameNs,
   reorderScxml,
   stripNestedDataAttrs,
+  stripXmlns,
 };
