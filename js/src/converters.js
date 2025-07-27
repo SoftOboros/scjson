@@ -157,7 +157,11 @@ function collapseWhitespace(value) {
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if ((k.endsWith('_attribute') || COLLAPSE_ATTRS.has(k)) && typeof v === 'string') {
-        value[k] = v.replace(/[\n\r\t]/g, ' ');
+        if (v.startsWith('\n')) {
+          value[k] = '\n' + v.slice(1).replace(/[\n\r\t]/g, ' ');
+        } else {
+          value[k] = v.replace(/[\n\r\t]/g, ' ');
+        }
       } else {
         value[k] = collapseWhitespace(v);
       }
@@ -551,12 +555,19 @@ function fixAssignDefaults(value) {
  *
  * @param {object|Array} value - Parsed object to adjust in place.
  */
+// Avoid infinite recursion on cyclic structures
+const VISITED_FLAG = Symbol('fixOtherAttributesVisited');
+
 function fixOtherAttributes(value) {
   if (Array.isArray(value)) {
     value.forEach(fixOtherAttributes);
     return;
   }
   if (value && typeof value === 'object') {
+    if (value[VISITED_FLAG]) {
+      return;
+    }
+    value[VISITED_FLAG] = true;
     if (Object.prototype.hasOwnProperty.call(value, 'assign')) {
       const arr = Array.isArray(value.assign) ? value.assign : [value.assign];
       arr.forEach(a => {
@@ -575,8 +586,10 @@ function fixOtherAttributes(value) {
       delete value.intial;
     }
     for (const v of Object.values(value)) {
+      if (v === value) continue;
       fixOtherAttributes(v);
     }
+    delete value[VISITED_FLAG];
   }
 }
 

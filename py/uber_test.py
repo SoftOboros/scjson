@@ -351,6 +351,15 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
         if not _available(cmd, env):
             print(f"Skipping {lang}: executable not available")
             continue
+        if lang == "javascript":
+            subprocess.run(
+                ["npm", "run", "build"],
+                cwd=ROOT / "js",
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
         json_dir = out_root / lang / "json"
         xml_dir = out_root / lang / "xml"
         json_dir.mkdir(parents=True, exist_ok=True)
