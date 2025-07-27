@@ -102,7 +102,7 @@ function convert(element) {
 /**
  * Keys that should never be pruned even when empty.
  */
-const ALWAYS_KEEP = new Set(['else_value', 'else', 'final']);
+const ALWAYS_KEEP = new Set(['else_value', 'else', 'final', 'onentry']);
 
 /**
  * Remove transition elements directly under the <scxml> root.
@@ -474,6 +474,44 @@ function fixAssignDefaults(value) {
     }
     for (const v of Object.values(value)) {
       fixAssignDefaults(v);
+    }
+  }
+}
+
+/**
+ * Hoist unexpected attributes into ``other_attributes``.
+ *
+ * Handles the ``id`` attribute on ``assign`` elements and the
+ * misspelled ``intial`` attribute on ``state`` elements so that
+ * generated scjson matches the reference Python output.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function fixOtherAttributes(value) {
+  if (Array.isArray(value)) {
+    value.forEach(fixOtherAttributes);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'assign')) {
+      const arr = Array.isArray(value.assign) ? value.assign : [value.assign];
+      arr.forEach(a => {
+        if (a.id !== undefined) {
+          a.other_attributes = a.other_attributes || {};
+          a.other_attributes.id = a.id;
+          delete a.id;
+        }
+        fixOtherAttributes(a);
+      });
+      value.assign = arr;
+    }
+    if (value.intial !== undefined) {
+      value.other_attributes = value.other_attributes || {};
+      value.other_attributes.intial = value.intial;
+      delete value.intial;
+    }
+    for (const v of Object.values(value)) {
+      fixOtherAttributes(v);
     }
   }
 }
@@ -933,6 +971,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   obj = collapseWhitespace(obj);
   splitTokenAttrs(obj);
   ensureArrays(obj);
+  fixOtherAttributes(obj);
   fixScripts(obj);
   fixAssignDefaults(obj);
   fixSendDefaults(obj);
@@ -1056,11 +1095,19 @@ function jsonToXml(jsonStr) {
         } else if (k === 'else_value') {
           nk = 'else';
         }
-      for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
-        if (prop === nk) {
-          nk = `@_${attr}`;
-          break;
+        if (nk === 'other_attributes') {
+          if (v && typeof v === 'object') {
+            for (const [ak, av] of Object.entries(v)) {
+              out[`@_${ak}`] = av;
+            }
+          }
+          continue;
         }
+        for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
+          if (prop === nk) {
+            nk = `@_${attr}`;
+            break;
+          }
       }
         if (nk === 'script') {
           if (Array.isArray(v)) {
@@ -1080,6 +1127,34 @@ function jsonToXml(jsonStr) {
           }
         } else if (nk === 'content') {
           if (Array.isArray(v)) {
+            if (v.every(item => item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'qname'))) {
+              v.forEach(item => {
+                const r = restoreDataNode(item);
+                const [ck, cv] = Object.entries(r)[0];
+                if (out[ck]) {
+                  if (Array.isArray(out[ck])) {
+                    out[ck].push(cv);
+                  } else {
+                    out[ck] = [out[ck], cv];
+                  }
+                } else {
+                  out[ck] = cv;
+                }
+              });
+              continue;
+            }
+            if (
+              value.location !== undefined &&
+              v.length === 1 &&
+              v[0] &&
+              typeof v[0] === 'object' &&
+              (v[0].state || v[0].parallel || v[0].final || v[0].datamodel ||
+                v[0].datamodel_attribute !== undefined)
+            ) {
+              const cv = restoreKeys(v[0]);
+              out.scxml = cv;
+              continue;
+            }
             out[nk] = v.map(item => {
               if (
                 item &&
@@ -1184,6 +1259,7 @@ module.exports = {
   fixSendDefaults,
   fixSendContent,
   fixDonedataContent,
+  fixOtherAttributes,
   restoreDataNode,
   flattenContent,
   splitTokenAttrs,
