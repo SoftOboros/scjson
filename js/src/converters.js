@@ -530,6 +530,14 @@ function fixSendContent(value) {
     return;
   }
   if (value && typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'qname')) {
+      if (Object.prototype.hasOwnProperty.call(value, 'version')) {
+        delete value.version;
+      }
+      if (Object.prototype.hasOwnProperty.call(value, 'datamodel_attribute')) {
+        delete value.datamodel_attribute;
+      }
+    }
     if (Object.prototype.hasOwnProperty.call(value, 'send')) {
       const arr = Array.isArray(value.send) ? value.send : [value.send];
       arr.forEach(s => {
@@ -880,6 +888,35 @@ const validate = ajv.compile(schema);
  * Removes the XML namespace attribute and injects default values
  * expected by the schema.
  */
+/**
+ * Recursively strip default attributes from nested data nodes.
+ *
+ * Any object with a ``qname`` property other than ``scxml`` may have
+ * ``version`` or ``datamodel_attribute`` inserted during validation.
+ * This helper removes those keys so that nested structures match the
+ * canonical Python output.
+ *
+ * @param {object|Array} value - Parsed object to adjust in place.
+ */
+function stripNestedDataAttrs(value) {
+  if (Array.isArray(value)) {
+    value.forEach(stripNestedDataAttrs);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    if (
+      Object.prototype.hasOwnProperty.call(value, 'qname') &&
+      value.qname !== 'scxml'
+    ) {
+      delete value.version;
+      delete value.datamodel_attribute;
+    }
+    for (const v of Object.values(value)) {
+      stripNestedDataAttrs(v);
+    }
+  }
+}
+
 function xmlToJson(xmlStr, omitEmpty = true) {
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -902,6 +939,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   fixSendContent(obj);
   fixDonedataContent(obj);
   fixDataContent(obj);
+  fixSendContent(obj);
   flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
@@ -940,12 +978,14 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   }
   stripQnameNs(obj);
   reorderScxml(obj);
+  stripNestedDataAttrs(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
   if (omitEmpty) {
     obj = removeEmpty(obj) || {};
     fixDataContent(obj);
     stripQnameNs(obj);
+    stripNestedDataAttrs(obj);
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
@@ -1151,4 +1191,5 @@ module.exports = {
   stripRootTransitions,
   stripQnameNs,
   reorderScxml,
+  stripNestedDataAttrs,
 };
