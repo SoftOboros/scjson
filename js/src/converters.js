@@ -760,6 +760,7 @@ function jsonToXml(jsonStr) {
     ignoreAttributes: false,
     format: true,
     suppressEmptyNode: true,
+    suppressBooleanAttributes: false,
   });
   let obj = JSON.parse(jsonStr);
   flattenContent(obj);
