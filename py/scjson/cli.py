@@ -231,6 +231,22 @@ def typescript(output: Path | None):
     Gen.render_to_file(f"types/{file_name}", "scjson_props.ts.jinja2", locals())
 
 
+@main.command(help="Create Rust type files for scjson")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
+def rust(output: Path | None):
+    """Create Rust structs and enums for scjson."""
+    print(f"Convert Scjson type for rust - Path: {output}")
+    Gen = JinjaGenPydantic(output=output, lang="rust")
+    base_dir = os.path.abspath(output)
+    interfaces = Gen.interfaces
+    schemas = Gen.schemas
+    all_arrays = Gen.all_arrays
+    os.makedirs(base_dir, exist_ok=True)
+    file_name = "scjson_props.rs"
+    file_description = "Properties file for scjson types"
+    Gen.render_to_file(file_name, "scjson_props.rs.jinja2", locals())
+
+
 @main.command(help="Export scjson.schema.json")
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
 def schema(output: Path | None):
