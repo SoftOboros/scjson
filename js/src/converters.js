@@ -91,9 +91,9 @@ function convert(element) {
   }
 
   // Handle text content if present
-  const text = element.textContent?.trim();
-  if (text && element.children.length === 0) {
-    result.content = [text];
+  const rawText = element.textContent;
+  if (rawText && element.children.length === 0 && rawText.trim() !== '') {
+    result.content = [rawText];
   }
 
   return result;
@@ -660,8 +660,9 @@ function fixSendContent(value) {
           const cArr = Array.isArray(s.content) ? s.content : [s.content];
           const mapped = cArr.map(c => {
             if (typeof c !== 'object') {
-              const sVal = String(c).trim();
-              return sVal ? { content: [{ content: [sVal] }] } : null;
+              const raw = String(c);
+              if (raw.trim() === '') return null;
+              return { content: [{ content: [raw] }] };
             }
             if (c && typeof c === 'object') {
               if (typeof c.content === 'string' || typeof c.content === 'number' || typeof c.content === 'boolean') {
@@ -669,8 +670,8 @@ function fixSendContent(value) {
               }
               if (Array.isArray(c.content)) {
                 c.content = c.content
-                  .map(i => (typeof i === 'string' ? i.trim() : i))
-                  .filter(i => i !== '' && i !== null && i !== undefined);
+                  .map(i => (typeof i === 'string' ? String(i) : i))
+                  .filter(i => !(typeof i === 'string' && i.trim() === '') && i !== null && i !== undefined);
                 if (c.content.length === 0) delete c.content;
               }
               // Convert raw XML objects into canonical content structures
@@ -720,8 +721,9 @@ function fixDonedataContent(value) {
           const cArr = Array.isArray(d.content) ? d.content : [d.content];
           const mapped = cArr.map(c => {
             if (typeof c !== 'object') {
-              const s = String(c).trim();
-              return s ? { content: [s] } : null;
+              const raw = String(c);
+              if (raw.trim() === '') return null;
+              return { content: [raw] };
             }
             if (c && typeof c === 'object') {
               if (
