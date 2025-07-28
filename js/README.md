@@ -2,6 +2,8 @@
 
 This directory contains the JavaScript implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
 
+For details on how SCXML elements are inferred during conversion see [INFERENCE.md](../INFERENCE.md).
+
 The package includes typescript types for the functions and default functions to return each.
 
 ## Installation

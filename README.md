@@ -28,8 +28,9 @@ Why JSON?
 
 ## Schema
 
-The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).  
+The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).
 It is generated from Pydantic models and used to validate all `*.scjson` documents.
+Detailed inference rules used by the converters are described in [INFERENCE.md](./INFERENCE.md).
 
 ---
 
