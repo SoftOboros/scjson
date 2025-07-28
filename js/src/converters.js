@@ -1161,6 +1161,15 @@ function jsonToXml(jsonStr) {
   obj = removeEmpty(obj) || {};
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
+  // Remove defaults injected by validation that would misidentify
+  // arbitrary XML content blocks as nested SCXML documents. Ajv
+  // populates ``version`` and ``datamodel_attribute`` for objects
+  // matching the ``Scxml`` schema. When the original JSON only
+  // contains a ``qname`` field these defaults lead to erroneous
+  // ``<scxml>`` wrappers being generated on output. Stripping the
+  // fields prior to conversion preserves parity with the Python
+  // implementation.
+  stripNestedDataAttrs(obj);
   function restoreKeys(value) {
     if (Array.isArray(value)) {
       return value.map(restoreKeys);
