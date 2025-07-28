@@ -1,0 +1,57 @@
+{#
+    scjson_props.rs.jinja2 : Template for creating rust structs and enums.
+#}
+{% extends "base.rs.jinja2" %}
+{% block file_header %}
+// {{file_name}} : {{file_description}}
+//
+// Part of the scjson project.
+// Developed by Softoboros Technology Inc.
+// Licensed under the BSD 1-Clause License.
+{% endblock %}
+{% block exports %}
+use serde::{Serialize, Deserialize};
+use serde_json::{Map, Value};
+
+{# Enumerations first #}
+{% for if_name, schem in interfaces.items() %}
+{% if type(schem) != dict %}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum {{ to_pascal(if_name) }}Props {
+{% for enum_name in schem.__members__.keys() %}
+    #[serde(rename = "{{ enum_name.lower() }}")]
+    {{ to_pascal(enum_name) }},
+{% endfor %}
+}
+
+pub fn default_{{ if_name.lower() }}() -> {{ to_pascal(if_name) }}Props {
+    {{ to_pascal(if_name) }}Props::{{ to_pascal(first_enum(schem)) }}
+}
+
+{% endif %}
+{% endfor %}
+
+{# Structs second #}
+{% for if_name, schem in interfaces.items() %}
+{% if type(schem) == dict %}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct {{ if_name }}Props {
+{% for field_name, field in schem["properties"].items() %}
+    pub {{ rust_ident(to_snake(field_name)) }}: {{ get_field_type(field) }},
+{% endfor %}
+}
+
+pub fn default_{{ if_name.lower() }}() -> {{ if_name }}Props {
+    {{ if_name }}Props {
+{% for field_name, field in schem["properties"].items() %}
+        {{ rust_ident(to_snake(field_name)) }}: {{ get_field_default(field, schem["$defs"]) }},
+{% endfor %}
+    }
+}
+
+{% if if_name in all_arrays %}
+pub type {{ if_name }}Array = Vec<{{ if_name }}Props>;
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endblock %}

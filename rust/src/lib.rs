@@ -15,6 +15,8 @@ use thiserror::Error;
 use xmltree::Error as XmlWriteError;
 use xmltree::{Element, XMLNode};
 
+pub mod scjson_props;
+
 /// Attribute name mappings used during conversion.
 // const ATTRIBUTE_MAP: &[(&str, &str)] = &[
 //     ("datamodel", "datamodel_attribute"),

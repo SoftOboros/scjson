@@ -18,18 +18,22 @@ from .CaseStyle import (
 
 class JinjaGenPydantic(object):
     """A class to render pydntic models using jinja2 templates."""
-    def __init__(   self,
-                    template_path: str = "",
-                    input: str="Scxml",
-                    output: str = "scjson",
-                    module: str = "scjson.pydantic"
-                ):
+
+    def __init__(
+        self,
+        template_path: str = "",
+        input: str = "Scxml",
+        output: str = "scjson",
+        module: str = "scjson.pydantic",
+        lang: str = "typescript",
+    ):
         """Initilize with optional config."""
         my_path = os.path.join(Path(__file__).parent, "templates")
-        self.template_path = template_path or my_path 
+        self.template_path = template_path or my_path
         self.output = output
         self.input = input
         self.module_name = module
+        self.lang = lang
         self.interfaces = {}
         self.schema = {}
         self.schemas = {}
@@ -49,12 +53,23 @@ class JinjaGenPydantic(object):
         self.env.globals.update(type=type)
         self.env.globals.update(dir=dir)
         self.env.globals.update(str=str)
-        self.env.globals.update(    get_field_default=JinjaGenPydantic._get_default_value,
-                                    get_field_type=JinjaGenPydantic._get_field_type,
-                                    get_schema_types=JinjaGenPydantic._get_schema_types,
-                                    list_join=JinjaGenPydantic._list_join,
-                                    is_field_enum=JinjaGenPydantic._is_field_enum,
-                                )
+        if self.lang == "rust":
+            self.env.globals.update(
+                get_field_default=JinjaGenPydantic._get_rust_default_value,
+                get_field_type=JinjaGenPydantic._get_rust_field_type,
+            )
+        else:
+            self.env.globals.update(
+                get_field_default=JinjaGenPydantic._get_default_value,
+                get_field_type=JinjaGenPydantic._get_field_type,
+            )
+        self.env.globals.update(
+            get_schema_types=JinjaGenPydantic._get_schema_types,
+            list_join=JinjaGenPydantic._list_join,
+            is_field_enum=JinjaGenPydantic._is_field_enum,
+            first_enum=JinjaGenPydantic._first_enum_member,
+            rust_ident=JinjaGenPydantic._rust_ident,
+        )
         self.env.globals.update(    to_camel=to_camel,
                                     to_pascal=to_pascal,
                                     to_snake=to_snake,
@@ -167,6 +182,97 @@ class JinjaGenPydantic(object):
             ret_val = ' | '.join(types)
         # None -> null, integer -> number, else ->
         return ret_val
+
+    def _get_rust_default_value(prop: dict, defs: dict | None = None) -> str:
+        """Return a Rust expression for the property's default value."""
+
+        def get_fallback(prop: dict) -> str:
+            type_name = prop.get("type")
+            mapping = {
+                "string": 'String::new()',
+                "integer": "0",
+                "number": "0.0",
+                "boolean": "false",
+                "array": "Vec::new()",
+                "object": "Map::new()",
+            }
+            return mapping.get(type_name, "Value::Null")
+
+        ret_val = "Value::Null"
+        if "type" in prop:
+            if "default" in prop:
+                if prop["type"] == "string":
+                    ret_val = f'"{prop["default"]}".to_string()'
+                elif prop["type"] == "boolean":
+                    ret_val = str(prop["default"]).lower()
+                else:
+                    ret_val = str(prop["default"])
+            else:
+                ret_val = get_fallback(prop)
+        elif "$ref" in prop:
+            ref_name = prop["$ref"].split("/")[-1]
+            if "default" in prop:
+                ret_val = f'{ref_name}Props::{to_pascal(prop["default"])}'
+            elif defs and ref_name in defs and "enum" in defs[ref_name]:
+                first = defs[ref_name]["enum"][0]
+                ret_val = f'{ref_name}Props::{to_pascal(first)}'
+            else:
+                ret_val = f'default_{ref_name.lower()}()'
+        if "anyOf" in prop:
+            has_null = any(opt.get("type") == "null" for opt in prop["anyOf"])
+            ret_val = "None" if has_null else "Value::Null"
+        return ret_val
+
+    def _get_rust_field_type(prop: dict | str) -> str:
+        """Return the Rust type for a schema property."""
+
+        def xlate(prop: dict | str) -> str:
+            if "type" in prop:
+                if prop["type"] == "array":
+                    return f"Vec<{xlate(prop['items'])}>"
+                else:
+                    dtype = prop["type"]
+            elif "$ref" in prop:
+                dtype = prop["$ref"].split("/")[-1] + "Props"
+            else:
+                dtype = str(prop)
+            return (
+                "String" if dtype == "string" else
+                "i64" if dtype == "integer" else
+                "f64" if dtype == "number" else
+                "bool" if dtype == "boolean" else
+                "Vec<Value>" if dtype == "array" else
+                "Map<String, Value>" if dtype in ["object", "{}"] else
+                dtype
+            )
+
+        ret_val = "None"
+        if "type" in prop or "$ref" in prop:
+            ret_val = xlate(prop)
+        elif "anyOf" in prop:
+            types = [xlate(t) for t in prop["anyOf"] if t.get("type") != "null"]
+            if len(types) == 1:
+                ret_val = f"Option<{types[0]}>"
+            else:
+                ret_val = "Value"
+        return ret_val
+
+    def _first_enum_member(enum_cls: Enum) -> str:
+        """Return the first member name of an Enum class."""
+        return next(iter(enum_cls.__members__.keys()))
+
+    def _rust_ident(name: str) -> str:
+        """Escape Rust keywords for identifiers."""
+        keywords = {
+            "as", "break", "const", "continue", "crate", "else", "enum", "extern",
+            "false", "fn", "for", "if", "impl", "in", "let", "loop", "match",
+            "mod", "move", "mut", "pub", "ref", "return", "self", "Self",
+            "static", "struct", "super", "trait", "true", "type", "unsafe",
+            "use", "where", "while", "async", "await", "dyn", "abstract",
+            "become", "box", "do", "final", "macro", "override", "priv",
+            "typeof", "unsized", "virtual", "yield", "try", "union",
+        }
+        return f"r#{name}" if name in keywords else name
 
     def _get_schema_types(schema: dict, name: str = "") -> List[str]:
         """Template helper to return the reference type from teh schema."""
