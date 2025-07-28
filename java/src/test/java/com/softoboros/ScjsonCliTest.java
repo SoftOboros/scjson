@@ -134,7 +134,7 @@ public class ScjsonCliTest {
      */
     @Test
     void testCommonsScxmlAvailable() {
-        org.apache.commons.scxml.model.SCXML machine = new org.apache.commons.scxml.model.SCXML();
+        org.apache.commons.scxml2.model.SCXML machine = new org.apache.commons.scxml2.model.SCXML();
         assertNotNull(machine);
     }
 }
