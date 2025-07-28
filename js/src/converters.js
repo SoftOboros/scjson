@@ -585,8 +585,8 @@ function fixOtherAttributes(value) {
       value.other_attributes.intial = value.intial;
       delete value.intial;
     }
-    for (const v of Object.values(value)) {
-      if (v === value) continue;
+    for (const [k, v] of Object.entries(value)) {
+      if (v === value || k === 'other_attributes') continue;
       fixOtherAttributes(v);
     }
     delete value[VISITED_FLAG];
