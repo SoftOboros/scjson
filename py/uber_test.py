@@ -392,11 +392,11 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     print(f"{lang} JSON parse error {rel}: {exc}")
                     errors += 1
                     continue
-                if data != canonical[src]:
+                diff = _diff_report(canonical[src], data)
+                lines = _diff_line_count(diff)
+                if lines:
                     print(f"{lang} JSON mismatch: {rel}")
-                    diff = _diff_report(canonical[src], data)
                     print(diff)
-                    lines = _diff_line_count(diff)
                     mismatch_items += lines
                     scjson_mismatch_items += lines
                     diff_lines = _verify_with_python(jpath, canonical[src], handler)
@@ -404,6 +404,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     scjson_mismatch_items += diff_lines
                     scjson_errors += 1
                     errors += 1
+                elif data != canonical[src]:  # pragma: no cover - debug aid
+                    print(f"{lang} JSON normalization resolved mismatch: {rel}")
             if scjson_errors:
                 print(
                     f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items."
@@ -429,15 +431,18 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     print(f"{lang} XML parse error {rel}: {exc}")
                     errors += 1
                     continue
-                if parsed != canonical[src]:
+                diff = _diff_report(canonical[src], parsed)
+                lines = _diff_line_count(diff)
+                if lines:
                     print(f"{lang} XML mismatch: {rel}")
-                    diff = _diff_report(canonical[src], parsed)
                     print(diff)
-                    mismatch_items += _diff_line_count(diff)
+                    mismatch_items += lines
                     jpath = json_dir / rel.with_suffix(".scjson")
                     if jpath.exists():
                         mismatch_items += _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
+                elif parsed != canonical[src]:  # pragma: no cover - debug aid
+                    print(f"{lang} XML normalization resolved mismatch: {rel}")
             if errors:
                 print(
                     f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items."
