@@ -443,7 +443,12 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items."
                 )
         except subprocess.CalledProcessError as exc:  # pragma: no cover - CLI failures
-            print(f"Skipping {lang}: {exc.stderr.decode().strip()}")
+            err = exc.stderr
+            if isinstance(err, (bytes, bytearray)):
+                err = err.decode().strip()
+            else:
+                err = str(err).strip()
+            print(f"Skipping {lang}: {err}")
         except Exception as exc:  # pragma: no cover - external tools may fail
             print(f"Skipping {lang}: {exc}")
 
