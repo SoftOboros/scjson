@@ -312,7 +312,7 @@ def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Pa
         try:
             result[f] = json.loads(handler.xml_to_json(data))
         except Exception as exc:  # pragma: no cover - best effort for bad files
-            print(f"Skipping {f}: {exc}")
+            pass
     return result
 
 
@@ -404,8 +404,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     scjson_mismatch_items += diff_lines
                     scjson_errors += 1
                     errors += 1
-                elif data != canonical[src]:  # pragma: no cover - debug aid
-                    print(f"{lang} JSON normalization resolved mismatch: {rel}")
+                #elif data != canonical[src]:  # pragma: no cover - debug aid
+                #    print(f"{lang} JSON normalization resolved mismatch: {rel}")
             if scjson_errors:
                 print(
                     f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items."
@@ -441,8 +441,8 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
                     if jpath.exists():
                         mismatch_items += _verify_with_python(jpath, canonical[src], handler)
                     errors += 1
-                elif parsed != canonical[src]:  # pragma: no cover - debug aid
-                    print(f"{lang} XML normalization resolved mismatch: {rel}")
+                #elif parsed != canonical[src]:  # pragma: no cover - debug aid
+                #    print(f"{lang} XML normalization resolved mismatch: {rel}")
             if errors:
                 print(
                     f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items."

@@ -2,6 +2,9 @@
 
 This directory contains the Rust implementation of **scjson**. It offers a command line tool and supporting library to convert between `.scxml` and `.scjson` files and to validate documents.
 
+For details on how SCXML elements are inferred during conversion see [INFERENCE.md](https://github.com/SoftOboros/scjson/blob/main/INFERENCE.md).
+
+
 ## Installation
 
 ```bash

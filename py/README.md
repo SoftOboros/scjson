@@ -4,6 +4,9 @@ This directory contains the Python implementation of **scjson**, a format for re
 
 The package includes pydantic and dataclasses types for the associated objects / enums in both standard and strict forms.
 
+For details on how SCXML elements are inferred during conversion see [INFERENCE.md](https://github.com/SoftOboros/scjson/blob/main/INFERENCE.md).  In python, inference for conversion is handled by the 
+dataclasses models. See below.
+
 ## Installation
 
 ```bash
