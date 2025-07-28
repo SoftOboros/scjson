@@ -1005,7 +1005,7 @@ function removeEmpty(value, key) {
       if (
         base.endsWith('_attribute') ||
         base.endsWith('_value') ||
-        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(key) ||
+        ['expr', 'cond', 'event', 'target', 'id', 'name', 'label', 'text'].includes(base) ||
         key === '@_xmlns'
       ) {
         return '';
