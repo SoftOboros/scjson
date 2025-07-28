@@ -60,16 +60,19 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 | Language  | Status | Path | Notes |
 |-----------|--------|------|-------|
-| Python    | ✅ Stable | [`/py`](./py) | Reference CLI |
-| JavaScript| ✅ Beta | [`/js`](./js) | Node CLI |
-| Ruby      | ✅ Beta | [`/ruby`](./ruby) | Gem CLI |
-| Go        | ✅ Beta | [`/go`](./go) | Go binary |
-| Rust      | ✅ Beta | [`/rust`](./rust) | Cargo crate |
-| Swift     | ✅ Beta | [`/swift`](./swift) | Swift package |
-| Java      | ✅ Beta | [`/java`](./java) | Maven CLI |
-| Lua       | ✅ Basic | [`/lua`](./lua) | Lua scripts |
-| C#        | ✅ Beta | [`/csharp`](./csharp) | .NET CLI |
----## Examples & Test Suite
+| Python    | ✅ Stable | [py](./py/README.md) | Reference CLI |
+| JavaScript| ✅ Beta | [js](./js/README.md) | Node CLI |
+| Ruby      | ✅ Beta | [ruby](./ruby/README.md) | Gem CLI |
+| Go        | ✅ Beta | [go](./go/README.md) | Go binary |
+| Rust      | ✅ Beta | [rust](./rust/README.md) | Cargo crate |
+| Swift     | ✅ Beta | [swift](./swift/README.md) | Swift package |
+| Java      | ✅ Beta | [java](./java/README.md) | Maven CLI |
+| Lua       | ✅ Basic | [lua](./lua/README.md) | Lua scripts |
+| C#        | ✅ Beta | [csharp](./csharp/README.md) | .NET CLI |
+
+---
+
+## Examples & Test Suite
 
 This repo includes a curated set of canonical SCXML examples and their equivalent `scjson` forms in [`/examples`](./examples). These are used for:
 
@@ -202,5 +205,7 @@ luarocks install busted --deps-mode=one
 busted tests
 ```
 
-## License
-All source code in this directory is released under the BSD\u00A01-Clause license. See `LICENSE` and `LEGAL.md` for details.
+## Legal and Documentation
+
+For licensing and legal details see [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md).
+Additional documentation is available in [AGENTS.md](./AGENTS.md) and [TESTING.md](./TESTING.md).

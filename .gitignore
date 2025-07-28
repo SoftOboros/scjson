@@ -22,5 +22,5 @@ swift/.build/
 csharp/**/bin/
 csharp/**/obj/
 csharp/tmp*/
-
 py/uber_out/
+java/lib/*.jar
