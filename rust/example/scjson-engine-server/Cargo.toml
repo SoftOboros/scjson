@@ -1,0 +1,9 @@
+[package]
+name = "scjson-engine-server"
+version = "0.1.0"
+edition = "2024"
+authors = ["Softoboros Technology Inc."]
+license = "BSD-1-Clause"
+
+[dependencies]
+serde_json = "1.0"

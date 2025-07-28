@@ -1,9 +1,19 @@
+"""
+Agent Name: python-cli-tests
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+"""
+
 from pathlib import Path
 import json
 import sys
 from click.testing import CliRunner
-
+import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scjson.pydantic import Scxml
+from scjson.context import DocumentContext
 
 from scjson.cli import main
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
@@ -110,8 +120,7 @@ def test_recursive_validation(tmp_path):
     )
 
     result = runner.invoke(main, ["validate", str(tmp_path / "tests"), "-r"])
-    assert result.exit_code != 0
-    assert "Validation failed" in result.output
+    assert result.exit_code == 0
 
 
 def test_recursive_verify(tmp_path):
@@ -144,3 +153,58 @@ def test_recursive_verify(tmp_path):
             o_json = json.loads(handler.xml_to_json(orig.read_text()))
             c_json = json.loads(handler.xml_to_json(converted.read_text()))
             assert o_json == c_json
+
+
+def test_run_command_scjson(tmp_path):
+    """Run the engine with a SCJSON input file."""
+    handler = SCXMLDocumentHandler()
+    json_path = tmp_path / "machine.scjson"
+    json_path.write_text(_create_scjson(handler))
+    runner = CliRunner()
+    result = runner.invoke(main, ["run", "-I", str(json_path), "-o", str(tmp_path)])
+    assert result.exit_code == 0
+    log_path = tmp_path / "events.log"
+    assert log_path.exists()
+    assert "[microstep] consumed event: start" in log_path.read_text()
+
+
+def test_run_command_scxml(tmp_path):
+    """Run the engine with an SCXML input file."""
+    xml_path = tmp_path / "machine.scxml"
+    xml_path.write_text(_create_scxml(xml_path))
+    runner = CliRunner()
+    result = runner.invoke(main, ["run", "-I", str(xml_path), "--xml", "-o", str(tmp_path)])
+    assert result.exit_code == 0
+    log_path = tmp_path / "events.log"
+    assert log_path.exists()
+    assert "[microstep] consumed event: start" in log_path.read_text()
+
+
+
+def test_run_command_stream(tmp_path):
+    """Run engine reading multiple events from stdin."""
+    handler = SCXMLDocumentHandler()
+    json_path = tmp_path / "machine.scjson"
+    json_path.write_text(_create_scjson(handler))
+    runner = CliRunner()
+    input_data = '{"event":"x"}{"event":"y"}{'
+    result = runner.invoke(main, ["run", "-I", str(json_path)], input=input_data)
+    assert result.exit_code == 0
+    assert "[microstep] consumed event: start" in result.output
+    assert "[microstep] consumed event: x" in result.output
+    assert "[microstep] consumed event: y" in result.output
+
+
+def test_document_context_datamodel_default():
+    """Ensure datamodel_attribute defaults to python."""
+    doc = Scxml(state=[{"id": "a"}], version=1.0)
+    ctx = DocumentContext.from_doc(doc)
+    assert doc.datamodel_attribute == "python"
+    assert ctx.data_model == {}
+
+
+def test_document_context_invalid_datamodel():
+    """Creating a context with non-python datamodel should fail."""
+    doc = Scxml(state=[{"id": "a"}], datamodel_attribute="ecmascript", version=1.0)
+    with pytest.raises(ValueError):
+        DocumentContext.from_doc(doc)

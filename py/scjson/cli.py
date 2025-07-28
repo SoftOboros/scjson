@@ -1,7 +1,20 @@
+"""
+Agent Name: cli-interface
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+"""
+
 import os
+import sys
+import logging
+from typing import TextIO
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
+from .context import DocumentContext
+from .json_stream import JsonStreamDecoder
 from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError
 from json import dumps
@@ -95,9 +108,22 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
-def json(path: Path, output: Path | None, recursive: bool, verify: bool, keep_empty: bool):
+@click.option(
+    "--fail-unknown/--skip-unknown",
+    "fail_unknown",
+    default=True,
+    help="Fail on unknown XML elements when converting",
+)
+def json(
+    path: Path,
+    output: Path | None,
+    recursive: bool,
+    verify: bool,
+    keep_empty: bool,
+    fail_unknown: bool,
+):
     """Convert a single SCXML file or all SCXML files in a directory."""
-    handler = SCXMLDocumentHandler(omit_empty=not keep_empty)
+    handler = SCXMLDocumentHandler(omit_empty=not keep_empty, fail_on_unknown_properties=fail_unknown)
 
     def convert_file(src: Path, dest: Path | None):
         try:
@@ -214,8 +240,61 @@ def schema(output: Path | None):
     outname = os.path.join(base_dir, "scjson.schema.json")
     os.makedirs(base_dir, exist_ok=True)
     with open(outname, "w") as schemafile:
-        schemafile.write(dumps(Gen.schemas["Scxml"], indent=4)) 
+        schemafile.write(dumps(Gen.schemas["Scxml"], indent=4))
     print(f'Generated: {outname}')
+
+
+@main.command(help="Run a document using the demo engine.")
+@click.option(
+    "--input",
+    "-I",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="SCJSON/SCXML document",
+)
+@click.option(
+    "--output",
+    "-o",
+    "workdir",
+    type=click.Path(path_type=Path),
+    help="Working directory",
+)
+@click.option("--xml", "is_xml", is_flag=True, default=False, help="Input is SCXML")
+def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
+    """Execute a document with the demo engine.
+
+    Args:
+        input_path: Path to the SCJSON or SCXML document.
+        workdir: Directory used for runtime output and event logs.
+        is_xml: Treat ``input_path`` as SCXML when ``True``.
+
+    Returns:
+        ``None``
+    """
+
+    sink: TextIO = sys.stdout
+    if workdir:
+        workdir.mkdir(parents=True, exist_ok=True)
+        sink_path = workdir / "events.log"
+        sink = open(sink_path, "w", encoding="utf-8")
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sink, force=True)
+    ctx = (
+        DocumentContext.from_xml_file(input_path)
+        if is_xml
+        else DocumentContext.from_json_file(input_path)
+    )
+    ctx.enqueue("start")
+    ctx.run()
+    for msg in JsonStreamDecoder(sys.stdin):
+        evt = msg.get("event") or msg.get("name")
+        data = msg.get("data")
+        if evt:
+            ctx.enqueue(evt, data)
+            ctx.run()
+    if sink is not sys.stdout:
+        sink.close()
 
 if __name__ == "__main__":
     main()

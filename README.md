@@ -28,8 +28,9 @@ Why JSON?
 
 ## Schema
 
-The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).  
+The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).
 It is generated from Pydantic models and used to validate all `*.scjson` documents.
+Detailed inference rules used by the converters are described in [INFERENCE.md](./INFERENCE.md).
 
 ---
 
@@ -122,46 +123,11 @@ scjson convert --from scxml path/to/file.scxml --to scjson path/to/file.scjson
 scjson validate path/to/file.scjson
 ```
 
-### Java Module
-
-The Java implementation uses Maven. If your environment requires an HTTP/HTTPS
-proxy, create `~/.m2/settings.xml` with proxy settings before building:
-
-```xml
-<settings>
-  <proxies>
-    <proxy>
-      <id>internal-proxy</id>
-      <active>true</active>
-      <protocol>http</protocol>
-      <host>proxy</host>
-      <port>8080</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>s
-    </proxy>
-    <proxy>
-      <id>internal-proxy-https</id>
-      <active>true</active>
-      <protocol>https</protocol>
-      <host>proxy</host>
-      <port>8080</port>
-      <nonProxyHosts>localhost|127.0.0.1</nonProxyHosts>
-    </proxy>
-  </proxies>
-</settings>
-```
-
-Build the module with:
-
-```bash
-cd java && mvn clean install -DskipTests -B && cd ..
-```
-
 ### Package Repostory Availability
 pypi: [https://pypi.org/project/scjson/]
 ```bash
 pip install scjson
 ```
-
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
@@ -178,8 +144,10 @@ dockerhub: [https://hub.docker.com/r/iraa/scjson]
 docker pull iraa/scjson:latest
 ```
 
-
 For a full example of installing toolchains and dependencies across languages see [`codex/startup.sh`](codex/startup.sh).
+
+
+## Quick Installs.
 
 ### Python Module
 ```bash

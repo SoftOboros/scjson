@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-python -m scjson typescript -o ../js
+#
+#  Update typescrupt and schema from pydantic models.
+#
+python -m scjson typescript -o ../js/src
 python -m scjson schema -o ..
 python -m scjson schema -o ../js
 python -m scjson schema -o ../java/src/main/resources

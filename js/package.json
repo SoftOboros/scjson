@@ -1,74 +1,46 @@
 {
   "name": "scjson",
-  "version": "0.2.1",
-  "description": "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.",
-  "keywords": [
-    "scjson",
-    "scxml",
-    "state-machine",
-    "conversion",
-    "json",
-    "cli",
-    "xml"
-  ],
-  "homepage": "https://github.com/SoftOboros/scjson/tree/main/js",
-  "bugs": {
-    "url": "https://github.com/SoftOboros/scjson/issues"
-  },
-  "license": "BSD-1-Clause",
+  "version": "0.3.0",
+  "description": "A JSON-based serialization of SCXML (State Chart XML).",
   "author": "Softoboros Technology Inc. <ira@softoboros.com>",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SoftOboros/scjson.git"
-  },
-  "bin": {
-    "scjson": "bin/scjson.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "main": "index.js",
-  "type": "commonjs",
+  "license": "BSD-1-Clause",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./index.js",
-    "./props": "./scjsonProps.ts",
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./props": {
+      "require": "./dist/scjsonProps.js",
+      "import": "./dist/scjsonProps.js",
+      "types": "./dist/scjsonProps.d.ts"
+    },
+    "./converters": {
+      "require": "./dist/converters.js",
+      "import": "./dist/converters.js",
+      "types": "./dist/converters.d.ts"
+    },
     "./browser": {
-      "import": "./browser.mjs",
-      "require": "./browser.cjs"
+      "require": "./dist/browser.cjs",
+      "import": "./dist/browser.mjs",
+      "types": "./dist/browser.d.ts"
     }
   },
-  "typesVersions": {
-    "*": {
-      "browser": [
-        "/types/scjson-browser.d.ts"
-      ],
-      "props": [
-        "/types/scjsonProps.d.ts"
-      ]
-
-    }
-  },
-  "types": "types/*",
   "files": [
+    "dist/",
     "bin/",
-    "index.js",
-    "browser.mjs",
-    "browser.cjs",
-    "scjsonProps.ts",
-    "types/scjson-browser.d.ts",
-    "types/scjsonProps.d.ts",
-    "tests/",
     "scjson.schema.json",
     "README.md",
     "LEGAL.md",
     "LICENSE"
   ],
-  "module": "./browser.mjs",
-  "browser": "./browser.mjs",
-  "publishConfig": {
-    "access": "public"
+  "bin": {
+    "scjson": "bin/scjson.js"
   },
   "scripts": {
+    "build": "tsc",
     "test": "jest",
     "lint": "eslint"
   },
@@ -79,7 +51,10 @@
     "fast-xml-parser": "^5.2.5"
   },
   "devDependencies": {
+    "@babel/parser": "^7.28.0",
+    "@babel/types": "^7.28.2",
     "jest": "^30.0.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "undici-types": "^7.12.0"
   }
 }

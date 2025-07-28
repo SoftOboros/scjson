@@ -14,10 +14,26 @@ fn create_scxml() -> String {
 
 fn create_scjson() -> String {
     let obj = serde_json::json!({
-        "version": 1,
+        "version": 1.0,
         "datamodel_attribute": "null"
     });
     serde_json::to_string_pretty(&obj).unwrap()
+}
+
+#[test]
+fn keep_empty_json_conversion() {
+    let dir = TempDir::new().unwrap();
+    let xml_path = dir.path().join("sample.scxml");
+    fs::write(&xml_path, create_scxml()).unwrap();
+
+    let mut cmd = assert_cmd::Command::cargo_bin("scjson_rust").unwrap();
+    cmd.args(["json", xml_path.to_str().unwrap(), "--keep-empty"]);
+    cmd.assert().success();
+
+    let out_path = xml_path.with_extension("scjson");
+    let data: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(out_path).unwrap()).unwrap();
+    assert!(data.get("datamodel_attribute").is_some());
 }
 
 #[test]
@@ -43,7 +59,7 @@ fn single_json_conversion() {
     assert!(out_path.exists());
     let data: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(out_path).unwrap()).unwrap();
-    assert_eq!(data["version"], 1);
+    assert_eq!(data["version"], 1.0);
 }
 
 #[test]
@@ -78,6 +94,21 @@ fn single_xml_conversion() {
     assert!(out_path.exists());
     let data = fs::read_to_string(out_path).unwrap();
     assert!(data.contains("scxml"));
+}
+
+#[test]
+fn keep_empty_xml_conversion() {
+    let dir = TempDir::new().unwrap();
+    let json_path = dir.path().join("sample.scjson");
+    fs::write(&json_path, create_scjson()).unwrap();
+
+    let mut cmd = assert_cmd::Command::cargo_bin("scjson_rust").unwrap();
+    cmd.args(["xml", json_path.to_str().unwrap(), "--keep-empty"]);
+    cmd.assert().success();
+
+    let out_path = json_path.with_extension("scxml");
+    let data = fs::read_to_string(out_path).unwrap();
+    assert!(data.contains("datamodel=\"null\""));
 }
 
 #[test]

@@ -1,10 +1,10 @@
 /**
- * scjsonProps.ts : Properties runtime file for scjson types
+ * Agent Name: ts-props
  *
  * Part of the scjson project.
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
- */
+*/
 
 export interface AssignProps {
     location: string;
@@ -70,15 +70,15 @@ export const defaultCancel = (): CancelProps => ({
 export type CancelArray = CancelProps[];
 
 export interface ContentProps {
-    otherAttributes: Record<string, object>;
+    content: ScxmlProps[] | null;
     expr: string | null;
-    content: Record<string, object>[];
+    otherAttributes: Record<string, object>;
 }
 
 export const defaultContent = (): ContentProps => ({
-    otherAttributes: {},
+    content: null,
     expr: null,
-    content: [],
+    otherAttributes: {},
 });
 
 export type ContentArray = ContentProps[];

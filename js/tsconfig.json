@@ -1,6 +1,12 @@
 {
   "compilerOptions": {
+    "allowJs": true,
+    "moduleResolution": "nodenext",
+    "outDir": "./dist",
+    "declaration": true,
+    "module": "nodenext",
+    "target": "ES2019",
     "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["types/**/*.d.ts", "src/**/*.ts"]
+  "include": ["src"]
 }
