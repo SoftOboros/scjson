@@ -1,6 +1,6 @@
 {
   "name": "scjson",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A JSON-based serialization of SCXML (State Chart XML).",
   "author": "Softoboros Technology Inc. <ira@softoboros.com>",
   "license": "BSD-1-Clause",

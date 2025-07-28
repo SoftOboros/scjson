@@ -1,10 +1,10 @@
 [project]
 name = "scjson"
-version = "0.3.0"
+version = "0.3.1"
 description = "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education."
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "BSD-1-Clause"}
+license = "BSD-1-Clause"
 authors = [{name = "Ira Abbott", email = "ira@mycloud.blue"}]
 dependencies = ["pydantic", "lxml", "jsonschema", "click"]  # optional
 
@@ -14,3 +14,7 @@ scjson = "scjson.__main__:main"  # Optional: installs as `scjson` shell command
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scjson"]
+
