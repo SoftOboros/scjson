@@ -145,6 +145,9 @@ impl Default for AssignProps {
     }
 }
 
+/// An array of Props Objects
+pub type AssignArray = Vec<AssignProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// cancel a pending `<send>` operation.
 pub struct CancelProps {
@@ -169,6 +172,9 @@ impl Default for CancelProps {
     }
 }
 
+/// An array of Props Objects
+pub type CancelArray = Vec<CancelProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// inline payload used by `<send>` and `<invoke>`.
 pub struct ContentProps {
@@ -190,6 +196,9 @@ impl Default for ContentProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type ContentArray = Vec<ContentProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// represents a single datamodel variable.
@@ -219,6 +228,9 @@ impl Default for DataProps {
     }
 }
 
+/// An array of Props Objects
+pub type DataArray = Vec<DataProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// container for one or more `<data>` elements.
 pub struct DatamodelProps {
@@ -240,6 +252,9 @@ impl Default for DatamodelProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type DatamodelArray = Vec<DatamodelProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// payload returned when a `<final>` state is reached.
@@ -263,6 +278,9 @@ impl Default for DonedataProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type DonedataArray = Vec<DonedataProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// fallback branch for `<if>` conditions.
@@ -330,6 +348,9 @@ impl Default for FinalProps {
     }
 }
 
+/// An array of Props Objects
+pub type FinalArray = Vec<FinalProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// executed after an `<invoke>` completes.
 pub struct FinalizeProps {
@@ -377,6 +398,9 @@ impl Default for FinalizeProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type FinalizeArray = Vec<FinalizeProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// iterate over items within executable content.
@@ -435,6 +459,9 @@ impl Default for ForeachProps {
     }
 }
 
+/// An array of Props Objects
+pub type ForeachArray = Vec<ForeachProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// pseudostate remembering previous active children.
 pub struct HistoryProps {
@@ -462,6 +489,9 @@ impl Default for HistoryProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type HistoryArray = Vec<HistoryProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// conditional execution block.
@@ -521,6 +551,9 @@ impl Default for IfProps {
     }
 }
 
+/// An array of Props Objects
+pub type IfArray = Vec<IfProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// starting state within a compound state.
 pub struct InitialProps {
@@ -542,6 +575,9 @@ impl Default for InitialProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type InitialArray = Vec<InitialProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// run an external process or machine.
@@ -597,6 +633,9 @@ impl Default for InvokeProps {
     }
 }
 
+/// An array of Props Objects
+pub type InvokeArray = Vec<InvokeProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// diagnostic output statement.
 pub struct LogProps {
@@ -620,6 +659,9 @@ impl Default for LogProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type LogArray = Vec<LogProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// actions performed when entering a state.
@@ -669,6 +711,9 @@ impl Default for OnentryProps {
     }
 }
 
+/// An array of Props Objects
+pub type OnentryArray = Vec<OnentryProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// actions performed when leaving a state.
 pub struct OnexitProps {
@@ -716,6 +761,9 @@ impl Default for OnexitProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type OnexitArray = Vec<OnexitProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// coordinates concurrent regions.
@@ -770,6 +818,9 @@ impl Default for ParallelProps {
     }
 }
 
+/// An array of Props Objects
+pub type ParallelArray = Vec<ParallelProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// parameter passed to `<invoke>` or `<send>`.
 pub struct ParamProps {
@@ -797,6 +848,9 @@ impl Default for ParamProps {
     }
 }
 
+/// An array of Props Objects
+pub type ParamArray = Vec<ParamProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// raise an internal event.
 pub struct RaiseProps {
@@ -814,6 +868,9 @@ impl Default for RaiseProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type RaiseArray = Vec<RaiseProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// inline executable script.
@@ -836,6 +893,9 @@ impl Default for ScriptProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type ScriptArray = Vec<ScriptProps>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// root element of an SCJSON document.
@@ -953,6 +1013,9 @@ impl Default for SendProps {
     }
 }
 
+/// An array of Props Objects
+pub type SendArray = Vec<SendProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// basic state node.
 pub struct StateProps {
@@ -1017,6 +1080,9 @@ impl Default for StateProps {
     }
 }
 
+/// An array of Props Objects
+pub type StateArray = Vec<StateProps>;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// edge between states triggered by events.
 pub struct TransitionProps {
@@ -1076,4 +1142,7 @@ impl Default for TransitionProps {
         }
     }
 }
+
+/// An array of Props Objects
+pub type TransitionArray = Vec<TransitionProps>;
 

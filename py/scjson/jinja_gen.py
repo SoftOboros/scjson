@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import importlib
 import inspect
+import textwrap
 from typing import List
 from enum import Enum
 from pydantic import BaseModel
@@ -53,6 +54,7 @@ class JinjaGenPydantic(object):
         self.env.globals.update(type=type)
         self.env.globals.update(dir=dir)
         self.env.globals.update(str=str)
+        self.env.globals.update(textwrap=textwrap)
         if self.lang == "rust":
             self.env.globals.update(
                 get_field_default=JinjaGenPydantic._get_rust_default_value,

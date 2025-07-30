@@ -14,8 +14,18 @@
 {% endblock %}
 
 {% block exports %}
-{% for if_name, schem in interfaces.items() %}
+{% for if_name, schem in Gen.interfaces.items() %}
 {% if type(schem) == dict %}
+{% set doc = Gen.objekts[if_name].__doc__ %}
+{% if doc %}
+{% for doc_line in doc.splitlines() %}
+/**
+{% for line in textwrap.wrap(doc_line, 80) %}
+ * {{ line }}
+{% endfor %}
+*/
+{% endfor %}
+{% endif %}
 export interface {{ if_name }}Props {
 {% for field_name, field in schem["properties"].items() %}
 {% if is_field_enum(field, schem ) and not is_runtime %}
@@ -27,6 +37,7 @@ export interface {{ if_name }}Props {
 }
 
 {% if is_runtime %}
+/** Instantiate a default object of type {{ if_name}}Props */
 export const default{{ if_name }} = (): {{ if_name }}Props => ({
 {% for field_name, field in schem["properties"].items() %}
     {{ to_camel(field_name) }}: {{ get_field_default(field, schem["$defs"])}},
@@ -34,12 +45,23 @@ export const default{{ if_name }} = (): {{ if_name }}Props => ({
 });
 
 {% else %}
+/** Instantiate a default object of type {{ if_name}}Props */
 export declare const default{{ if_name }}: () => {{ if_name }}Props;
 
 {% endif %}
 {% else %}
 {% set pascal_name = to_pascal(if_name) %}
 {% if is_runtime %}
+{% set doc = Gen.objekts[pascal_name].__doc__ %}
+{% if doc %}
+/**
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+ * {{ line }}
+{% endfor %}
+{% endfor %}
+*/
+{% endif %}
 export const {{pascal_name}}Props = {
 {% for enum_name in dir(schem) %}
 {% if enum_name.find('__') != 0 %}
@@ -47,10 +69,20 @@ export const {{pascal_name}}Props = {
 {% endif %}
 {% endfor %}
 } as const;
-
+/** executable version of {{pascal_name}}Props */
 export type {{pascal_name}}Props = typeof {{pascal_name}}Props[keyof typeof {{pascal_name}}Props];
 
 {% else %}
+{% set doc = Gen.objekts[pascal_name].__doc__ %}
+{% if doc %}
+/**
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+ * {{ line }}
+{% endfor %}
+{% endfor %}
+*/
+{% endif %}
 export type {{pascal_name}}PropsType =
 {% for enum_name in dir(schem) %}
 {% if enum_name.find('__') != 0 %}
@@ -68,14 +100,25 @@ export declare const {{pascal_name}}Props: {
 
 {% endif %}
 {% endif %}
-{% if if_name in all_arrays %}
+{% if if_name in Gen.all_arrays %}
+{% set doc = Gen.objekts[if_name].__doc__ %}
+{% if doc %}
+/**
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+ * {{ line }}
+{% endfor %}
+{% endfor %}
+*/
+{% endif %}
+/** Type for an array of of {{ if_name }}Props */
 export type {{ if_name }}Array = {{ if_name }}Props[];
 
 {% endif %}
 {%- endfor %}
 {% set kinds = ['"number"', '"string"', '"record<string, object>"', '"number[]"', '"string[]"', '"record<string, object>[]"'] %}
 {% set unions = ['null', 'string', 'number', 'Record<string, object>', 'string[]', 'number[]', 'Record<string, object>[]'] %}
-{% for if_name, schem in interfaces.items() %}
+{% for if_name, schem in Gen.interfaces.items() %}
 {% do kinds.append('"' ~ if_name.lower() ~ '"') %}
 {% if is_runtime  or type(schem) == dict%}
 {% do unions.append(if_name ~ 'Props')%}
@@ -83,7 +126,7 @@ export type {{ if_name }}Array = {{ if_name }}Props[];
 {% do unions.append('typeof ' ~ if_name ~ 'Props')%}
 {% endif %}
 {% endfor %}
-{% for array in all_arrays %}
+{% for array in Gen.all_arrays %}
 {% do kinds.append('"' ~ array.lower() ~ 'array' ~ '"') %}
 {% do unions.append(array ~ 'Array')%}
 {% endfor %}
@@ -92,13 +135,13 @@ export type Kind = {{ list_join(kinds, sep=' | ', pre="", post="", indent=18) }}
 export type PropsUnion = {{ list_join(unions, sep=' | ', pre="", post="", indent=24) }};
 
 export type KindMap = {
-{% for if_name, schem in interfaces.items() %}
+{% for if_name, schem in Gen.interfaces.items() %}
 {% if type(schem) == dict or is_runtime %}
     {{ if_name.lower() }}: {{ if_name }}Props
 {% else %}
     {{ if_name.lower() }}: typeof {{ if_name }}Props
 {% endif %}
-{% if if_name in all_arrays %}
+{% if if_name in Gen.all_arrays %}
     {{ if_name.lower() }}array: {{ if_name }}Array
 {% endif %}
 {% endfor %}

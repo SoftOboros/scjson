@@ -217,18 +217,15 @@ def typescript(output: Path | None):
     print(f"Convert Scjson type for typescript - Path: {output}")
     Gen = JinjaGenPydantic(output=output)
     base_dir = os.path.abspath(output)
-    interfaces = Gen.interfaces
-    schemas = Gen.schemas
-    all_arrays = Gen.all_arrays
     os.makedirs(base_dir, exist_ok=True)
     is_runtime = True
     file_name = "scjsonProps.ts"
     file_description = "Properties runtime file for scjson types"
     Gen.render_to_file(file_name, "scjson_props.ts.jinja2", locals())
-    is_runtime = False
-    file_name = "scjsonProps.d.ts"
-    file_description = "Properties definition file for scjson types"
-    Gen.render_to_file(f"types/{file_name}", "scjson_props.ts.jinja2", locals())
+    #is_runtime = False
+    #file_name = "scjsonProps.d.ts"
+    #file_description = "Properties definition file for scjson types"
+    #Gen.render_to_file(f"types/{file_name}", "scjson_props.ts.jinja2", locals())
 
 
 @main.command(help="Create Rust type files for scjson")
@@ -238,9 +235,6 @@ def rust(output: Path | None):
     print(f"Convert Scjson type for rust - Path: {output}")
     Gen = JinjaGenPydantic(output=output, lang="rust")
     base_dir = os.path.abspath(output)
-    interfaces = Gen.interfaces
-    schemas = Gen.schemas
-    all_arrays = Gen.all_arrays
     os.makedirs(base_dir, exist_ok=True)
     file_name = "scjson_props.rs"
     file_description = "Properties file for scjson types"
