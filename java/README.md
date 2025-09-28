@@ -58,4 +58,4 @@ java -jar target/scjson.jar run examples/example.scxml -e examples/events.json -
 ```
 This uses `ScxmlRunner` under the hood and requires the Apache Commons SCXML library. Ensure Maven can download dependencies or has them cached locally.
 
-All source code in this directory is released under the BSD\u00A01-Clause license. See `LICENSE` and `LEGAL.md` for details.
+All source code in this directory is released under the BSD 1-Clause license. See `LICENSE` and `LEGAL.md` for details.

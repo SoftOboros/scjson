@@ -1,0 +1,96 @@
+{#
+    scjson_props.rs.jinja2 : Template for generating Rust types from schema.
+#}
+{% extends "base.rs.jinja2" %}
+{% block file_header %}
+// {{file_name}} : {{file_description}}
+//
+// Part of the scjson project.
+// Developed by Softoboros Technology Inc.
+// Licensed under the BSD 1-Clause License.
+{% endblock %}
+
+{% block exports %}
+use serde::{Serialize, Deserialize};
+use serde_json::{Map, Value};
+
+//
+// ==== ENUMERATIONS ===
+//
+
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) != dict %}
+{% set doc = Gen.objekts[if_name].__doc__ %}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+{% if doc %}
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+/// {{ line }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+pub enum {{ to_pascal(if_name) }}Props {
+{% for enum_name in schem.__members__.keys() %}
+    {{ to_pascal(enum_name) }},
+{% endfor %}
+}
+/// Retrieves the Default {{ to_pascal(if_name) }}Props Value
+impl Default for {{ to_pascal(if_name) }}Props {
+    fn default() -> Self {
+        Self::{{ to_pascal(first_enum(schem)) }}
+    }
+}
+
+{% endif %}
+{% endfor %}
+
+//
+// ==== STRUCTS ===
+//
+
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) == dict %}
+{% set doc = Gen.objekts[if_name].__doc__ %}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+{% if doc %}
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+/// {{ line }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+pub struct {{ if_name }}Props {
+{% for field_name, field in schem["properties"].items() %}
+{% set doc = Gen.objekts[to_pascal(field_name)].__doc__ if Gen.objekts[to_pascal(field_name)] else "" %}
+    #[serde(default{% if field.get("rename") %}, rename = "{{ field["rename"] }}"{% endif %})]
+{% if doc %}
+{% for doc_line in doc.splitlines() %}
+{% for line in textwrap.wrap(doc_line, 80) %}
+    /// {{ line }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+    pub {{ rust_ident(to_snake(field_name)) }}: {{ get_field_type(field) }},
+{% endfor %}
+}
+/// Instantiates a Default {{ field_name }}Props Object
+impl Default for {{ if_name }}Props {
+    fn default() -> Self {
+        Self {
+{% for field_name, field in schem["properties"].items() %}
+{% set ty = get_field_type(field) %}
+            {{ rust_ident(to_snake(field_name)) }}: {{ ty.replace('<', '::<') }}::default(),
+{% endfor %}
+        }
+    }
+}
+
+{% if if_name in Gen.all_arrays %}
+/// An array of {{ field_name }}Props Objects
+pub type {{ if_name }}Array = Vec<{{ if_name }}Props>;
+
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endblock %}

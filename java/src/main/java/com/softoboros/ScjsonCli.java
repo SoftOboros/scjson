@@ -33,8 +33,8 @@ public class ScjsonCli implements Runnable {
      */
     public static void main(String[] args) {
         int exitCode = new CommandLine(new ScjsonCli())
-                .addSubcommand("to-json", new ScxmlToScjson())
-                .addSubcommand("to-xml", new ScjsonToScxml())
+                .addSubcommand("json", new ScxmlToScjson())
+                .addSubcommand("xml", new ScjsonToScxml())
                 .addSubcommand("validate", new ValidateCommand())
                 .addSubcommand("run", new RunCommand())
                 .execute(args);

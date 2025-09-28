@@ -1,7 +1,6 @@
-cargo-features = ["edition2024"]
 [package]
 name = "scjson"
-version = "0.3.0"
+version = "0.3.2"
 authors = ["Ira Abbott ira@softobotos.com"]
 edition = "2024"
 license = "BSD-1-Clause"
@@ -28,4 +27,3 @@ tempfile = "3.9"
 [[bin]]
 name = "scjson_rust"
 path = "src/main.rs"
-

@@ -28,3 +28,5 @@ busted -v tests
 ```
 
 The provided `scjson.lua` module offers minimal conversion utilities. It is intended as a starting point for a complete Lua port of the reference Python implementation.
+
+All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.

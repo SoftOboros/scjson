@@ -2,7 +2,7 @@
 
 This directory contains the JavaScript implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
 
-For details on how SCXML elements are inferred during conversion see [INFERENCE.md](../INFERENCE.md).
+For details on how SCXML elements are inferred during conversion see [INFERENCE.md](https://github.com/SoftOboros/scjson/blob/main/INFERENCE.md).
 
 The package includes typescript types for the functions and default functions to return each.
 
@@ -185,32 +185,31 @@ Several generated classes share generic helper fields:
 
 ### Document / Object Types
 Plain typescript types without runtime validation.
-
-- `AssignProps` `AssignArray` – update a datamodel location with an expression or value.
-- `CancelProps` `CancelArray` – cancel a pending `<send>` operation.
-- `ContentProps` `ContentArray` – inline payload used by `<send>` and `<invoke>`.
-- `DataProps` `DataArray` – represents a single datamodel variable.
-- `DatamodelProps` `DatamodelArray` – container for one or more `<data>` elements.
-- `DonedataProps` `DonedataArray`  – payload returned when a `<final>` state is reached.
-- `ElseProps` – fallback branch for `<if>` conditions.
-- `ElseifProps` – conditional branch following an `<if>`.
-- `FinalProps` `FinalArray` – marks a terminal state in the machine.
-- `FinalizeProps` `FinalizeArray` – executed after an `<invoke>` completes.
-- `ForeachProps` `ForeachArray` – iterate over items within executable content.
-- `HistoryProps` `HistoryArray` – pseudostate remembering previous active children.
-- `IfProps` `IfArray` – conditional execution block.
-- `InitialProps` `InitialArray` – starting state within a compound state.
-- `InvokeProps` `InvokeArray` – run an external process or machine.
-- `LogProps` `LogArray` – diagnostic output statement.
-- `OnentryProps` `OnentryArray` – actions performed when entering a state.
-- `OnexitProps` `OnexitArray` – actions performed when leaving a state.
-- `ParallelProps` `ParallelArray` – coordinates concurrent regions.
-- `ParamProps` `ParamArray` – parameter passed to `<invoke>` or `<send>`.
-- `RaiseProps` `RaiseArray` – raise an internal event.
-- `ScriptProps` `ScriptArray` – inline executable script.
-- `ScxmlProps` – root element of an SCJSON document.
-- `SendProps` `SendArray` – dispatch an external event.
-- `StateProps` `StateArray` – basic state node.
+- `AssignProps` `AssignArray`         – update a datamodel location with an expression or value.
+- `CancelProps` `CancelArray`         – cancel a pending `<send>` operation.
+- `ContentProps` `ContentArray`       – inline payload used by `<send>` and `<invoke>`.
+- `DataProps` `DataArray`             – represents a single datamodel variable.
+- `DatamodelProps` `DatamodelArray`   – container for one or more `<data>` elements.
+- `DonedataProps` `DonedataArray`     – payload returned when a `<final>` state is reached.
+- `ElseProps`                         – fallback branch for `<if>` conditions.
+- `ElseifProps`                       – conditional branch following an `<if>`.
+- `FinalProps` `FinalArray`           – marks a terminal state in the machine.
+- `FinalizeProps` `FinalizeArray`     – executed after an `<invoke>` completes.
+- `ForeachProps` `ForeachArray`       – iterate over items within executable content.
+- `HistoryProps` `HistoryArray`       – pseudostate remembering previous active children.
+- `IfProps` `IfArray`                 – conditional execution block.
+- `InitialProps` `InitialArray`       – starting state within a compound state.
+- `InvokeProps` `InvokeArray`         – run an external process or machine.
+- `LogProps` `LogArray`               – diagnostic output statement.
+- `OnentryProps` `OnentryArray`       – actions performed when entering a state.
+- `OnexitProps` `OnexitArray`         – actions performed when leaving a state.
+- `ParallelProps` `ParallelArray`     – coordinates concurrent regions.
+- `ParamProps` `ParamArray`           – parameter passed to `<invoke>` or `<send>`.
+- `RaiseProps` `RaiseArray`           – raise an internal event.
+- `ScriptProps` `ScriptArray`         – inline executable script.
+- `ScxmlProps`                        – root element of an SCJSON document.
+- `SendProps` `SendArray`             – dispatch an external event.
+- `StateProps` `StateArray`           – basic state node.
 - `TransitionProps` `TransitionArray` – edge between states triggered by events.
 
 ### Object Management
@@ -330,4 +329,4 @@ docker pull iraa/scjson:latest
 ```
 
 
-All source code in this directory is released under the BSD\u00A01-Clause license. See `LICENSE` and `LEGAL.md` for details.
+All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.
