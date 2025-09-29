@@ -24,14 +24,14 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 ## Roadmap (Iterations)
 
 1) Core Algorithm & Trace
-- [ ] Make `scjson.context` the single runtime source (retire/repurpose `engine.py`).
+- [x] Make `scjson.context` the single runtime source (retire/repurpose `engine.py`).
 - [x] Implement macrostep loop (process eventless transitions until quiescence).
 - [x] Deterministic transition selection (document order, ancestor checks, conflict resolution).
 - [x] Define standardized JSON trace schema (event, firedTransitions, enteredStates, exitedStates, configuration, actionLog, datamodelDelta).
 - [x] Add CLI: `scjson engine-trace -I path.[scxml|scjson] [--xml] -e events.jsonl`.
 
 2) Compound, Parallel, Final, History
-- [ ] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
+- [x] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
 - [ ] Parallel completion: parent final when all regions complete; propagate finalization.
 - [x] History: shallow with default transition fallback.
 - [ ] History: deep (restore deep descendants).

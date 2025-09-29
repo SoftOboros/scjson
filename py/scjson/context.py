@@ -455,16 +455,101 @@ class DocumentContext(BaseModel):
         self, source: ActivationRecord, trans: TransitionSpec
     ) -> tuple[Set[str], Set[str]]:
         before = set(self.configuration)
-        if source.id in self.configuration:
-            self._exit_state(source)
-        for tid in trans.target:
-            target = self.activations.get(tid)
-            if target:
-                self._enter_target(target)
+
+        exit_list = self._compute_exit_set(source, trans.target)
+        for act in exit_list:
+            if act.id in self.configuration:
+                self._exit_state(act)
+
+        enter_list = self._compute_entry_list(source, trans.target)
+        for act in enter_list:
+            if act.id not in self.configuration:
+                self._enter_target(act)
+
         after = set(self.configuration)
         entered = after - before
         exited = before - after
         return entered, exited
+
+    def _depth(self, act: ActivationRecord) -> int:
+        depth = 0
+        cur = act
+        while cur.parent:
+            depth += 1
+            cur = cur.parent
+        return depth
+
+    def _least_common_ancestor(
+        self, first: ActivationRecord, second: ActivationRecord
+    ) -> Optional[ActivationRecord]:
+        ancestors: Set[str] = set()
+        cur = first
+        while cur:
+            ancestors.add(cur.id)
+            cur = cur.parent
+        cur = second
+        while cur:
+            if cur.id in ancestors:
+                return cur
+            cur = cur.parent
+        return None
+
+    def _compute_exit_set(
+        self, source: ActivationRecord, targets: List[str]
+    ) -> List[ActivationRecord]:
+        exit_set: Dict[str, ActivationRecord] = {}
+
+        if not targets:
+            cur = source
+            while cur:
+                exit_set[cur.id] = cur
+                cur = cur.parent
+        else:
+            for tid in targets:
+                target_act = self.activations.get(tid)
+                if not target_act:
+                    continue
+                normalized_target = (
+                    target_act.parent
+                    if isinstance(target_act.node, History)
+                    else target_act
+                )
+                lca = self._least_common_ancestor(source, normalized_target or self.root_activation)
+                cur = source
+                while cur and cur is not lca:
+                    exit_set[cur.id] = cur
+                    cur = cur.parent
+
+        ordered = sorted(exit_set.values(), key=self._depth, reverse=True)
+        return ordered
+
+    def _compute_entry_list(
+        self, source: ActivationRecord, targets: List[str]
+    ) -> List[ActivationRecord]:
+        enter_order: List[ActivationRecord] = []
+        seen: Set[str] = set()
+
+        for tid in targets or []:
+            target_act = self.activations.get(tid)
+            if not target_act:
+                continue
+            normalized_target = (
+                target_act.parent
+                if isinstance(target_act.node, History)
+                else target_act
+            )
+            lca = self._least_common_ancestor(source, normalized_target or self.root_activation)
+            path: List[ActivationRecord] = []
+            cur = target_act
+            while cur and cur is not lca:
+                path.append(cur)
+                cur = cur.parent
+            for act in reversed(path):
+                if act.id not in seen:
+                    seen.add(act.id)
+                    enter_order.append(act)
+
+        return enter_order
 
     def drain_internal(self) -> None:
         """Execute eventless transitions until quiescent."""
