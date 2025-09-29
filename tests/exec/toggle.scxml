@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="python" initial="idle" name="toggle">
+  <state id="idle">
+    <transition event="go" target="active"/>
+  </state>
+  <state id="active">
+    <onentry>
+      <log label="mode" expr="'active'"/>
+      <assign location="count" expr="(count if 'count' in globals() else 0) + 1"/>
+    </onentry>
+    <transition event="reset" target="idle"/>
+  </state>
+</scxml>

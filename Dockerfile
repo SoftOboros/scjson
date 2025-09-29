@@ -31,6 +31,28 @@ RUN apt-get update && apt-get install -y \
     npm \
     && rm -rf /var/lib/apt/lists/*
 
+# Ensure Java tooling is fully configured
+ENV JAVA_HOME="/usr/lib/jvm/java-21-openjdk"
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
+RUN mkdir -p /etc/ssl/certs/java && \
+    if [ ! -f /etc/ssl/certs/java/cacerts ]; then \
+      keytool -genkeypair \
+        -alias temp \
+        -keystore /etc/ssl/certs/java/cacerts \
+        -storepass changeit \
+        -keypass changeit \
+        -dname "CN=temp" \
+        -keyalg RSA \
+        -keysize 2048 \
+        -validity 1 \
+        -noprompt || echo "⚠️ failed to create dummy keystore"; \
+      keytool -delete -alias temp \
+        -keystore /etc/ssl/certs/java/cacerts \
+        -storepass changeit || echo "⚠️ failed to delete dummy entry"; \
+    fi && \
+    dpkg --configure -a || true
+
 # Install Node.js from official tarball
 RUN wget https://download.swift.org/swift-6.1.2-release/ubuntu2204/swift-6.1.2-RELEASE/swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \
     && tar -xzf swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \

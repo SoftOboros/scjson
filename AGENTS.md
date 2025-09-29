@@ -30,6 +30,12 @@ Licensed under the BSD 1-Clause License.
 """
 ```
 
+### Checklist Maintenance Policy
+
+- All `docs/TODO-*.md` files are living checklists.
+- Keep them up to date: checked items reflect features that have landed; unchecked are pending.
+- When implementing or changing features that affect a checklist, update the corresponding `docs/TODO-*.md` in the same change.
+
 ---
 
 ## Agent: scxml-to-scjson
@@ -111,4 +117,3 @@ Licensed under the BSD 1-Clause License.
 - **Notes**:
   - Prints root tag, state count, and feature coverage
   - Optional: hash of structure for test matching
-

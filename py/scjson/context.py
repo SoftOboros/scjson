@@ -11,7 +11,7 @@ Runtime execution context with onentry/onexit and history support.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 import logging
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,6 +47,7 @@ class DocumentContext(BaseModel):
     activations: Dict[str, ActivationRecord] = Field(default_factory=dict)
     history: Dict[str, List[str]] = Field(default_factory=dict)
     action_log: List[str] = Field(default_factory=list)
+    activation_order: Dict[str, int] = Field(default_factory=dict)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -65,26 +66,179 @@ class DocumentContext(BaseModel):
     def microstep(self) -> None:
         """Execute one microstep of the interpreter."""
         evt = self.events.pop()
-        if not evt:
-            return
+        event_consumed = evt is not None
+        triggered = False
 
-        for state_id in list(self.configuration):
+        if evt is not None:
+            result = self._execute_transition(evt)
+            if result:
+                act, trans, _, _ = result
+                triggered = True
+                logger.info(
+                    "[microstep] %s -> %s on %s",
+                    act.id,
+                    ",".join(trans.target),
+                    evt.name,
+                )
+
+        while True:
+            result = self._execute_transition(None)
+            if not result:
+                break
+            triggered = True
+            act, trans, _, _ = result
+            logger.info(
+                "[microstep] %s -> %s on %s",
+                act.id,
+                ",".join(trans.target),
+                trans.event or "<epsilon>",
+            )
+
+        if event_consumed and not triggered and evt is not None:
+            logger.info("[microstep] consumed event: %s", evt.name)
+
+    def _activation_order_key(self, state_id: str) -> int:
+        return self.activation_order.get(state_id, len(self.activation_order) + 1)
+
+    def _select_transition(self, evt: Event | None) -> tuple[ActivationRecord, TransitionSpec] | None:
+        """Return the first enabled transition for ``evt`` respecting document order."""
+
+        event_name = evt.name if evt is not None else None
+        for state_id in sorted(self.configuration, key=self._activation_order_key):
             act = self.activations.get(state_id)
             if not act:
                 continue
             for trans in act.transitions:
-                if trans.event is None or trans.event == evt.name:
-                    if trans.cond is None or self._eval_condition(trans.cond, act):
-                        self._fire_transition(act, trans)
-                        logger.info(
-                            "[microstep] %s -> %s on %s",
-                            act.id,
-                            ",".join(trans.target),
-                            evt.name,
-                        )
-                        return
+                if evt is None:
+                    if trans.event is not None:
+                        continue
+                else:
+                    if trans.event != event_name:
+                        continue
+                if trans.cond is None or self._eval_condition(trans.cond, act):
+                    return act, trans
+        return None
 
-        logger.info("[microstep] consumed event: %s", evt.name)
+    def _execute_transition(
+        self, evt: Event | None
+    ) -> Optional[Tuple[ActivationRecord, TransitionSpec, Set[str], Set[str]]]:
+        sel = self._select_transition(evt)
+        if not sel:
+            return None
+        act, trans = sel
+        entered, exited = self._fire_transition(act, trans)
+        return act, trans, entered, exited
+
+    def trace_step(self, evt: Event | None = None) -> dict:
+        """Execute one microstep and return a standardized trace entry."""
+
+        if evt is not None:
+            event_obj = evt
+        else:
+            event_obj = self.events.pop()
+
+        config_before = set(self.configuration)
+        dm_before = dict(self.data_model)
+        action_count_before = len(self.action_log)
+        fired: List[Dict[str, Any]] = []
+        entered: Set[str] = set()
+        exited: Set[str] = set()
+
+        if event_obj is not None:
+            result = self._execute_transition(event_obj)
+            if result:
+                act, trans, ent, ex = result
+                fired.append(
+                    {
+                        "source": act.id,
+                        "targets": list(trans.target),
+                        "event": trans.event,
+                        "cond": trans.cond,
+                    }
+                )
+                entered.update(ent)
+                exited.update(ex)
+
+        while True:
+            result = self._execute_transition(None)
+            if not result:
+                break
+            act, trans, ent, ex = result
+            fired.append(
+                {
+                    "source": act.id,
+                    "targets": list(trans.target),
+                    "event": trans.event,
+                    "cond": trans.cond,
+                }
+            )
+            entered.update(ent)
+            exited.update(ex)
+
+        dm_delta: Dict[str, Any] = {
+            k: self.data_model[k]
+            for k in self.data_model
+            if dm_before.get(k) != self.data_model[k]
+        }
+        for key in dm_before:
+            if key not in self.data_model:
+                dm_delta[key] = None
+        actions = self.action_log[action_count_before:]
+
+        event_payload = (
+            {"name": event_obj.name, "data": event_obj.data}
+            if event_obj is not None
+            else None
+        )
+
+        config_after = set(self.configuration)
+        if not entered:
+            entered = config_after - config_before
+        if not exited:
+            exited = config_before - config_after
+
+        filtered_entered = self._filter_states(entered)
+        if not filtered_entered:
+            filtered_entered = self._filter_states(config_after - config_before)
+
+        filtered_exited = self._filter_states(exited)
+        if not filtered_exited:
+            filtered_exited = self._filter_states(config_before - config_after)
+
+        filtered_config = self._filter_states(self.configuration)
+
+        filtered_transitions: List[Dict[str, Any]] = []
+        for item in fired:
+            src = item["source"]
+            targets = [t for t in item["targets"] if self._is_user_state(t)]
+            if not self._is_user_state(src):
+                if not targets:
+                    continue
+                continue  # skip synthetic transitions entirely
+            filtered_transitions.append(
+                {
+                    "source": src,
+                    "targets": targets,
+                    "event": item["event"],
+                    "cond": item["cond"],
+                }
+            )
+
+        return {
+            "event": event_payload,
+            "firedTransitions": filtered_transitions,
+            "enteredStates": sorted(filtered_entered, key=self._activation_order_key),
+            "exitedStates": sorted(filtered_exited, key=self._activation_order_key),
+            "configuration": sorted(filtered_config, key=self._activation_order_key),
+            "actionLog": actions,
+            "datamodelDelta": dm_delta,
+        }
+
+    def _is_user_state(self, state_id: str) -> bool:
+        return bool(state_id) and state_id != self.root_activation.id and not state_id.startswith("$generated-")
+
+    def _filter_states(self, ids: Iterable[str]) -> List[str]:
+        return [sid for sid in ids if self._is_user_state(sid)]
 
     # ------------------------------------------------------------------ #
     # Construction helpers
@@ -105,6 +259,7 @@ class DocumentContext(BaseModel):
         ctx._index_activations(root_state)
         ctx.configuration.add(root_state.id)
         ctx._enter_initial_states(root_state)
+        ctx.drain_internal()
         return ctx
 
     # ------------------------------------------------------------------ #
@@ -168,6 +323,8 @@ class DocumentContext(BaseModel):
     def _index_activations(self, act: ActivationRecord) -> None:
         """Populate ``self.activations`` with the activation tree."""
         self.activations[act.id] = act
+        if act.id not in self.activation_order:
+            self.activation_order[act.id] = len(self.activation_order)
         for child in act.children:
             self._index_activations(child)
 
@@ -294,13 +451,28 @@ class DocumentContext(BaseModel):
         else:
             self._enter_state(act)
 
-    def _fire_transition(self, source: ActivationRecord, trans: TransitionSpec) -> None:
+    def _fire_transition(
+        self, source: ActivationRecord, trans: TransitionSpec
+    ) -> tuple[Set[str], Set[str]]:
+        before = set(self.configuration)
         if source.id in self.configuration:
             self._exit_state(source)
         for tid in trans.target:
             target = self.activations.get(tid)
             if target:
                 self._enter_target(target)
+        after = set(self.configuration)
+        entered = after - before
+        exited = before - after
+        return entered, exited
+
+    def drain_internal(self) -> None:
+        """Execute eventless transitions until quiescent."""
+
+        while True:
+            result = self._execute_transition(None)
+            if not result:
+                break
 
     @classmethod
     def from_json_file(cls, path: str | Path) -> "DocumentContext":
