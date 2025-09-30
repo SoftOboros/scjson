@@ -111,6 +111,8 @@ class InvokeRegistry:
         # SCXML/SCJSON child-machine handler
         self.register("scxml", lambda type_name, src, payload, on_done=None: SCXMLChildHandler(type_name, src, payload, on_done))
         self.register("scjson", lambda type_name, src, payload, on_done=None: SCXMLChildHandler(type_name, src, payload, on_done))
+        # Deferred mock that completes on a specific event
+        self.register("mock:deferred", lambda type_name, src, payload, on_done=None: DeferredHandler(type_name, src, payload, on_done))
 
     def register(self, type_name: str, factory: Callable[..., InvokeHandler]) -> None:
         self._factories[type_name] = factory
@@ -208,3 +210,11 @@ class SCXMLChildHandler(InvokeHandler):
                 self._emit(Event(name=evt.name, data=evt.data, send_id=evt.send_id))
             except Exception:
                 pass
+
+
+class DeferredHandler(InvokeHandler):
+    """Completes when it receives an event named 'complete'."""
+
+    def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
+        if name == "complete":
+            self._on_done(self.payload)

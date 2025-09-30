@@ -139,11 +139,12 @@ new scenario is exercised against scion-core.
     under the state are started via a pluggable `InvokeRegistry`.
   - On state exit (before `onexit`), any active invocations for the state are
     canceled; their `<finalize>` blocks run in the invoking state's scope.
-  - A mock registry ships with two handler types:
+  - A mock registry ships with three handler types:
     - `mock:immediate`: completes immediately upon start and calls the done
       callback with the initial payload; the engine runs `<finalize>` and enqueues
       `done.invoke.<id>` with the payload.
     - `mock:record`: a no-op handler that records events forwarded via `send`.
+    - `mock:deferred`: completes when it receives an event named `complete`.
   - Payload materialization mirrors `<send>`: collects `<param>`, `namelist`, and
     `<content>` into a dictionary available to the handler and as `_event.data`
     during `<finalize>`.
@@ -151,6 +152,8 @@ new scenario is exercised against scion-core.
   - `typeexpr` and `srcexpr` are evaluated in the state's scope when present.
   - `autoforward="true"` forwards external events (excluding `__*`, `error.*`,
     `done.state.*`, `done.invoke.*`) to the active handler via `handler.send(name, data)`.
+  - Child SCXML/SCJSON machines bubble their raised events to the parent queue;
+    completion is detected via `done.state.<childRootId>`.
 
 Limitations:
 - Full SCXML invoke semantics (processor coupling, nested machines, error

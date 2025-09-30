@@ -1098,3 +1098,59 @@ def test_invoke_child_bubbles_event_to_parent(tmp_path):
     # The child's raised event should be queued for the parent
     evt = ctx.events.pop()
     assert evt and evt.name == "childReady"
+
+
+def test_invoke_deferred_completion_and_ordering(tmp_path):
+    chart = tmp_path / "invoke_deferred.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel><data id="v" expr="0"/></datamodel>
+  <state id="s">
+    <invoke type="mock:deferred" id="job">
+      <finalize>
+        <assign location="v" expr="1"/>
+      </finalize>
+    </invoke>
+    <transition event="done.invoke.job" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Trigger completion via external event delivered to invocation
+    ctx.enqueue("complete")
+    ctx.microstep()  # deliver to invoker and run finalize
+    assert ctx.data_model["v"] == 1
+    evt = ctx.events.pop()
+    assert evt and evt.name == "done.invoke.job"
+    # Consume transition to 'pass'
+    ctx.microstep()
+    assert "pass" in ctx.configuration
+
+
+def test_multiple_invocations_autoforward(tmp_path):
+    chart = tmp_path / "invoke_multi_autoforward.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="mock:record" id="rec1" autoforward="true"/>
+    <invoke type="mock:record" id="rec2" autoforward="true"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    ctx.enqueue("poke", {"k": 2})
+    ctx.microstep()
+    h1 = ctx.invocations.get("rec1")
+    h2 = ctx.invocations.get("rec2")
+    assert isinstance(h1, RecordHandler) and isinstance(h2, RecordHandler)
+    assert h1.received and h1.received[0] == ("poke", {"k": 2})
+    assert h2.received and h2.received[0] == ("poke", {"k": 2})
