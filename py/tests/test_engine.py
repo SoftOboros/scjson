@@ -1022,3 +1022,45 @@ def test_finalize_receives_event_data(tmp_path):
     ctx = DocumentContext.from_xml_file(chart)
     # finalize should read _event.data and compute 42
     assert ctx.data_model["y"] == 42
+
+
+def test_invoke_scxml_child_completes_and_finalizes(tmp_path):
+    child = tmp_path / "child.scxml"
+    child.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s" id="childroot">
+  <state id="s">
+    <transition event="go" target="f"/>
+  </state>
+  <final id="f">
+    <donedata><param name="result" expr="42"/></donedata>
+  </final>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    parent = tmp_path / "parent.scxml"
+    parent.write_text(
+        f"""
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel><data id="x" expr="0"/></datamodel>
+  <state id="s">
+    <invoke type="scxml" id="child" src="{child}" autoforward="true">
+      <finalize>
+        <assign location="x" expr="_event['data']['result']"/>
+      </finalize>
+    </invoke>
+    <transition event="done.invoke.child" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(parent)
+    ctx.enqueue("go")
+    ctx.run()
+    assert "pass" in ctx.configuration
+    assert ctx.data_model["x"] == 42

@@ -15,6 +15,9 @@ engine can start/cancel invocations, support `<finalize>`, and emit
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
+from pathlib import Path
+
+from .context import DocumentContext
 
 
 OnDone = Callable[[Any], None]
@@ -93,6 +96,9 @@ class InvokeRegistry:
         # Built-in mocks
         self.register("mock:immediate", lambda type_name, src, payload, on_done=None: ImmediateDoneHandler(type_name, src, payload, on_done))
         self.register("mock:record", lambda type_name, src, payload, on_done=None: RecordHandler(type_name, src, payload, on_done))
+        # SCXML/SCJSON child-machine handler
+        self.register("scxml", lambda type_name, src, payload, on_done=None: SCXMLChildHandler(type_name, src, payload, on_done))
+        self.register("scjson", lambda type_name, src, payload, on_done=None: SCXMLChildHandler(type_name, src, payload, on_done))
 
     def register(self, type_name: str, factory: Callable[..., InvokeHandler]) -> None:
         self._factories[type_name] = factory
@@ -130,3 +136,58 @@ class RecordHandler(InvokeHandler):
 
     def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
         self.received.append((name, data))
+
+
+class SCXMLChildHandler(InvokeHandler):
+    """Runs a nested SCXML/SCJSON machine using the Python engine.
+
+    The child machine completes when it enqueues `done.state.<rootId>`; the
+    handler then invokes the done callback with that event's data.
+    """
+
+    def __init__(self, type_name: str, src: Any, payload: Any, on_done: Optional[OnDone] = None) -> None:
+        super().__init__(type_name, src, payload, on_done)
+        self.child: DocumentContext | None = None
+
+    def start(self) -> None:  # noqa: D401
+        path = self.src
+        if not isinstance(path, (str, Path)):
+            return  # nothing to start
+        p = Path(str(path))
+        try:
+            if p.suffix.lower() == ".scxml":
+                self.child = DocumentContext.from_xml_file(p)
+            else:
+                self.child = DocumentContext.from_json_file(p)
+        except Exception:
+            self.child = None
+            return
+        self._pump()
+
+    def stop(self) -> None:  # noqa: D401
+        self.child = None
+
+    def cancel(self) -> None:  # noqa: D401
+        self.child = None
+
+    def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
+        if not self.child:
+            return
+        self.child.enqueue(name, data)
+        # Run one external microstep then drain internal transitions
+        self.child.microstep()
+        self.child.drain_internal()
+        self._pump()
+
+    def _pump(self) -> None:
+        """Drain child outputs and detect completion."""
+        if not self.child:
+            return
+        root_id = self.child.root_activation.id
+        while True:
+            evt = self.child.events.pop()
+            if not evt:
+                break
+            if evt.name == f"done.state.{root_id}":
+                self._on_done(evt.data)
+                break
