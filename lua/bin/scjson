@@ -1,39 +1,626 @@
-#!/usr/bin/env lua5.4
+#!/usr/bin/env lua
 --[[
 Agent Name: lua-cli-runner
 
 Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
+
+Command line entry point for the Lua implementation of the scjson tools.
 ]]
 
+local debug_info = debug.getinfo(1, 'S')
+local script_path = debug_info and debug_info.source and debug_info.source:match('@(.*/)')
+if script_path then
+    local root = script_path .. '../'
+    package.path = root .. '?.lua;' .. root .. '?/init.lua;' .. package.path
+    package.cpath = root .. '?.so;' .. package.cpath
+end
+
 local scjson = require('scjson')
+local lfs = require('lfs')
 
-local cmd = arg[1]
-local path = arg[2]
+local VERSION = 'scjson (Lua) CLI'
 
-if not cmd or not path then
-    io.stderr:write('Usage: scjson <json|xml> <path>\n')
-    os.exit(1)
+---
+-- Print CLI usage information.
+-- @return nil
+local function print_usage()
+    io.write([[scjson (Lua)
+
+Usage: scjson <command> [options] <path>
+
+Commands:
+  json <path>       Convert SCXML files to scjson.
+  xml <path>        Convert scjson files to SCXML.
+  validate <path>   Round-trip files without writing output.
+
+Options:
+  -o, --output PATH   Destination file or directory.
+  -r, --recursive     Recurse into directories.
+  --verify            Round-trip conversions without writing output.
+  --keep-empty        Preserve empty values when producing scjson.
+  --skip-unknown      Ignore unknown XML elements (no-op placeholder).
+  --fail-unknown      Enable strict handling of unknown XML elements.
+  -h, --help          Show this message and exit.
+  --version           Show version information.
+]])
 end
 
-if cmd == 'json' then
-    local data = io.open(path):read('*a')
-    local out = scjson.xml_to_json(data)
-    local out_path = path:gsub('%.scxml$', '.scjson')
-    local f = io.open(out_path, 'w')
-    f:write(out)
-    f:close()
-    print('Wrote ' .. out_path)
-elseif cmd == 'xml' then
-    local data = io.open(path):read('*a')
-    local out = scjson.json_to_xml(data)
-    local out_path = path:gsub('%.scjson$', '.scxml')
-    local f = io.open(out_path, 'w')
-    f:write(out)
-    f:close()
-    print('Wrote ' .. out_path)
-else
-    io.stderr:write('Unknown command: ' .. cmd .. '\n')
-    os.exit(1)
+---
+-- Normalise a filesystem path by resolving ``.`` and ``..`` segments.
+-- @param path string relative or absolute path
+-- @return string normalised path
+local function normalize_path(path)
+    if not path or path == '' then
+        return ''
+    end
+    local is_abs = path:sub(1, 1) == '/'
+    local parts = {}
+    for segment in path:gmatch('([^/]+)') do
+        if segment == '..' then
+            if #parts > 0 then
+                table.remove(parts)
+            end
+        elseif segment ~= '.' and segment ~= '' then
+            parts[#parts + 1] = segment
+        end
+    end
+    local normalised = table.concat(parts, '/')
+    if is_abs then
+        if normalised == '' then
+            return '/'
+        end
+        return '/' .. normalised
+    end
+    if normalised == '' then
+        return '.'
+    end
+    return normalised
 end
+
+---
+-- Convert a path to an absolute representation.
+-- @param path string relative or absolute path
+-- @return string absolute path
+local function absolute_path(path)
+    if not path or path == '' then
+        return normalize_path(lfs.currentdir())
+    end
+    if path:sub(1, 1) == '/' then
+        return normalize_path(path)
+    end
+    return normalize_path(lfs.currentdir() .. '/' .. path)
+end
+
+---
+-- Join path segments using POSIX separators.
+-- @param base string base path
+-- @param child string child component
+-- @return string joined path
+local function join_path(base, child)
+    if child == '' or not child then
+        return base
+    end
+    if child:sub(1, 1) == '/' then
+        return normalize_path(child)
+    end
+    if base == '' or not base then
+        return normalize_path(child)
+    end
+    if base:sub(-1) == '/' then
+        return normalize_path(base .. child)
+    end
+    return normalize_path(base .. '/' .. child)
+end
+
+---
+-- Return the directory portion of a path.
+-- @param path string input path
+-- @return string directory path
+local function dirname(path)
+    if not path or path == '' then
+        return '.'
+    end
+    local dir = path:match('^(.*)/[^/]+$')
+    if not dir or dir == '' then
+        return '.'
+    end
+    return dir
+end
+
+---
+-- Return the final component of a path.
+-- @param path string input path
+-- @return string file name component
+local function basename(path)
+    if not path or path == '' then
+        return ''
+    end
+    local name = path:match('([^/]+)$')
+    return name or path
+end
+
+---
+-- Replace the extension of a path with a new suffix.
+-- @param path string original path
+-- @param new_ext string extension including leading dot
+-- @return string updated path
+local function replace_extension(path, new_ext)
+    if path:find('%.') then
+        return path:gsub('%.[^/.]+$', new_ext)
+    end
+    return path .. new_ext
+end
+
+---
+-- Compute the relative path from ``base`` to ``path`` when possible.
+-- @param base string base directory
+-- @param path string target path
+-- @return string relative representation when ``path`` is inside ``base``
+local function relative_path(base, path)
+    if not base or base == '' then
+        return path
+    end
+    if base:sub(-1) ~= '/' then
+        base = base .. '/'
+    end
+    if path:sub(1, #base) == base then
+        return path:sub(#base + 1)
+    end
+    return path
+end
+
+---
+-- Recursively create directories along ``path``.
+-- @param path string directory path
+-- @return boolean success, string|nil error message on failure
+local function ensure_dir(path)
+    if not path or path == '' or path == '.' then
+        return true
+    end
+    local attrs = lfs.attributes(path)
+    if attrs and attrs.mode == 'directory' then
+        return true
+    end
+    local parent = dirname(path)
+    if parent and parent ~= path then
+        local ok, err = ensure_dir(parent)
+        if not ok then
+            return false, err
+        end
+    end
+    local ok, err = lfs.mkdir(path)
+    if not ok and err ~= 'File exists' then
+        return false, err
+    end
+    return true
+end
+
+---
+-- Test whether a path exists and points to a directory.
+-- @param path string path to inspect
+-- @return boolean true when ``path`` is a directory
+local function is_directory(path)
+    local attrs = lfs.attributes(path)
+    return attrs and attrs.mode == 'directory'
+end
+
+---
+-- Test whether a path exists and points to a file.
+-- @param path string path to inspect
+-- @return boolean true when ``path`` is a file
+local function is_file(path)
+    local attrs = lfs.attributes(path)
+    return attrs and attrs.mode == 'file'
+end
+
+---
+-- Read the entire contents of a file.
+-- @param path string file to read
+-- @return boolean success flag, string|nil data or error message
+local function read_file(path)
+    local handle, err = io.open(path, 'r')
+    if not handle then
+        return false, err
+    end
+    local content = handle:read('*a')
+    handle:close()
+    return true, content
+end
+
+---
+-- Write content to a file, truncating any existing data.
+-- @param path string destination path
+-- @param data string content to write
+-- @return boolean success flag, string|nil error message
+local function write_file(path, data)
+    local ok, err = ensure_dir(dirname(path))
+    if not ok then
+        return false, err
+    end
+    local handle, open_err = io.open(path, 'w')
+    if not handle then
+        return false, open_err
+    end
+    handle:write(data)
+    handle:close()
+    return true
+end
+
+---
+-- Iterate over files beneath ``root`` selecting those with ``suffix``.
+-- @param root string starting directory
+-- @param recursive boolean recurse into subdirectories when true
+-- @param suffix string file name suffix to match
+-- @return table list of absolute file paths
+local function collect_files(root, recursive, suffix)
+    local results = {}
+    local function walk(dir)
+        for entry in lfs.dir(dir) do
+            if entry ~= '.' and entry ~= '..' then
+                local full = join_path(dir, entry)
+                local attrs = lfs.attributes(full)
+                if attrs and attrs.mode == 'directory' then
+                    if recursive then
+                        walk(full)
+                    end
+                elseif attrs and attrs.mode == 'file' then
+                    if not suffix or entry:sub(-#suffix) == suffix then
+                        results[#results + 1] = full
+                    end
+                end
+            end
+        end
+    end
+    walk(root)
+    table.sort(results)
+    return results
+end
+
+---
+-- Convert a single SCXML file to scjson.
+-- @param src string source file
+-- @param dest string|nil destination file path
+-- @param omit_empty boolean remove empty fields when true
+-- @param verify_only boolean perform round-trip without writing output
+-- @return boolean success flag
+local function convert_scxml_file(src, dest, omit_empty, verify_only)
+    local ok, data_or_err = read_file(src)
+    if not ok then
+        io.stderr:write('Failed to read ' .. src .. ': ' .. tostring(data_or_err) .. '\n')
+        return false
+    end
+    local success, json_or_err = pcall(scjson.xml_to_json, data_or_err, omit_empty)
+    if not success then
+        io.stderr:write('Failed to convert ' .. src .. ': ' .. tostring(json_or_err) .. '\n')
+        return false
+    end
+    if verify_only then
+        local verify_ok, verify_err = pcall(scjson.json_to_xml, json_or_err)
+        if not verify_ok then
+            io.stderr:write('Verification failed for ' .. src .. ': ' .. tostring(verify_err) .. '\n')
+            return false
+        end
+        io.stdout:write('Verified ' .. src .. '\n')
+        return true
+    end
+    if not dest then
+        io.stderr:write('No output path provided for ' .. src .. '\n')
+        return false
+    end
+    local write_ok, write_err = write_file(dest, json_or_err)
+    if not write_ok then
+        io.stderr:write('Failed to write ' .. dest .. ': ' .. tostring(write_err) .. '\n')
+        return false
+    end
+    io.stdout:write('Wrote ' .. dest .. '\n')
+    return true
+end
+
+---
+-- Convert a single scjson file to SCXML.
+-- @param src string source file
+-- @param dest string|nil destination file path
+-- @param verify_only boolean perform round-trip without writing output
+-- @return boolean success flag
+local function convert_scjson_file(src, dest, verify_only)
+    local ok, data_or_err = read_file(src)
+    if not ok then
+        io.stderr:write('Failed to read ' .. src .. ': ' .. tostring(data_or_err) .. '\n')
+        return false
+    end
+    local success, xml_or_err = pcall(scjson.json_to_xml, data_or_err)
+    if not success then
+        io.stderr:write('Failed to convert ' .. src .. ': ' .. tostring(xml_or_err) .. '\n')
+        return false
+    end
+    if verify_only then
+        local verify_ok, verify_err = pcall(scjson.xml_to_json, xml_or_err)
+        if not verify_ok then
+            io.stderr:write('Verification failed for ' .. src .. ': ' .. tostring(verify_err) .. '\n')
+            return false
+        end
+        io.stdout:write('Verified ' .. src .. '\n')
+        return true
+    end
+    if not dest then
+        io.stderr:write('No output path provided for ' .. src .. '\n')
+        return false
+    end
+    local write_ok, write_err = write_file(dest, xml_or_err)
+    if not write_ok then
+        io.stderr:write('Failed to write ' .. dest .. ': ' .. tostring(write_err) .. '\n')
+        return false
+    end
+    io.stdout:write('Wrote ' .. dest .. '\n')
+    return true
+end
+
+---
+-- Parse CLI arguments following the initial command token.
+-- @param argv table of arguments (``arg``)
+-- @return table|nil options table, string|nil error message
+local function parse_args(argv)
+    local opts = {
+        command = argv[1],
+        recursive = false,
+        verify = false,
+        keep_empty = false,
+        fail_unknown = true,
+    }
+    if not opts.command then
+        return nil, 'missing command'
+    end
+    local i = 2
+    while i <= #argv do
+        local token = argv[i]
+        if token == '-o' or token == '--output' then
+            i = i + 1
+            if i > #argv then
+                return nil, '--output requires a path'
+            end
+            opts.output = argv[i]
+        elseif token == '-r' or token == '--recursive' then
+            opts.recursive = true
+        elseif token == '--verify' or token == '-v' then
+            opts.verify = true
+        elseif token == '--keep-empty' then
+            opts.keep_empty = true
+        elseif token == '--skip-unknown' then
+            opts.fail_unknown = false
+        elseif token == '--fail-unknown' then
+            opts.fail_unknown = true
+        elseif token == '-h' or token == '--help' then
+            opts.help = true
+        elseif token == '--version' then
+            opts.version = true
+        else
+            if opts.path then
+                return nil, 'unexpected argument: ' .. token
+            end
+            opts.path = token
+        end
+        i = i + 1
+    end
+    return opts
+end
+
+---
+-- Execute the ``json`` subcommand.
+-- @param opts table parsed options
+-- @return boolean success flag
+local function run_json(opts)
+    if not opts.path then
+        io.stderr:write('json command requires a path\n')
+        return false
+    end
+    local input_path = absolute_path(opts.path)
+    local output_root = opts.output and absolute_path(opts.output) or nil
+    local omit_empty = not opts.keep_empty
+    if is_directory(input_path) then
+        local sources = collect_files(input_path, opts.recursive, '.scxml')
+        if #sources == 0 then
+            io.stderr:write('No .scxml files found under ' .. input_path .. '\n')
+        end
+        local target_root
+        if opts.verify then
+            target_root = nil
+        else
+            target_root = output_root or input_path
+            local ok, err = ensure_dir(target_root)
+            if not ok then
+                io.stderr:write('Failed to prepare output directory ' .. target_root .. ': ' .. tostring(err) .. '\n')
+                return false
+            end
+        end
+        local errors = 0
+        for _, src in ipairs(sources) do
+            local dest = nil
+            if target_root then
+                local rel = relative_path(input_path, src)
+                dest = join_path(target_root, rel)
+                dest = replace_extension(dest, '.scjson')
+            end
+            if not convert_scxml_file(src, dest, omit_empty, opts.verify) then
+                errors = errors + 1
+            end
+        end
+        return errors == 0
+    elseif is_file(input_path) then
+        local dest = nil
+        if not opts.verify then
+            if output_root then
+                if is_directory(output_root) then
+                    dest = join_path(output_root, replace_extension(basename(input_path), '.scjson'))
+                elseif output_root:sub(-7) == '.scjson' then
+                    dest = output_root
+                else
+                    local ok, err = ensure_dir(output_root)
+                    if not ok then
+                        io.stderr:write('Failed to prepare output directory ' .. output_root .. ': ' .. tostring(err) .. '\n')
+                        return false
+                    end
+                    dest = join_path(output_root, replace_extension(basename(input_path), '.scjson'))
+                end
+            else
+                dest = replace_extension(input_path, '.scjson')
+            end
+        end
+        return convert_scxml_file(input_path, dest, omit_empty, opts.verify)
+    else
+        io.stderr:write('Path not found: ' .. input_path .. '\n')
+        return false
+    end
+end
+
+---
+-- Execute the ``xml`` subcommand.
+-- @param opts table parsed options
+-- @return boolean success flag
+local function run_xml(opts)
+    if not opts.path then
+        io.stderr:write('xml command requires a path\n')
+        return false
+    end
+    local input_path = absolute_path(opts.path)
+    local output_root = opts.output and absolute_path(opts.output) or nil
+    if is_directory(input_path) then
+        local sources = collect_files(input_path, opts.recursive, '.scjson')
+        if #sources == 0 then
+            io.stderr:write('No .scjson files found under ' .. input_path .. '\n')
+        end
+        local target_root
+        if opts.verify then
+            target_root = nil
+        else
+            target_root = output_root or input_path
+            local ok, err = ensure_dir(target_root)
+            if not ok then
+                io.stderr:write('Failed to prepare output directory ' .. target_root .. ': ' .. tostring(err) .. '\n')
+                return false
+            end
+        end
+        local errors = 0
+        for _, src in ipairs(sources) do
+            local dest = nil
+            if target_root then
+                local rel = relative_path(input_path, src)
+                dest = join_path(target_root, rel)
+                dest = replace_extension(dest, '.scxml')
+            end
+            if not convert_scjson_file(src, dest, opts.verify) then
+                errors = errors + 1
+            end
+        end
+        return errors == 0
+    elseif is_file(input_path) then
+        local dest = nil
+        if not opts.verify then
+            if output_root then
+                if is_directory(output_root) then
+                    dest = join_path(output_root, replace_extension(basename(input_path), '.scxml'))
+                elseif output_root:sub(-6) == '.scxml' then
+                    dest = output_root
+                else
+                    local ok, err = ensure_dir(output_root)
+                    if not ok then
+                        io.stderr:write('Failed to prepare output directory ' .. output_root .. ': ' .. tostring(err) .. '\n')
+                        return false
+                    end
+                    dest = join_path(output_root, replace_extension(basename(input_path), '.scxml'))
+                end
+            else
+                dest = replace_extension(input_path, '.scxml')
+            end
+        end
+        return convert_scjson_file(input_path, dest, opts.verify)
+    else
+        io.stderr:write('Path not found: ' .. input_path .. '\n')
+        return false
+    end
+end
+
+---
+-- Execute the ``validate`` subcommand by round-tripping inputs in memory.
+-- @param opts table parsed options
+-- @return boolean success flag
+local function run_validate(opts)
+    if not opts.path then
+        io.stderr:write('validate command requires a path\n')
+        return false
+    end
+    local input_path = absolute_path(opts.path)
+    local sources = {}
+    if is_directory(input_path) then
+        local scxml_files = collect_files(input_path, opts.recursive, '.scxml')
+        local json_files = collect_files(input_path, opts.recursive, '.scjson')
+        for _, p in ipairs(scxml_files) do
+            sources[#sources + 1] = p
+        end
+        for _, p in ipairs(json_files) do
+            sources[#sources + 1] = p
+        end
+    elseif is_file(input_path) then
+        sources[#sources + 1] = input_path
+    else
+        io.stderr:write('Path not found: ' .. input_path .. '\n')
+        return false
+    end
+    local errors = 0
+    for _, src in ipairs(sources) do
+        if src:sub(-6) == '.scxml' then
+            if not convert_scxml_file(src, nil, not opts.keep_empty, true) then
+                errors = errors + 1
+            end
+        elseif src:sub(-7) == '.scjson' then
+            if not convert_scjson_file(src, nil, true) then
+                errors = errors + 1
+            end
+        end
+    end
+    return errors == 0
+end
+
+---
+-- Dispatch commands based on parsed arguments.
+-- @param argv table command line arguments (``arg``)
+-- @return integer shell exit code
+local function main(argv)
+    local first = argv[1]
+    if not first or first == '-h' or first == '--help' or first == 'help' then
+        print_usage()
+        return first and 0 or 1
+    end
+    if first == '--version' then
+        io.write(VERSION .. '\n')
+        return 0
+    end
+    local opts, err = parse_args(argv)
+    if not opts then
+        io.stderr:write('Error: ' .. err .. '\n')
+        return 1
+    end
+    if opts.help then
+        print_usage()
+        return 0
+    end
+    if opts.version then
+        io.write(VERSION .. '\n')
+        return 0
+    end
+    local ok
+    if opts.command == 'json' then
+        ok = run_json(opts)
+    elseif opts.command == 'xml' then
+        ok = run_xml(opts)
+    elseif opts.command == 'validate' then
+        ok = run_validate(opts)
+    else
+        io.stderr:write('Unknown command: ' .. tostring(opts.command) .. '\n')
+        return 1
+    end
+    return ok and 0 or 1
+end
+
+os.exit(main(arg))
