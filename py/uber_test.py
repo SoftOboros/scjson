@@ -43,7 +43,7 @@ LANG_CMDS: dict[str, list[str]] = {
     "python": [sys.executable, "-m", "scjson"],
     "javascript": ["node", str(ROOT / "js" )],
     "ruby": ["ruby", str(ROOT / "ruby" / "bin" / "scjson")],
-    "lua": ["lua5.4", str(ROOT / "lua" / "bin" / "scjson")],
+    "lua": ["lua", str(ROOT / "lua" / "bin" / "scjson")],
     "go": [str(ROOT / "go" / "go")],
     "rust": [str(ROOT / "rust" / "target" / "debug" / "scjson_rust")],
     "swift": [str(ROOT / "swift" / ".build" / "x86_64-unknown-linux-gnu" / "debug" / "scjson-swift")],
