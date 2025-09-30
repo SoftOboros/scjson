@@ -1154,3 +1154,89 @@ def test_multiple_invocations_autoforward(tmp_path):
     assert isinstance(h1, RecordHandler) and isinstance(h2, RecordHandler)
     assert h1.received and h1.received[0] == ("poke", {"k": 2})
     assert h2.received and h2.received[0] == ("poke", {"k": 2})
+
+
+def test_multiple_invocations_in_distinct_states_autoforward_switch(tmp_path):
+    chart = tmp_path / "invoke_switch.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s1">
+  <state id="s1">
+    <invoke type="mock:record" id="rec1" autoforward="true"/>
+    <transition event="to2" target="s2"/>
+  </state>
+  <state id="s2">
+    <invoke type="mock:record" id="rec2" autoforward="true"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # While in s1, note should go to rec1 only
+    ctx.enqueue("note", {"n": 1})
+    ctx.microstep()
+    h1 = ctx.invocations.get("rec1")
+    h2 = ctx.invocations.get("rec2")
+    assert isinstance(h1, RecordHandler)
+    assert h1.received and h1.received[-1] == ("note", {"n": 1})
+    assert (h2 is None) or (not getattr(h2, "received", []))
+
+    # Switch to s2; now note2 should go to rec2 only
+    ctx.enqueue("to2")
+    ctx.microstep()
+    ctx.enqueue("note2", {"n": 2})
+    ctx.microstep()
+    h2 = ctx.invocations.get("rec2")
+    assert isinstance(h2, RecordHandler)
+    assert h2.received and h2.received[-1] == ("note2", {"n": 2})
+
+
+def test_finalize_runs_before_done_in_same_microstep(tmp_path):
+    chart = tmp_path / "invoke_finalize_order.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel><data id="flag" expr="0"/></datamodel>
+  <state id="s">
+    <invoke type="mock:deferred" id="job">
+      <finalize><assign location="flag" expr="1"/></finalize>
+    </invoke>
+    <transition event="done.invoke.job" cond="flag == 1" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    ctx.enqueue("complete")
+    ctx.microstep()
+    # Transition should have fired in the same microstep thanks to finalize-before-enqueue
+    assert "pass" in ctx.configuration
+
+
+def test_finalize_event_scope_is_transient(tmp_path):
+    chart = tmp_path / "invoke_finalize_scope.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="mock:immediate">
+      <finalize>
+        <assign location="visible" expr="1"/>
+      </finalize>
+    </invoke>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # _event should not leak into state local_data after finalize
+    act_s = ctx.activations.get("s")
+    assert act_s is not None
+    assert "_event" not in act_s.local_data
