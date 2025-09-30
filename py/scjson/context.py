@@ -86,6 +86,7 @@ class DocumentContext(BaseModel):
     invocations_by_state: Dict[str, List[str]] = Field(default_factory=dict)
     _invoke_specs: Dict[str, tuple[Any, ActivationRecord]] = PrivateAttr(default_factory=dict)
     invocations_autoforward: Dict[str, bool] = Field(default_factory=dict)
+    _base_dir: Optional[Path] = PrivateAttr(default=None)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -1028,10 +1029,26 @@ class DocumentContext(BaseModel):
                     inv_type = str(self._evaluate_expr(inv.typeexpr, env))
                 except Exception:
                     pass
+            # Normalize well-known SCXML type URI
+            if str(inv_type).strip().lower() in {"http://www.w3.org/tr/scxml/", "w3c:scxml"}:
+                inv_type = "scxml"
             inv_src = getattr(inv, "src", None)
             if getattr(inv, "srcexpr", None):
                 try:
                     inv_src = self._evaluate_expr(inv.srcexpr, env)
+                except Exception:
+                    pass
+            # Resolve file: URIs and relative paths using the parent's base_dir
+            if isinstance(inv_src, str):
+                src_text = inv_src
+                if src_text.startswith("file:"):
+                    src_text = src_text[5:]
+                try:
+                    p = Path(src_text)
+                    if not p.is_absolute() and self._base_dir is not None:
+                        inv_src = (self._base_dir / p).resolve()
+                    else:
+                        inv_src = p
                 except Exception:
                     pass
 
@@ -1088,6 +1105,8 @@ class DocumentContext(BaseModel):
                 self._run_finalize(spec, act, inv_id, data)
             except Exception:
                 pass
+        # Enqueue generic done.invoke first for engines/tests that expect it
+        self.events.push(Event(name="done.invoke", data=data))
         self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
         handler = self.invocations.pop(inv_id, None)
         if handler:
@@ -1550,7 +1569,7 @@ class DocumentContext(BaseModel):
         json_str = handler.xml_to_json(xml_str)
         data = cls._prepare_raw_data(json.loads(json_str))
         doc = Scxml.model_validate(data)
-        return cls._from_model(
+        ctx = cls._from_model(
             doc,
             data,
             allow_unsafe_eval=allow_unsafe_eval,
@@ -1558,6 +1577,11 @@ class DocumentContext(BaseModel):
             execution_mode=mode,
             source_xml=xml_str,
         )
+        try:
+            ctx._base_dir = Path(path).resolve().parent
+        except Exception:
+            ctx._base_dir = None
+        return ctx
 
     @classmethod
     def _from_model(

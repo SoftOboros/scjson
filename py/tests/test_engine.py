@@ -1067,6 +1067,56 @@ def test_invoke_scxml_child_completes_and_finalizes(tmp_path):
     assert ctx.data_model["x"] == 42
 
 
+def test_invoke_generic_done_event(tmp_path):
+    chart = tmp_path / "invoke_generic_done.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="mock:immediate" id="child"/>
+    <transition event="done.invoke" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Transition on generic done.invoke should have fired
+    assert "pass" in ctx.configuration
+
+
+def test_invoke_type_uri_and_file_src(tmp_path):
+    child = tmp_path / "sub.scxml"
+    child.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="f" id="sub">
+  <final id="f"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    chart = tmp_path / "invoke_uri.scxml"
+    chart.write_text(
+        f"""
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="http://www.w3.org/TR/scxml/" src="file:{child.name}" id="child"/>
+    <transition event="done.invoke.child" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Child completes immediately; relative file: URI should resolve against base_dir
+    assert "pass" in ctx.configuration
+
+
 def test_invoke_child_bubbles_event_to_parent(tmp_path):
     child = tmp_path / "child_bubble.scxml"
     child.write_text(
