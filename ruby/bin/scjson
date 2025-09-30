@@ -5,6 +5,8 @@
 # Developed by Softoboros Technology Inc.
 # Licensed under the BSD 1-Clause License.
 
+ENV['BUNDLE_GEMFILE'] ||= File.expand_path('../Gemfile', __dir__)
+
 require 'bundler/setup'
 require_relative '../lib/scjson/cli'
 Scjson.main
