@@ -7,8 +7,11 @@ Licensed under the BSD 1-Clause License.
 """
 
 from decimal import Decimal
-from scjson.pydantic import Scxml, State, Transition, Datamodel, Data
-from scjson.context import DocumentContext
+import pytest
+from xsdata.exceptions import ParserError
+
+from scjson.pydantic import Scxml, State, Transition, Datamodel, Data, Parallel
+from scjson.context import DocumentContext, ExecutionMode
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
 
@@ -96,6 +99,183 @@ def _make_history_doc() -> Scxml:
         ],
         version=Decimal("1.0"),
     )
+
+
+def _make_deep_history_doc() -> Scxml:
+    """Parent state with deep history restoring nested descendant."""
+    return Scxml(
+        id="histdeep",
+        initial=["p"],
+        state=[
+            State(
+                id="p",
+                initial_attribute=["s1"],
+                history=[{"id": "h", "type_value": "deep", "transition": Transition(target=["s2b"]) }],
+                state=[
+                    State(
+                        id="s1",
+                        initial_attribute=["s1a"],
+                        state=[
+                            State(id="s1a", transition=[Transition(event="next", target=["s1b"]) ]),
+                            State(id="s1b"),
+                        ],
+                        transition=[Transition(event="toQ", target=["q"])]
+                    ),
+                    State(
+                        id="s2",
+                        initial_attribute=["s2a"],
+                        state=[State(id="s2a"), State(id="s2b")],
+                    ),
+                ],
+                transition=[Transition(event="toQ", target=["q"])]
+            ),
+            State(id="q", transition=[Transition(event="back", target=["h"]) ]),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def test_deep_history_restores_descendant_path():
+    """Deep history should restore to the nested descendant active at exit."""
+    ctx = DocumentContext.from_doc(_make_deep_history_doc())
+    # Currently in p -> s1 -> s1a
+    ctx.enqueue("next")
+    ctx.microstep()
+    assert "s1b" in ctx.configuration
+    # Transition to q, then back via history 'h'
+    ctx.enqueue("toQ")
+    ctx.microstep()
+    assert "q" in ctx.configuration and "s1b" not in ctx.configuration
+    ctx.enqueue("back")
+    ctx.microstep()
+    # Deep history should return us to s1b (not initial s1a)
+    assert "s1b" in ctx.configuration
+
+
+def _make_done_compound_doc() -> Scxml:
+    """Compound state that raises ``done.state`` when entering its final child."""
+    return Scxml(
+        id="root",
+        initial=["s"],
+        state=[
+            State(
+                id="s",
+                state=[State(id="x", transition=[Transition(target=["f"])])],
+                final=[{"id": "f"}],
+                transition=[Transition(event="done.state.s", target=["pass"])],
+            ),
+            State(id="pass"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def _make_done_parallel_doc() -> Scxml:
+    """Parallel with two regions; emits region done and then parent done."""
+    return Scxml(
+        id="pdoc",
+        datamodel=[Datamodel(data=[Data(id="v", expr="0")])],
+        initial=["p"],
+        parallel=[
+            Parallel(
+                id="p",
+                onentry=[
+                    {"raise_value": [{"event": "e1"}]},
+                    {"raise_value": [{"event": "e2"}]},
+                ],
+                transition=[
+                    Transition(event="done.state.r1", assign=[{"location": "v", "expr": "1"}]),
+                    Transition(event="done.state.r2", target=["s1"]),
+                ],
+                state=[
+                    State(
+                        id="r1",
+                        initial_attribute=["r1a"],
+                        state=[State(id="r1a", transition=[Transition(event="e1", target=["r1f"])])],
+                        final=[{"id": "r1f"}],
+                    ),
+                    State(
+                        id="r2",
+                        initial_attribute=["r2a"],
+                        state=[State(id="r2a", transition=[Transition(event="e2", target=["r2f"])])],
+                        final=[{"id": "r2f"}],
+                    ),
+                ],
+            )
+        ],
+        state=[
+            State(
+                id="s1",
+                transition=[
+                    Transition(event="done.state.p", cond="v == 1", target=["pass"]),
+                    Transition(event="*", target=["fail"]),
+                ],
+            ),
+            State(id="pass"),
+            State(id="fail"),
+        ],
+        version=Decimal("1.0"),
+    )
+
+
+def test_external_send_emits_error_communication(tmp_path):
+    """External send target should produce error.communication and not enqueue external event."""
+    chart = tmp_path / "external_send.scxml"
+    chart.write_text(
+        """
+<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" initial=\"s\" datamodel=\"python\">
+  <state id=\"s\">
+    <onentry>
+      <send event=\"poke\" target=\"#external\"/>
+    </onentry>
+  </state>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # First event should be error.communication (no other events enqueued)
+    evt = ctx.events.pop()
+    assert evt and evt.name == "error.communication"
+    assert ctx.events.pop() is None
+
+def test_error_event_emitted_on_cond_failure():
+    """A failing cond expression should enqueue error.execution."""
+    doc = Scxml(
+        id="err",
+        initial=["s"],
+        state=[
+            State(id="s", transition=[Transition(event="go", target=["t"], cond="undefined_var + 1")]),
+            State(id="t"),
+        ],
+        version=Decimal("1.0"),
+    )
+    ctx = DocumentContext.from_doc(doc)
+    ctx.enqueue("go")
+    ctx.microstep()
+    err = ctx.events.pop()
+    assert err is not None and err.name == "error.execution"
+
+
+def test_done_state_compound():
+    """done.state.<parent> is raised on entering a final child."""
+    ctx = DocumentContext.from_doc(_make_done_compound_doc())
+    # Trigger transition into the final child of state 's'
+    ctx.enqueue("__start__")  # no-op to step
+    ctx.microstep()  # drain initial (no effect)
+    # transition from x -> f (eventless)
+    ctx.microstep()
+    # process done.state.s to move to 'pass'
+    ctx.microstep()
+    assert "pass" in ctx.configuration
+
+
+def test_done_state_parallel_sequence():
+    """Parallel emits region done events before parent done, allowing ordering-sensitive logic."""
+    ctx = DocumentContext.from_doc(_make_done_parallel_doc())
+    # Run until all internal events are processed
+    ctx.run()
+    assert "pass" in ctx.configuration
 
 
 def test_initial_configuration():
@@ -277,3 +457,433 @@ def test_xml_skip_unknown(tmp_path):
     handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
     json_str = handler.xml_to_json(xml)
     assert "bogus" not in json_str
+
+
+def test_execution_mode_defaults_to_strict():
+    ctx = DocumentContext.from_doc(_make_doc())
+    assert ctx.execution_mode is ExecutionMode.STRICT
+
+
+def test_execution_mode_lax_allows_unknown(tmp_path):
+    chart = tmp_path / "unknown.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s">
+  <state id="s">
+    <bogus />
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ParserError):
+        DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.STRICT)
+
+    ctx = DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
+    assert ctx.execution_mode is ExecutionMode.LAX
+
+
+def test_if_elseif_else_branches(tmp_path):
+    chart = tmp_path / "branches.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <datamodel>
+    <data id="flag" expr="1"/>
+    <data id="value" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <onentry>
+      <if cond="flag == 0">
+        <assign location="value" expr="100"/>
+        <elseif cond="flag == 1"/>
+        <assign location="value" expr="200"/>
+        <else/>
+        <assign location="value" expr="300"/>
+      </if>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    assert ctx.data_model["value"] == 200
+
+
+def test_foreach_executes_body(tmp_path):
+    chart = tmp_path / "foreach.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <datamodel>
+    <data id="total" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <onentry>
+      <foreach array="[1,2,3]" item="item" index="idx">
+        <assign location="total" expr="total + item"/>
+      </foreach>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    assert ctx.data_model["total"] == 6
+
+
+def test_send_enqueues_internal_event(tmp_path):
+    chart = tmp_path / "send.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <datamodel>
+    <data id="flag" expr="5"/>
+  </datamodel>
+  <state id="s">
+    <onentry>
+      <send event="go" id="evt">
+        <param name="value" expr="flag"/>
+      </send>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt is not None
+    assert evt.name == "go"
+    assert evt.send_id == "evt"
+    assert evt.data == {"value": 5}
+
+
+def test_cancel_removes_pending_send(tmp_path):
+    chart = tmp_path / "cancel.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="go" id="evt"/>
+      <cancel sendid="evt"/>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    assert ctx.events.pop() is None
+
+
+def test_send_delay_requires_advance_time(tmp_path):
+    chart = tmp_path / "delay.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="tick" delay="0.1s"/>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    assert ctx.events.pop() is None
+    ctx.advance_time(0.2)
+    evt = ctx.events.pop()
+    assert evt and evt.name == "tick"
+
+
+def test_delayed_sends_fire_in_order(tmp_path):
+    """Delayed events release in chronological order via advance_time."""
+    chart = tmp_path / "delayed_multi.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="first" delay="0.1s"/>
+      <send event="second" delay="0.3s"/>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    assert ctx.events.pop() is None
+
+    ctx.advance_time(0.15)
+    first = ctx.events.pop()
+    assert first is not None and first.name == "first"
+    assert ctx.events.pop() is None
+
+    ctx.advance_time(0.2)
+    second = ctx.events.pop()
+    assert second is not None and second.name == "second"
+
+
+def test_cancel_removes_delayed_send(tmp_path):
+    """Cancelling a delayed send prevents future delivery."""
+    chart = tmp_path / "cancel_delayed.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="poke" id="evt" delay="0.5s"/>
+      <cancel sendid="evt"/>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    ctx.advance_time(1.0)
+    assert ctx.events.pop() is None
+
+
+def test_send_content_text_payload(tmp_path):
+    """Textual <content> blocks populate the send payload."""
+    chart = tmp_path / "send_content_text.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="notify" id="evt">
+        <content>hello-world</content>
+      </send>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt is not None
+    assert evt.data == {"content": "hello-world"}
+
+
+def test_send_content_expr_payload(tmp_path):
+    """<content expr="..."> expressions evaluate within the sandbox."""
+    chart = tmp_path / "send_content_expr.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <datamodel>
+    <data id="value" expr="41"/>
+  </datamodel>
+  <state id="s">
+    <onentry>
+      <send event="notify" id="evt">
+        <content expr="value + 1"/>
+      </send>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt is not None
+    assert evt.data == {"content": 42}
+
+def test_send_content_nested_markup(tmp_path):
+    """Nested markup inside <content> is preserved as structured payload."""
+    chart = tmp_path / "send_content_nested.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="complex" id="evt">
+        <content>
+          <foo attr="1">text</foo>
+          <bar>
+            <baz>42</baz>
+          </bar>
+        </content>
+      </send>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt is not None
+    assert evt.data == {
+        "content": [
+            {
+                "qname": "{http://www.w3.org/2005/07/scxml}foo",
+                "text": "text",
+                "attributes": {"attr": "1"},
+            },
+            {
+                "qname": "{http://www.w3.org/2005/07/scxml}bar",
+                "text": "",
+                "children": [
+                    {
+                        "qname": "{http://www.w3.org/2005/07/scxml}baz",
+                        "text": "42",
+                    }
+                ],
+            },
+        ]
+    }
+
+
+def test_donedata_content_precedence(tmp_path):
+    """When <donedata> has both <content> and <param>, content must dominate."""
+    chart = tmp_path / "donedata_content_precedence.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <state id="x">
+      <transition target="f"/>
+    </state>
+    <final id="f">
+      <donedata>
+        <param name="ignored" expr="123"/>
+        <content>{"a": 1, "b": 2}</content>
+      </donedata>
+    </final>
+    <transition event="done.state.s" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # done.state.s should be queued from entering <final> during initialization
+    evt = ctx.events.pop()
+    assert evt is not None and evt.name == "done.state.s"
+    # Content should dominate over params; payload is the literal content string
+    assert isinstance(evt.data, str)
+    assert evt.data.strip() == '{"a": 1, "b": 2}'
+
+
+def test_deep_history_parallel_restores_both_regions(tmp_path):
+    """Deep history should restore leaf states across parallel regions."""
+    chart = tmp_path / "deep_hist_parallel.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="p">
+  <state id="p">
+    <history id="h" type="deep">
+      <transition target="par.r1b par.r2b"/>
+    </history>
+    <parallel id="par">
+      <state id="r1" initial="r1a">
+        <state id="r1a"><transition event="go1" target="r1b"/></state>
+        <state id="r1b"/>
+      </state>
+      <state id="r2" initial="r2a">
+        <state id="r2a"><transition event="go2" target="r2b"/></state>
+        <state id="r2b"/>
+      </state>
+    </parallel>
+    <transition event="toQ" target="q"/>
+  </state>
+  <state id="q">
+    <transition event="back" target="h"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Initially r1a and r2a are active under the parallel
+    ctx.enqueue("go1")
+    ctx.microstep()
+    ctx.enqueue("go2")
+    ctx.microstep()
+    assert "r1b" in ctx.configuration and "r2b" in ctx.configuration
+    # Exit to q and then return via deep history
+    ctx.enqueue("toQ")
+    ctx.microstep()
+    assert "q" in ctx.configuration
+    ctx.enqueue("back")
+    ctx.microstep()
+    # Both region leaves should be restored
+    assert "r1b" in ctx.configuration and "r2b" in ctx.configuration
+
+
+def test_error_event_ordering_precedes_later_events(tmp_path):
+    """error.execution should be queued before later events when cond fails."""
+    chart = tmp_path / "error_ordering.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <onentry>
+      <send event="go"/>
+      <send event="later"/>
+    </onentry>
+    <transition event="go" target="t" cond="undefined_var + 1"/>
+  </state>
+  <state id="t"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Process the first event (go); cond fails -> error.execution should be enqueued
+    ctx.microstep()
+    # Next event in queue should be error.execution before the later event
+    first = ctx.events.pop()
+    assert first and first.name == "error.execution"
+    second = ctx.events.pop()
+    assert second and second.name == "later"
+
+
+def test_external_send_error_precedes_raise(tmp_path):
+    """error.communication from external send should preserve document order vs raise."""
+    chart = tmp_path / "send_error_ordering.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s" datamodel="python">
+  <state id="s">
+    <onentry>
+      <send event="poke" target="#external"/>
+      <raise event="later"/>
+    </onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    e1 = ctx.events.pop()
+    e2 = ctx.events.pop()
+    assert e1 and e1.name == "error.communication"
+    assert e2 and e2.name == "later"

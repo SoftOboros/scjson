@@ -55,15 +55,19 @@ def _load_trace(path: Path) -> List[dict]:
     return lines
 
 
-def _diff_steps(py_steps: List[dict], ref_steps: List[dict]) -> Tuple[bool, List[str]]:
+def _diff_steps(py_steps: List[dict], ref_steps: List[dict]) -> Tuple[bool, List[str], Tuple[int, int, int, int]]:
     mismatch = False
     notes: List[str] = []
-    if len(py_steps) != len(ref_steps):
+    py_len = len(py_steps)
+    ref_len = len(ref_steps)
+    compared = min(py_len, ref_len)
+    mismatching_keys = 0
+    if py_len != ref_len:
         mismatch = True
         notes.append(
-            f"Length mismatch: python trace has {len(py_steps)} steps, reference has {len(ref_steps)}."
+            f"Length mismatch: python trace has {py_len} steps, reference has {ref_len}."
         )
-    for idx in range(min(len(py_steps), len(ref_steps))):
+    for idx in range(compared):
         p_step = py_steps[idx]
         r_step = ref_steps[idx]
         if p_step == r_step:
@@ -76,9 +80,10 @@ def _diff_steps(py_steps: List[dict], ref_steps: List[dict]) -> Tuple[bool, List
             p_val = p_step.get(key)
             r_val = r_step.get(key)
             if p_val != r_val:
+                mismatching_keys += 1
                 notes.append(f"  {key}: python={p_val!r} reference={r_val!r}")
         break
-    return mismatch, notes
+    return mismatch, notes, (py_len, ref_len, compared, mismatching_keys)
 
 
 def _default_reference_cmd() -> List[str]:
@@ -185,12 +190,16 @@ def main() -> None:
 
     py_steps = _load_trace(py_trace)
     ref_steps = _load_trace(ref_trace)
-    mismatch, notes = _diff_steps(py_steps, ref_steps)
+    mismatch, notes, stats = _diff_steps(py_steps, ref_steps)
 
     if mismatch:
         print("Mismatch detected (python vs reference):")
         for note in notes:
             print(note)
+        py_len, ref_len, compared, mismatching_keys = stats
+        print(
+            f"Totals: python_steps={py_len} reference_steps={ref_len} compared={compared} mismatching_keys={mismatching_keys}"
+        )
         if temp_dir:
             print(f"Artifacts retained in {workdir}")
         sys.exit(1)
@@ -207,11 +216,15 @@ def main() -> None:
         secondary_trace = workdir / "secondary.trace.jsonl"
         _run(_build_trace_cmd(secondary_cmd, chart, events, secondary_trace, treat_as_xml))
         secondary_steps = _load_trace(secondary_trace)
-        mismatch_sec, notes_sec = _diff_steps(ref_steps, secondary_steps)
+        mismatch_sec, notes_sec, stats_sec = _diff_steps(ref_steps, secondary_steps)
         if mismatch_sec:
             print("Mismatch detected (reference vs secondary):")
             for note in notes_sec:
                 print(note)
+            py_len, ref_len, compared, mismatching_keys = stats_sec
+            print(
+                f"Totals: reference_steps={py_len} secondary_steps={ref_len} compared={compared} mismatching_keys={mismatching_keys}"
+            )
             if temp_dir:
                 print(f"Artifacts retained in {workdir}")
             sys.exit(2)
