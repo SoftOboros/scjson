@@ -6,39 +6,34 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
+        <commons.scxml.version>0.9</commons.scxml.version>
     </properties>
-    <dependencies>
-        <!-- JSON Schema validation -->
+<dependencies>
         <dependency>
             <groupId>org.everit.json</groupId>
             <artifactId>org.everit.json.schema</artifactId>
             <version>1.5.1</version>
         </dependency>
-        <!-- JSON parsing and serialization -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>2.16.0</version>
         </dependency>
-        <!-- XML parsing (DOM/SAX) -->
         <dependency>
             <groupId>xerces</groupId>
             <artifactId>xercesImpl</artifactId>
             <version>2.12.2</version>
         </dependency>
-        <!-- Picocli CLI parsing -->
         <dependency>
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>
             <version>4.7.5</version>
         </dependency>
-        <!-- Apache Commons SCXML engine - strict  -->
         <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-scxml2</artifactId>
-            <version>2.0-M1</version>
+            <groupId>local.apache.commons</groupId>
+            <artifactId>commons-scxml</artifactId>
+            <version>0.9</version>
         </dependency>
-        <!-- Expression evaluation for SCXML -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-jexl</artifactId>
@@ -57,13 +52,16 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+
     <build>
+
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-		        <version>2.4</version>
-		        <configuration>
+                <version>2.4</version>
+                <configuration>
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>

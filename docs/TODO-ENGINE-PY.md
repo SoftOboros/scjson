@@ -16,10 +16,10 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 - [ ] Validate behavior across a stock corpus by comparing traces against a canonical engine.
 
 ## Reference Semantics
-- [ ] Decide canonical reference engine.
-  - [ ] Prefer Apache Commons SCXML 2.x (Java) `org.apache.commons:commons-scxml2`.
-  - [ ] If Maven/Jar acquisition is impractical, switch to a freely available authoritative engine (e.g., scion-core for Node.js).
-- [ ] Document chosen reference and rationale in repo docs.
+- [x] Decide canonical reference engine.
+  - [x] Use scion-core (Node.js) as the canonical reference for behavior.
+  - [ ] Document rationale and guidance for scion compatibility in repo docs.
+- [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (build/run optional).
 
 ## Roadmap (Iterations)
 
@@ -118,3 +118,7 @@ Comparison Tooling
 - [x] Add `engine-trace` subcommand emitting the standardized trace.
 - [x] Draft Java (or Node) runner that emits the same trace format.
 - [x] Create `tests/exec/` with 5–10 seed charts and event scripts; add a minimal `exec_compare.py` to run both and diff.
+
+### Notes
+- As of Sept 2025, Apache Commons SCXML is considered deprecated/legacy; scion-core is the authoritative implementation for behavioral compatibility.
+- Historical Commons SCXML builds (0.x) may be kept for reference but are not required for CI.
