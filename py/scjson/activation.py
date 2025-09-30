@@ -47,6 +47,7 @@ class ActivationRecord(BaseModel):
     local_data: Dict[str, Any] = Field(default_factory=dict)
     children: List["ActivationRecord"] = Field(default_factory=list)
     transitions: List["TransitionSpec"] = Field(default_factory=list)
+    invokes: List[Any] = Field(default_factory=list)
 
     def mark_final(self) -> None:
         """Flag this activation and its ancestors as final when complete."""

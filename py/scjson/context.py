@@ -34,6 +34,7 @@ from .pydantic import (
 from .events import Event, EventQueue
 from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
+from .invoke import InvokeRegistry, InvokeHandler
 from . import dataclasses as dataclasses_module
 
 
@@ -79,6 +80,11 @@ class DocumentContext(BaseModel):
     execution_mode: ExecutionMode = ExecutionMode.STRICT
     allow_unsafe_eval: bool = False
     evaluator: SafeExpressionEvaluator = Field(default_factory=SafeExpressionEvaluator)
+    # Invoke runtime
+    invoke_registry: InvokeRegistry = Field(default_factory=InvokeRegistry)
+    invocations: Dict[str, InvokeHandler] = Field(default_factory=dict)
+    invocations_by_state: Dict[str, List[str]] = Field(default_factory=dict)
+    _invoke_specs: Dict[str, tuple[Any, ActivationRecord]] = PrivateAttr(default_factory=dict)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -350,6 +356,14 @@ class DocumentContext(BaseModel):
                 container=t,
             )
             act.transitions.append(trans)
+
+        # Collect invocations declared on state-like nodes
+        try:
+            invokes = getattr(node, "invoke", [])
+            if invokes:
+                act.invokes = list(invokes)
+        except Exception:
+            pass
 
         for child in getattr(node, "state", []):
             act.add_child(
@@ -990,6 +1004,109 @@ class DocumentContext(BaseModel):
         self._timer_now += seconds
         self._release_delayed_events()
 
+    # -------------------------------
+    # Invoke lifecycle
+    # -------------------------------
+    def _start_invocations_for_state(self, act: ActivationRecord) -> None:
+        for inv in getattr(act, "invokes", []) or []:
+            inv_id = getattr(inv, "id", None)
+            if not inv_id and getattr(inv, "idlocation", None):
+                inv_id = str(uuid4())
+                self._set_variable(inv.idlocation, inv_id, act)
+            inv_id = inv_id or f"$invoke-{uuid4()}"
+
+            # Evaluate type and src if expressions provided
+            env = self._scope_env(act)
+            inv_type = getattr(inv, "type_value", None) or "scxml"
+            if getattr(inv, "typeexpr", None):
+                try:
+                    inv_type = str(self._evaluate_expr(inv.typeexpr, env))
+                except Exception:
+                    pass
+            inv_src = getattr(inv, "src", None)
+            if getattr(inv, "srcexpr", None):
+                try:
+                    inv_src = self._evaluate_expr(inv.srcexpr, env)
+                except Exception:
+                    pass
+
+            payload = self._build_invoke_payload(inv, env, act)
+
+            try:
+                handler = self.invoke_registry.create(inv_type, inv_src, payload, autostart=True,
+                                                      on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data))
+                self.invocations[inv_id] = handler
+                self.invocations_by_state.setdefault(act.id, []).append(inv_id)
+                self._invoke_specs[inv_id] = (inv, act)
+                handler.start()
+            except Exception:
+                self.events.push(Event(name="error.communication"))
+
+    def _build_invoke_payload(self, inv: Any, env: Dict[str, Any], act: ActivationRecord) -> Any:
+        payload: Dict[str, Any] = {}
+        for param in getattr(inv, "param", []) or []:
+            name = getattr(param, "name", None)
+            if not name:
+                continue
+            value: Any = None
+            if getattr(param, "expr", None) is not None:
+                try:
+                    value = self._evaluate_expr(param.expr, env)
+                except Exception:
+                    value = None
+            elif getattr(param, "location", None):
+                value = self._resolve_variable(param.location, act)
+            payload[name] = value
+        namelist = getattr(inv, "namelist", None)
+        if namelist:
+            for name in namelist.split():
+                payload[name] = env.get(name)
+        content_items = getattr(inv, "content", []) or []
+        if content_items:
+            cv = self._resolve_send_content(content_items, env)
+            if cv is not None:
+                payload.setdefault("content", cv)
+        return payload or None
+
+    def _on_invoke_done(self, inv_id: str, data: Any = None) -> None:
+        spec_act = self._invoke_specs.get(inv_id)
+        if spec_act is not None:
+            spec, act = spec_act
+            try:
+                for fin in getattr(spec, "finalize", []) or []:
+                    self._run_actions(fin, act)
+            except Exception:
+                pass
+        self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
+        handler = self.invocations.pop(inv_id, None)
+        if handler:
+            try:
+                handler.stop()
+            except Exception:
+                pass
+
+    def _cancel_invocations_for_state(self, act: ActivationRecord) -> None:
+        ids = list(self.invocations_by_state.get(act.id, []))
+        for inv_id in ids:
+            handler = self.invocations.pop(inv_id, None)
+            if handler:
+                try:
+                    handler.cancel()
+                except Exception:
+                    pass
+            spec_act = self._invoke_specs.get(inv_id)
+            if spec_act is not None:
+                spec, inv_act = spec_act
+                try:
+                    for fin in getattr(spec, "finalize", []) or []:
+                        self._run_actions(fin, inv_act)
+                except Exception:
+                    pass
+        if ids:
+            remaining = [x for x in self.invocations_by_state.get(act.id, []) if x not in set(ids)]
+            self.invocations_by_state[act.id] = remaining
+
+
     def _parse_delay(self, value: Any) -> Optional[float]:
         if value is None:
             return 0.0
@@ -1071,6 +1188,9 @@ class DocumentContext(BaseModel):
         for onentry in getattr(act.node, "onentry", []):
             self._run_actions(onentry, act)
         self._enter_initial_states(act)
+        # Start invocations after onentry/initial
+        if getattr(act, "invokes", None):
+            self._start_invocations_for_state(act)
         # If we have just entered a <final> state, raise done.state events
         # and mark completion for the containing state/parallel.
         if isinstance(act.node, ScxmlFinalType):
@@ -1168,6 +1288,8 @@ class DocumentContext(BaseModel):
                 self.history_deep[act.id] = self._active_leaves_under(act)
             except Exception:
                 self.history_deep[act.id] = list(active_children)
+        # Cancel invocations for this state prior to onexit
+        self._cancel_invocations_for_state(act)
         for cid in active_children:
             self._exit_state(self.activations[cid])
         for onexit in getattr(act.node, "onexit", []):
