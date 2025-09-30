@@ -27,6 +27,7 @@ import os
 from os import sep
 from os.path import abspath, split as pathsplit
 from pathlib import Path
+from typing import Dict, Iterable
 
 import pytest
 
@@ -38,6 +39,17 @@ from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
 ROOT = Path(sep.join(pathsplit(str(Path(__file__).resolve().parent))[:-1]))
 TUTORIAL = ROOT / "tutorial"
+
+ENGINE_KNOWN_UNSUPPORTED = {
+    # Still pending or require broader feature support
+    Path("Tests/python/W3C/Mandatory/Auto/test401.scxml"),  # expects generic 'error' event
+    # Optional features not yet targeted by the Python engine
+    Path("Tests/python/W3C/Optional/Auto/test457.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test520.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test532.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test562.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test578.scxml"),
+}
 
 LANG_CMDS: dict[str, list[str]] = {
     "python": [sys.executable, "-m", "scjson"],
@@ -90,6 +102,34 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
     except Exception:
         return False
 
+
+def _python_engine_available() -> bool:
+    try:
+        from scjson.context import DocumentContext  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _iter_python_datamodel_charts(root: Path) -> Iterable[Path]:
+    import xml.etree.ElementTree as ET
+
+    for scxml in root.rglob("*.scxml"):
+        try:
+            tree = ET.parse(scxml)
+        except ET.ParseError:
+            continue
+        root_node = tree.getroot()
+        datamodel_attr = (
+            root_node.attrib.get("datamodel")
+            or root_node.attrib.get("datamodel_attribute")
+        )
+        if datamodel_attr and datamodel_attr.strip().lower() != "python":
+            continue
+        rel = scxml.relative_to(root)
+        if rel in ENGINE_KNOWN_UNSUPPORTED:
+            continue
+        yield scxml
 
 
 SCXML_NAMESPACE_KEYS = {
@@ -456,6 +496,29 @@ def main(out_dir: str | Path = "uber_out", language: str | None = None) -> None:
             print(f"Skipping {lang}: {err}")
         except Exception as exc:  # pragma: no cover - external tools may fail
             print(f"Skipping {lang}: {exc}")
+
+
+@pytest.mark.skipif(not _python_engine_available(), reason="Python engine not available")
+def test_python_engine_executes_python_charts():
+    from scjson.context import DocumentContext
+
+    failures: Dict[Path, str] = {}
+    charts = list(_iter_python_datamodel_charts(TUTORIAL))
+    if not charts:
+        pytest.skip("No tutorial charts declare datamodel='python'")
+
+    for chart in charts:
+        try:
+            ctx = DocumentContext.from_xml_file(chart)
+            ctx.trace_step()
+        except Exception as exc:  # noqa: BLE001
+            failures[chart] = str(exc)
+
+    if failures:
+        details = "\n".join(f"- {path}: {reason}" for path, reason in sorted(failures.items()))
+        pytest.fail(
+            f"Python engine failed on {len(failures)} tutorial charts:\n{details}"
+        )
 
 
 if __name__ == "__main__":

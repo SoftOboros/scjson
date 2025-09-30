@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = "BSD-1-Clause"
 authors = [{name = "Ira Abbott", email = "ira@mycloud.blue"}]
-dependencies = ["pydantic", "lxml", "jsonschema", "click"]  # optional
+dependencies = ["pydantic", "lxml", "jsonschema", "click", "py-sandboxed"]  # optional
 
 [project.scripts]
 scjson = "scjson.__main__:main"  # Optional: installs as `scjson` shell command

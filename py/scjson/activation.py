@@ -32,6 +32,7 @@ class TransitionSpec(BaseModel):
     event: Optional[str] = None
     target: List[str] = Field(default_factory=list)
     cond: Optional[str] = None
+    container: Optional[Any] = None
 
 
 class ActivationRecord(BaseModel):

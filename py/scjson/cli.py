@@ -13,7 +13,7 @@ from typing import TextIO
 import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
-from .context import DocumentContext
+from .context import DocumentContext, ExecutionMode
 from .events import Event
 from .json_stream import JsonStreamDecoder
 from .jinja_gen import JinjaGenPydantic
@@ -334,7 +334,33 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     type=click.Path(path_type=Path),
     help="Destination trace file; defaults to stdout",
 )
-def engine_trace(input_path: Path, events_path: Path | None, is_xml: bool, out_path: Path | None) -> None:
+@click.option(
+    "--unsafe-eval",
+    is_flag=True,
+    default=False,
+    help="Disable sandboxing and allow Python eval for expressions",
+)
+@click.option(
+    "--max-steps",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Limit the number of processed event steps",
+)
+@click.option(
+    "--lax/--strict",
+    "lax_mode",
+    default=False,
+    help="Use lax execution mode when set (default strict).",
+)
+def engine_trace(
+    input_path: Path,
+    events_path: Path | None,
+    is_xml: bool,
+    out_path: Path | None,
+    unsafe_eval: bool,
+    max_steps: int | None,
+    lax_mode: bool,
+) -> None:
     """Produce a JSON lines trace of engine steps for comparison harnesses.
 
     Parameters
@@ -347,6 +373,13 @@ def engine_trace(input_path: Path, events_path: Path | None, is_xml: bool, out_p
         Treat ``input_path`` as SCXML when ``True``.
     out_path: Path | None
         Optional destination file; writes to stdout when omitted.
+    unsafe_eval: bool
+        Allow direct Python ``eval`` for expressions when ``True``.
+    max_steps: int | None
+        Optional maximum number of processed event steps after the initial
+        snapshot.
+    lax_mode: bool
+        Selects lax execution mode when ``True``; strict mode remains default.
 
     Returns
     -------
@@ -354,10 +387,15 @@ def engine_trace(input_path: Path, events_path: Path | None, is_xml: bool, out_p
         Writes one JSON object per line.
     """
 
+    execution_mode = ExecutionMode.LAX if lax_mode else ExecutionMode.STRICT
+    ctx_kwargs = {
+        "allow_unsafe_eval": unsafe_eval,
+        "execution_mode": execution_mode,
+    }
     ctx = (
-        DocumentContext.from_xml_file(input_path)
+        DocumentContext.from_xml_file(input_path, **ctx_kwargs)
         if is_xml
-        else DocumentContext.from_json_file(input_path)
+        else DocumentContext.from_json_file(input_path, **ctx_kwargs)
     )
 
     sink: TextIO
@@ -392,6 +430,12 @@ def engine_trace(input_path: Path, events_path: Path | None, is_xml: bool, out_p
 
         step_no = 1
         for msg in JsonStreamDecoder(stream):
+            if max_steps is not None and step_no > max_steps:
+                click.echo(
+                    f"Reached max step limit ({max_steps}); remaining events skipped.",
+                    err=True,
+                )
+                break
             evt_name = msg.get("event") or msg.get("name")
             if not evt_name:
                 continue
