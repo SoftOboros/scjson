@@ -164,15 +164,20 @@ class SCXMLChildHandler(InvokeHandler):
         self.child: DocumentContext | None = None
 
     def start(self) -> None:  # noqa: D401
+        # Prefer explicit src path
         path = self.src
-        if not isinstance(path, (str, Path)):
-            return  # nothing to start
-        p = Path(str(path))
         try:
-            if p.suffix.lower() == ".scxml":
-                self.child = DocumentContext.from_xml_file(p)
+            if isinstance(path, (str, Path)):
+                p = Path(str(path))
+                if p.suffix.lower() == ".scxml":
+                    self.child = DocumentContext.from_xml_file(p)
+                else:
+                    self.child = DocumentContext.from_json_file(p)
             else:
-                self.child = DocumentContext.from_json_file(p)
+                # Attempt inline content if provided in payload
+                xml_str = self._xml_from_payload_content(self.payload)
+                if xml_str:
+                    self.child = DocumentContext.from_xml_string(xml_str)
         except Exception:
             self.child = None
             return
@@ -210,6 +215,48 @@ class SCXMLChildHandler(InvokeHandler):
                 self._emit(Event(name=evt.name, data=evt.data, send_id=evt.send_id))
             except Exception:
                 pass
+
+    def _xml_from_payload_content(self, payload: Any) -> str | None:
+        content = None
+        if isinstance(payload, dict):
+            content = payload.get("content")
+        if content is None:
+            return None
+        try:
+            root_nodes = content if isinstance(content, list) else [content]
+            # Find first node whose qname ends with '}scxml' or 'scxml'
+            scxml_node = None
+            for node in root_nodes:
+                if isinstance(node, dict):
+                    qn = node.get("qname") or ""
+                    local = qn.rsplit("}", 1)[-1]
+                    if local == "scxml":
+                        scxml_node = node
+                        break
+            if not scxml_node:
+                return None
+
+            import xml.etree.ElementTree as ET
+
+            def build(elem_dict: dict) -> ET.Element:
+                qn = elem_dict.get("qname") or "scxml"
+                e = ET.Element(qn)
+                attrs = elem_dict.get("attributes") or {}
+                for k, v in attrs.items():
+                    e.set(k, str(v))
+                text = elem_dict.get("text")
+                if isinstance(text, str):
+                    e.text = text
+                for child in elem_dict.get("children") or []:
+                    if isinstance(child, dict):
+                        e.append(build(child))
+                return e
+
+            root_elem = build(scxml_node)
+            xml_str = ET.tostring(root_elem, encoding="unicode")
+            return xml_str
+        except Exception:
+            return None
 
 
 class DeferredHandler(InvokeHandler):

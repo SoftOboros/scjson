@@ -1584,6 +1584,53 @@ class DocumentContext(BaseModel):
         return ctx
 
     @classmethod
+    def from_xml_string(
+        cls,
+        xml_str: str,
+        *,
+        allow_unsafe_eval: bool = False,
+        evaluator: SafeExpressionEvaluator | None = None,
+        execution_mode: ExecutionMode | str = ExecutionMode.STRICT,
+    ) -> "DocumentContext":
+        """Create a DocumentContext from an XML string.
+
+        Parameters
+        ----------
+        xml_str: str
+            The SCXML document as a string.
+        allow_unsafe_eval: bool
+            Use Python eval for expressions if True.
+        evaluator: SafeExpressionEvaluator | None
+            Optional evaluator instance.
+        execution_mode: ExecutionMode | str
+            Strict or lax parsing.
+
+        Returns
+        -------
+        DocumentContext
+            Initialized runtime context.
+        """
+        mode = (
+            execution_mode
+            if isinstance(execution_mode, ExecutionMode)
+            else ExecutionMode(str(execution_mode).lower())
+        )
+        handler = SCXMLDocumentHandler(fail_on_unknown_properties=mode is ExecutionMode.STRICT)
+        json_str = handler.xml_to_json(xml_str)
+        data = cls._prepare_raw_data(json.loads(json_str))
+        doc = Scxml.model_validate(data)
+        ctx = cls._from_model(
+            doc,
+            data,
+            allow_unsafe_eval=allow_unsafe_eval,
+            evaluator=evaluator,
+            execution_mode=mode,
+            source_xml=xml_str,
+        )
+        ctx._base_dir = None
+        return ctx
+
+    @classmethod
     def _from_model(
         cls,
         doc: Scxml,
