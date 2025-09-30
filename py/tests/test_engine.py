@@ -1060,7 +1060,41 @@ def test_invoke_scxml_child_completes_and_finalizes(tmp_path):
     )
 
     ctx = DocumentContext.from_xml_file(parent)
+    # Child should be started at initialization; ensure parent transition fires after forwarding
     ctx.enqueue("go")
     ctx.run()
     assert "pass" in ctx.configuration
     assert ctx.data_model["x"] == 42
+
+
+def test_invoke_child_bubbles_event_to_parent(tmp_path):
+    child = tmp_path / "child_bubble.scxml"
+    child.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s" id="childroot">
+  <state id="s">
+    <onentry><raise event="childReady"/></onentry>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    parent = tmp_path / "parent_bubble.scxml"
+    parent.write_text(
+        f"""
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="scxml" id="child" src="{child}"/>
+    <transition event="childReady" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(parent)
+    # The child's raised event should be queued for the parent
+    evt = ctx.events.pop()
+    assert evt and evt.name == "childReady"

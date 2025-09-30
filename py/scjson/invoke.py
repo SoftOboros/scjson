@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, Optional
 from pathlib import Path
 
 from .context import DocumentContext
+from .events import Event
 
 
 OnDone = Callable[[Any], None]
@@ -43,6 +44,7 @@ class InvokeHandler:
         self.src = src
         self.payload = payload
         self._on_done = on_done or (lambda data: None)
+        self._emit: Callable[[Event], None] = lambda evt: None
 
     def start(self) -> None:  # noqa: D401
         """Start the invocation (no-op by default)."""
@@ -55,6 +57,16 @@ class InvokeHandler:
 
     def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
         """Send an event to the invocation (no-op by default)."""
+
+    def set_emitter(self, emitter: Callable[[Event], None]) -> None:
+        """Install a parent-emitter callback used to bubble child events.
+
+        Parameters
+        ----------
+        emitter : Callable[[Event], None]
+            Function that receives Event objects to enqueue at the parent.
+        """
+        self._emit = emitter
 
 
 class ImmediateDoneHandler(InvokeHandler):
@@ -191,3 +203,8 @@ class SCXMLChildHandler(InvokeHandler):
             if evt.name == f"done.state.{root_id}":
                 self._on_done(evt.data)
                 break
+            # Bubble the child's event to the parent
+            try:
+                self._emit(Event(name=evt.name, data=evt.data, send_id=evt.send_id))
+            except Exception:
+                pass

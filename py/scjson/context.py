@@ -1040,6 +1040,10 @@ class DocumentContext(BaseModel):
             try:
                 handler = self.invoke_registry.create(inv_type, inv_src, payload, autostart=True,
                                                       on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data))
+                try:
+                    handler.set_emitter(lambda e: self.events.push(e))
+                except Exception:
+                    pass
                 self.invocations[inv_id] = handler
                 self.invocations_by_state.setdefault(act.id, []).append(inv_id)
                 self._invoke_specs[inv_id] = (inv, act)
