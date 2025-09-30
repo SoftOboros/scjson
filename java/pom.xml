@@ -6,7 +6,6 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <commons.scxml.version>0.9</commons.scxml.version>
     </properties>
 <dependencies>
         <dependency>
@@ -28,11 +27,6 @@
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>
             <version>4.7.5</version>
-        </dependency>
-        <dependency>
-            <groupId>local.apache.commons</groupId>
-            <artifactId>commons-scxml</artifactId>
-            <version>0.9</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
