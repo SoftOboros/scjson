@@ -85,6 +85,7 @@ class DocumentContext(BaseModel):
     invocations: Dict[str, InvokeHandler] = Field(default_factory=dict)
     invocations_by_state: Dict[str, List[str]] = Field(default_factory=dict)
     _invoke_specs: Dict[str, tuple[Any, ActivationRecord]] = PrivateAttr(default_factory=dict)
+    invocations_autoforward: Dict[str, bool] = Field(default_factory=dict)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -106,6 +107,10 @@ class DocumentContext(BaseModel):
         evt = self.events.pop()
         event_consumed = evt is not None
         triggered = False
+
+        # Autoforward external events to active invocations before processing
+        if evt is not None:
+            self._autoforward_event(evt)
 
         if evt is not None:
             result = self._execute_transition(evt)
@@ -1038,6 +1043,9 @@ class DocumentContext(BaseModel):
                 self.invocations[inv_id] = handler
                 self.invocations_by_state.setdefault(act.id, []).append(inv_id)
                 self._invoke_specs[inv_id] = (inv, act)
+                # Record autoforward setting
+                af = getattr(inv, "autoforward", None)
+                self.invocations_autoforward[inv_id] = str(af).lower().endswith("true") if af is not None else False
                 handler.start()
             except Exception:
                 self.events.push(Event(name="error.communication"))
@@ -1073,8 +1081,7 @@ class DocumentContext(BaseModel):
         if spec_act is not None:
             spec, act = spec_act
             try:
-                for fin in getattr(spec, "finalize", []) or []:
-                    self._run_actions(fin, act)
+                self._run_finalize(spec, act, inv_id, data)
             except Exception:
                 pass
         self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
@@ -1098,13 +1105,38 @@ class DocumentContext(BaseModel):
             if spec_act is not None:
                 spec, inv_act = spec_act
                 try:
-                    for fin in getattr(spec, "finalize", []) or []:
-                        self._run_actions(fin, inv_act)
+                    self._run_finalize(spec, inv_act, inv_id, None)
                 except Exception:
                     pass
         if ids:
             remaining = [x for x in self.invocations_by_state.get(act.id, []) if x not in set(ids)]
             self.invocations_by_state[act.id] = remaining
+
+    def _run_finalize(self, spec: Any, act: ActivationRecord, inv_id: str, data: Any) -> None:
+        # Inject _event during finalize execution
+        saved = act.local_data.pop("_event", None)
+        try:
+            act.local_data["_event"] = {"name": f"done.invoke.{inv_id}", "data": data}
+            for fin in getattr(spec, "finalize", []) or []:
+                self._run_actions(fin, act)
+        finally:
+            if saved is not None:
+                act.local_data["_event"] = saved
+            else:
+                act.local_data.pop("_event", None)
+
+    def _autoforward_event(self, evt: Event) -> None:
+        # Skip obvious engine-internal categories
+        name = evt.name or ""
+        if name.startswith("error.") or name.startswith("done.state."):
+            return
+        for inv_id, handler in list(self.invocations.items()):
+            if self.invocations_autoforward.get(inv_id):
+                try:
+                    handler.send(evt.name, evt.data)
+                except Exception:
+                    # ignore forwarding errors
+                    pass
 
 
     def _parse_delay(self, value: Any) -> Optional[float]:

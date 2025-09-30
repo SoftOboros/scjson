@@ -13,6 +13,7 @@ from xsdata.exceptions import ParserError
 from scjson.pydantic import Scxml, State, Transition, Datamodel, Data, Parallel
 from scjson.context import DocumentContext, ExecutionMode
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+from scjson.invoke import InvokeRegistry, RecordHandler
 
 
 def _make_doc():
@@ -887,3 +888,58 @@ def test_external_send_error_precedes_raise(tmp_path):
     e2 = ctx.events.pop()
     assert e1 and e1.name == "error.communication"
     assert e2 and e2.name == "later"
+
+
+def test_invoke_immediate_done_and_finalize(tmp_path):
+    chart = tmp_path / "invoke_immediate.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel>
+    <data id="flag" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <invoke type="mock:immediate" idlocation="invId">
+      <finalize>
+        <assign location="flag" expr="1"/>
+      </finalize>
+    </invoke>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Finalize should have run immediately, setting flag to 1
+    assert ctx.data_model["flag"] == 1
+    # An invocation id should be stored
+    inv_id = ctx.root_activation.local_data.get("invId") or ctx.data_model.get("invId")
+    assert isinstance(inv_id, str) and inv_id
+    evt = ctx.events.pop()
+    assert evt and evt.name == f"done.invoke.{inv_id}"
+
+
+def test_invoke_autoforward_records_events(tmp_path):
+    chart = tmp_path / "invoke_autoforward.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="mock:record" id="rec" autoforward="true"/>
+    <transition event="go" target="t"/>
+  </state>
+  <state id="t"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Send an external event; should be forwarded to the mock record handler
+    ctx.enqueue("go", {"x": 1})
+    ctx.microstep()
+    # Locate the record handler
+    handler = ctx.invocations.get("rec")
+    assert isinstance(handler, RecordHandler)
+    assert handler.received and handler.received[0] == ("go", {"x": 1})

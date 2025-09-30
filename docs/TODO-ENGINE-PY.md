@@ -50,9 +50,10 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 - [x] Timers with mock clock for deterministic tests. (Delayed `<send>` scheduling uses `DocumentContext.advance_time` for deterministic control.)
 
 5) Invoke / Finalize
-- [ ] `<invoke>` lifecycle with `autoforward`.
-- [ ] `<param>` and `<finalize>` handling.
-- [ ] Pluggable InvokeRegistry with test/mocked invokers.
+- [x] Add scaffolding: InvokeRegistry + mock handler; start/cancel on state entry/exit; `<finalize>` executes on completion/cancel; emits `done.invoke.<id>`.
+- [ ] Implement full `<invoke>` lifecycle with `autoforward` semantics.
+- [ ] Complete `<param>`/`<content>` mapping and `_event` exposure for finalize.
+- [ ] Expand registry and add tests for multiple invoker types.
 
 6) Robustness & Performance
 - [ ] Lax vs strict execution modes; unknown element/attribute behavior.

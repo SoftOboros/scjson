@@ -92,6 +92,7 @@ class InvokeRegistry:
         self._factories: Dict[str, Callable[..., InvokeHandler]] = {}
         # Built-in mocks
         self.register("mock:immediate", lambda type_name, src, payload, on_done=None: ImmediateDoneHandler(type_name, src, payload, on_done))
+        self.register("mock:record", lambda type_name, src, payload, on_done=None: RecordHandler(type_name, src, payload, on_done))
 
     def register(self, type_name: str, factory: Callable[..., InvokeHandler]) -> None:
         self._factories[type_name] = factory
@@ -113,3 +114,19 @@ class InvokeRegistry:
             handler = NoopHandler(type_name, src, payload, on_done)
         return handler
 
+
+class RecordHandler(InvokeHandler):
+    """A mock handler that records forwarded events via ``send``.
+
+    Attributes
+    ----------
+    received : list[tuple[str, Any]]
+        Sequence of (name, data) tuples in arrival order.
+    """
+
+    def __init__(self, type_name: str, src: Any, payload: Any, on_done: Optional[OnDone] = None) -> None:
+        super().__init__(type_name, src, payload, on_done)
+        self.received: list[tuple[str, Any]] = []
+
+    def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
+        self.received.append((name, data))
