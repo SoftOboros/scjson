@@ -132,6 +132,31 @@ new scenario is exercised against scion-core.
   `error.communication` and skips delivery.
 - `<script>` blocks are not executed (no-op with a warning).
 
+### Invoke & Finalize (Scaffolding)
+
+- The engine supports basic `<invoke>` semantics sufficient for testing:
+  - On state entry (after `onentry` and initial processing), invocations listed
+    under the state are started via a pluggable `InvokeRegistry`.
+  - On state exit (before `onexit`), any active invocations for the state are
+    canceled; their `<finalize>` blocks run in the invoking state's scope.
+  - A mock registry ships with two handler types:
+    - `mock:immediate`: completes immediately upon start and calls the done
+      callback with the initial payload; the engine runs `<finalize>` and enqueues
+      `done.invoke.<id>` with the payload.
+    - `mock:record`: a no-op handler that records events forwarded via `send`.
+  - Payload materialization mirrors `<send>`: collects `<param>`, `namelist`, and
+    `<content>` into a dictionary available to the handler and as `_event.data`
+    during `<finalize>`.
+  - `idlocation` is respected; when `id` is not provided a UUID is generated.
+  - `typeexpr` and `srcexpr` are evaluated in the state's scope when present.
+  - `autoforward="true"` forwards external events (excluding `__*`, `error.*`,
+    `done.state.*`, `done.invoke.*`) to the active handler via `handler.send(name, data)`.
+
+Limitations:
+- Full SCXML invoke semantics (processor coupling, nested machines, error
+  handling parity) are not implemented. The current behavior is designed to
+  unblock engine testing and can be extended behind the `InvokeRegistry`.
+
 ### Finalization and Done Events
 
 - Entering a `<final>` child of a compound state immediately enqueues

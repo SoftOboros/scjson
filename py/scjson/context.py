@@ -1128,7 +1128,12 @@ class DocumentContext(BaseModel):
     def _autoforward_event(self, evt: Event) -> None:
         # Skip obvious engine-internal categories
         name = evt.name or ""
-        if name.startswith("error.") or name.startswith("done.state."):
+        if (
+            name.startswith("__")
+            or name.startswith("error.")
+            or name.startswith("done.state.")
+            or name.startswith("done.invoke.")
+        ):
             return
         for inv_id, handler in list(self.invocations.items()):
             if self.invocations_autoforward.get(inv_id):

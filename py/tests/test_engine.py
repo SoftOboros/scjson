@@ -943,3 +943,82 @@ def test_invoke_autoforward_records_events(tmp_path):
     handler = ctx.invocations.get("rec")
     assert isinstance(handler, RecordHandler)
     assert handler.received and handler.received[0] == ("go", {"x": 1})
+
+
+def test_invoke_cancel_runs_finalize_only_no_done_event(tmp_path):
+    chart = tmp_path / "invoke_cancel_finalize.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel>
+    <data id="n" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <invoke type="mock:record" id="rec">
+      <finalize>
+        <assign location="n" expr="n + 1"/>
+      </finalize>
+    </invoke>
+    <transition event="go" target="t"/>
+  </state>
+  <state id="t"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Cancel by leaving the state
+    ctx.enqueue("go")
+    ctx.microstep()
+    # Finalize should have run; n incremented
+    assert ctx.data_model["n"] == 1
+    # No done.invoke.* should be in the queue after cancel
+    ev = ctx.events.pop()
+    assert (ev is None) or (not ev.name.startswith("done.invoke."))
+
+
+def test_invoke_id_and_idlocation_assignment(tmp_path):
+    chart = tmp_path / "invoke_id_idlocation.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="mock:record" id="fixed" idlocation="stored"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # idlocation should reflect the explicit id
+    stored = ctx.root_activation.local_data.get("stored") or ctx.data_model.get("stored")
+    assert stored == "fixed"
+    assert "fixed" in ctx.invocations
+
+
+def test_finalize_receives_event_data(tmp_path):
+    chart = tmp_path / "invoke_finalize_event.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <datamodel>
+    <data id="y" expr="0"/>
+  </datamodel>
+  <state id="s">
+    <invoke type="mock:immediate">
+      <param name="x" expr="41"/>
+      <finalize>
+        <assign location="y" expr="_event['data']['x'] + 1"/>
+      </finalize>
+    </invoke>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # finalize should read _event.data and compute 42
+    assert ctx.data_model["y"] == 42
