@@ -14,8 +14,8 @@ require 'net/http'
 require 'pathname'
 
 def main
-  repo_root = Pathname(__FILE__).expand_path.parent.parent
-  gemspec_path = repo_root + 'ruby/scjson.gemspec'
+  repo_root = Pathname(__FILE__).expand_path.parent.parent.parent
+  gemspec_path = repo_root.join('ruby', 'scjson.gemspec')
   unless gemspec_path.exist?
     warn "gemspec not found at #{gemspec_path}"
     return 1
@@ -34,7 +34,7 @@ def main
     existing = []
   end
 
-  should_publish = (!existing.include?(version)).to_s
+  should_publish = existing.include?(version) ? 'false' : 'true'
 
   output_path = ENV['GITHUB_OUTPUT']
   if output_path && !output_path.empty?
