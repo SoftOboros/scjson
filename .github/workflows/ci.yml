@@ -308,11 +308,15 @@ jobs:
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NPM_AUTH_TOKEN" ]; then
+          TOKEN="${NPM_AUTH_TOKEN:-$NODE_AUTH_TOKEN}"
+          if [ -z "$TOKEN" ]; then
             echo "No npm token available; skipping publish."
             exit 0
           fi
-          echo "//registry.npmjs.org/:_authToken=${NPM_AUTH_TOKEN}" > ~/.npmrc
+          CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          mkdir -p "$(dirname "$CONFIG_PATH")"
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > "$CONFIG_PATH"
+          export NODE_AUTH_TOKEN="$TOKEN"
           npm publish --provenance --access public
 
       - name: Skip publish (no version change)
