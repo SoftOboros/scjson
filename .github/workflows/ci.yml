@@ -294,7 +294,16 @@ jobs:
             echo "No npm token available; skipping publish." && exit 0
           fi
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-          npm publish --provenance --access public || echo "Publish failed; continuing as green per policy."
+          publish_output=$(npm publish --provenance --access public 2>&1)
+          status=$?
+          echo "$publish_output"
+          if [ $status -ne 0 ]; then
+            if echo "$publish_output" | grep -q "E404"; then
+              echo "npm publish returned 404 (package likely requires manual setup); skipping."
+              exit 0
+            fi
+            exit $status
+          fi
         continue-on-error: true
 
       - name: Skip publish (no version change)
