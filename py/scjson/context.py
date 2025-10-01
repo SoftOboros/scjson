@@ -766,6 +766,23 @@ class DocumentContext(BaseModel):
                 self.events.push(Event(name="error.communication"))
             return
 
+        # Special target to send to invoked child(ren) from this state
+        if target and str(target) in {"#_child", "#_scxml_child", "#_invokedChild"}:
+            payload = self._build_send_payload(send, env, act)
+            # Find invocations associated with this state
+            ids = list(self.invocations_by_state.get(act.id, []))
+            if not ids:
+                self.events.push(Event(name="error.communication"))
+                return
+            for inv_id in ids:
+                handler = self.invocations.get(inv_id)
+                if handler:
+                    try:
+                        handler.send(str(event_name), payload)
+                    except Exception:
+                        self.events.push(Event(name="error.communication"))
+            return
+
         if target and str(target) not in {"#_internal", "_internal"}:
             logger.warning(
                 "External <send> target '%s' is not supported yet; skipping", target
@@ -1044,7 +1061,11 @@ class DocumentContext(BaseModel):
                 try:
                     inv_type = str(self._evaluate_expr(inv.typeexpr, env))
                 except Exception:
-                    pass
+                    # signal evaluation failure
+                    try:
+                        self.events.push_front(Event(name="error.execution"))
+                    except Exception:
+                        self.events.push(Event(name="error.execution"))
             # Normalize well-known SCXML type URI
             if str(inv_type).strip().lower() in {"http://www.w3.org/tr/scxml/", "w3c:scxml"}:
                 inv_type = "scxml"
@@ -1053,7 +1074,10 @@ class DocumentContext(BaseModel):
                 try:
                     inv_src = self._evaluate_expr(inv.srcexpr, env)
                 except Exception:
-                    pass
+                    try:
+                        self.events.push_front(Event(name="error.execution"))
+                    except Exception:
+                        self.events.push(Event(name="error.execution"))
             # Resolve file: URIs and relative paths using the parent's base_dir
             if isinstance(inv_src, str):
                 src_text = inv_src
