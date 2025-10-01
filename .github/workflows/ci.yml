@@ -293,7 +293,9 @@ jobs:
           if [ -z "$NODE_AUTH_TOKEN" ]; then
             echo "No npm token available; skipping publish." && exit 0
           fi
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          mkdir -p "$(dirname "$CONFIG_PATH")"
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > "$CONFIG_PATH"
           publish_output=$(npm publish --provenance --access public 2>&1)
           status=$?
           echo "$publish_output"
