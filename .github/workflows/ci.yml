@@ -288,8 +288,8 @@ jobs:
           chmod 0600 ~/.gem/credentials
           gem push scjson-*.gem
 
-      - id: determine
-        name: Determine publish necessity
+      - id: determine_npm
+        name: Determine npm publish necessity
         working-directory: js
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
@@ -303,7 +303,7 @@ jobs:
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine.outputs.should_publish == 'true'
+        if: github.ref == 'refs/heads/main' && steps.determine_npm.outputs.should_publish == 'true'
         working-directory: js
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
@@ -316,5 +316,5 @@ jobs:
           npm publish --provenance --access public
 
       - name: Skip publish (no version change)
-        if: steps.determine.outputs.should_publish != 'true'
+        if: steps.determine_npm.outputs.should_publish != 'true'
         run: echo "Package version unchanged; skipping publish."
