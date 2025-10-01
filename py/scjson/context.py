@@ -87,6 +87,7 @@ class DocumentContext(BaseModel):
     _invoke_specs: Dict[str, tuple[Any, ActivationRecord]] = PrivateAttr(default_factory=dict)
     invocations_autoforward: Dict[str, bool] = Field(default_factory=dict)
     _base_dir: Optional[Path] = PrivateAttr(default=None)
+    _external_emitter: Optional[Any] = PrivateAttr(default=None)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -750,6 +751,21 @@ class DocumentContext(BaseModel):
                 target = self._evaluate_expr(send.targetexpr, env)
             except (SafeEvaluationError, Exception):
                 target = None
+        # Special target to bubble to parent as an external event
+        if target and str(target) in {"#_parent", "#_scxml_parent"}:
+            payload = self._build_send_payload(send, env, act)
+            event_obj = Event(name=str(event_name), data=payload, send_id=getattr(send, "id", None))
+            emitter = getattr(self, "_external_emitter", None)
+            if callable(emitter):
+                try:
+                    emitter(event_obj)
+                except Exception:
+                    self.events.push(Event(name="error.communication"))
+            else:
+                # No emitter available; treat as communication error
+                self.events.push(Event(name="error.communication"))
+            return
+
         if target and str(target) not in {"#_internal", "_internal"}:
             logger.warning(
                 "External <send> target '%s' is not supported yet; skipping", target
@@ -1576,11 +1592,8 @@ class DocumentContext(BaseModel):
             evaluator=evaluator,
             execution_mode=mode,
             source_xml=xml_str,
+            base_dir=Path(path).resolve().parent,
         )
-        try:
-            ctx._base_dir = Path(path).resolve().parent
-        except Exception:
-            ctx._base_dir = None
         return ctx
 
     @classmethod
@@ -1626,8 +1639,8 @@ class DocumentContext(BaseModel):
             evaluator=evaluator,
             execution_mode=mode,
             source_xml=xml_str,
+            base_dir=None,
         )
-        ctx._base_dir = None
         return ctx
 
     @classmethod
@@ -1640,6 +1653,8 @@ class DocumentContext(BaseModel):
         evaluator: SafeExpressionEvaluator | None,
         execution_mode: ExecutionMode,
         source_xml: str | None = None,
+        base_dir: Path | None = None,
+        defer_initial: bool = False,
     ) -> "DocumentContext":
         evaluator = evaluator or SafeExpressionEvaluator()
         lookup, path_map = cls._build_json_lookup(doc, raw_data)
@@ -1652,13 +1667,18 @@ class DocumentContext(BaseModel):
             evaluator=evaluator,
             json_lookup=lookup,
         )
+        try:
+            ctx._base_dir = base_dir
+        except Exception:
+            ctx._base_dir = None
         ctx._action_cache = {}
         ctx.json_order = cls._build_order_map(raw_data, path_map, source_xml)
         ctx.data_model = root_state.local_data
         ctx._index_activations(root_state)
         ctx.configuration.add(root_state.id)
-        ctx._enter_initial_states(root_state)
-        ctx.drain_internal()
+        if not defer_initial:
+            ctx._enter_initial_states(root_state)
+            ctx.drain_internal()
         return ctx
 
     @staticmethod

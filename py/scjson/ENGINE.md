@@ -150,10 +150,12 @@ new scenario is exercised against scion-core.
     during `<finalize>`.
   - `idlocation` is respected; when `id` is not provided a UUID is generated.
   - `typeexpr` and `srcexpr` are evaluated in the state's scope when present.
-  - `autoforward="true"` forwards external events (excluding `__*`, `error.*`,
-    `done.state.*`, `done.invoke.*`) to the active handler via `handler.send(name, data)`.
-  - Child SCXML/SCJSON machines bubble their raised events to the parent queue;
-    completion is detected via `done.state.<childRootId>`.
+- `autoforward="true"` forwards external events (excluding `__*`, `error.*`,
+  `done.state.*`, `done.invoke.*`) to the active handler via `handler.send(name, data)`.
+- Child SCXML/SCJSON machines bubble their raised events to the parent queue;
+  completion is detected via `done.state.<childRootId>`.
+  - The child engine recognizes `<send target="#_parent">` and emits directly
+    into the parent's event queue when an emitter is attached by the invoker.
 
 Limitations:
 - Full SCXML invoke semantics (processor coupling, nested machines, error

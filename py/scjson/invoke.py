@@ -17,8 +17,10 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 from pathlib import Path
 
-from .context import DocumentContext
+from typing import TYPE_CHECKING
 from .events import Event
+if TYPE_CHECKING:  # pragma: no cover - type hints only
+    from .context import DocumentContext
 
 
 OnDone = Callable[[Any], None]
@@ -161,7 +163,7 @@ class SCXMLChildHandler(InvokeHandler):
 
     def __init__(self, type_name: str, src: Any, payload: Any, on_done: Optional[OnDone] = None) -> None:
         super().__init__(type_name, src, payload, on_done)
-        self.child: DocumentContext | None = None
+        self.child: 'DocumentContext' | None = None
 
     def start(self) -> None:  # noqa: D401
         # Prefer explicit src path
@@ -170,17 +172,36 @@ class SCXMLChildHandler(InvokeHandler):
             if isinstance(path, (str, Path)):
                 p = Path(str(path))
                 if p.suffix.lower() == ".scxml":
+                    from .context import DocumentContext  # local to avoid import cycle
                     self.child = DocumentContext.from_xml_file(p)
                 else:
+                    from .context import DocumentContext  # local to avoid import cycle
                     self.child = DocumentContext.from_json_file(p)
             else:
                 # Attempt inline content if provided in payload
-                xml_str = self._xml_from_payload_content(self.payload)
-                if xml_str:
-                    self.child = DocumentContext.from_xml_string(xml_str)
+                ctx = self._context_from_payload_content(self.payload)
+                if ctx is not None:
+                    self.child = ctx
+                else:
+                    xml_str = self._xml_from_payload_content(self.payload)
+                    if xml_str:
+                        from .context import DocumentContext  # local to avoid import cycle
+                        self.child = DocumentContext.from_xml_string(xml_str)
         except Exception:
             self.child = None
             return
+        # Attach emitter so child can bubble '#_parent' sends
+        try:
+            self.child._external_emitter = self._emit  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        # If initial was deferred, enter now so onentry sends can bubble
+        try:
+            if self.child and len(self.child.configuration) == 1:
+                self.child._enter_initial_states(self.child.root_activation)
+                self.child.drain_internal()
+        except Exception:
+            pass
         self._pump()
 
     def stop(self) -> None:  # noqa: D401
@@ -224,39 +245,89 @@ class SCXMLChildHandler(InvokeHandler):
             return None
         try:
             root_nodes = content if isinstance(content, list) else [content]
-            # Find first node whose qname ends with '}scxml' or 'scxml'
-            scxml_node = None
+            # First, try SCION-style qname/text/children structure
             for node in root_nodes:
-                if isinstance(node, dict):
-                    qn = node.get("qname") or ""
-                    local = qn.rsplit("}", 1)[-1]
-                    if local == "scxml":
-                        scxml_node = node
-                        break
-            if not scxml_node:
+                if isinstance(node, dict) and (node.get("qname") or node.get("children") is not None):
+                    qn = (node.get("qname") or "").rsplit("}", 1)[-1]
+                    if qn == "scxml":
+                        import xml.etree.ElementTree as ET
+                        def build(elem_dict: dict) -> ET.Element:
+                            qn2 = elem_dict.get("qname") or "scxml"
+                            e = ET.Element(qn2)
+                            attrs = elem_dict.get("attributes") or {}
+                            for k, v in attrs.items():
+                                e.set(k, str(v))
+                            text = elem_dict.get("text")
+                            if isinstance(text, str):
+                                e.text = text
+                            for child in elem_dict.get("children") or []:
+                                if isinstance(child, dict):
+                                    e.append(build(child))
+                            return e
+                        return ET.tostring(build(node), encoding="unicode")
+            # Next, try SCJSON-like dict (keys: state, initial, final, ...)
+            for node in root_nodes:
+                if isinstance(node, dict) and ("state" in node or "initial" in node or "final" in node):
+                    try:
+                        import json as _json
+                        from .SCXMLDocumentHandler import SCXMLDocumentHandler as _Handler  # local import
+                        handler = _Handler(pretty=False, omit_empty=True, fail_on_unknown_properties=False)
+                        return handler.json_to_xml(_json.dumps(node))
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        return None
+
+    def _context_from_payload_content(self, payload: Any):
+        try:
+            content = None
+            if isinstance(payload, dict):
+                content = payload.get("content")
+            if content is None:
                 return None
-
-            import xml.etree.ElementTree as ET
-
-            def build(elem_dict: dict) -> ET.Element:
-                qn = elem_dict.get("qname") or "scxml"
-                e = ET.Element(qn)
-                attrs = elem_dict.get("attributes") or {}
-                for k, v in attrs.items():
-                    e.set(k, str(v))
-                text = elem_dict.get("text")
-                if isinstance(text, str):
-                    e.text = text
-                for child in elem_dict.get("children") or []:
-                    if isinstance(child, dict):
-                        e.append(build(child))
-                return e
-
-            root_elem = build(scxml_node)
-            xml_str = ET.tostring(root_elem, encoding="unicode")
-            return xml_str
+            nodes = content if isinstance(content, list) else [content]
+            for node in nodes:
+                if isinstance(node, dict) and ("state" in node or "initial" in node or "final" in node):
+                    # Normalize SCJSON-like node: ensure list fields for 'initial' and transition 'target'
+                    def normalize(n: Any) -> Any:
+                        if isinstance(n, dict):
+                            out = {}
+                            for k, v in n.items():
+                                if k == "initial" and isinstance(v, str):
+                                    out[k] = [v]
+                                else:
+                                    out[k] = normalize(v)
+                            # Fix transition target(s) specifically
+                            if "transition" in out and isinstance(out["transition"], list):
+                                tlist = []
+                                for t in out["transition"]:
+                                    if isinstance(t, dict) and isinstance(t.get("target"), str):
+                                        t = {**t, "target": [t["target"]]}
+                                    tlist.append(t)
+                                out["transition"] = tlist
+                            return out
+                        if isinstance(n, list):
+                            return [normalize(i) for i in n]
+                        return n
+                    norm = normalize(node)
+                    from .pydantic import Scxml  # local import to avoid cycles
+                    from .context import DocumentContext, ExecutionMode  # local import
+                    doc = Scxml.model_validate(norm)
+                    raw = doc.model_dump(mode="python")
+                    return DocumentContext._from_model(
+                        doc,
+                        raw,
+                        allow_unsafe_eval=False,
+                        evaluator=None,
+                        execution_mode=ExecutionMode.LAX,
+                        source_xml=None,
+                        base_dir=None,
+                        defer_initial=True,
+                    )
         except Exception:
             return None
+        return None
 
 
 class DeferredHandler(InvokeHandler):
