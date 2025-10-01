@@ -18,7 +18,7 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 ## Reference Semantics
 - [x] Decide canonical reference engine.
   - [x] Use scion-core (Node.js) as the canonical reference for behavior.
-  - [ ] Document rationale and guidance for scion compatibility in repo docs.
+  - [x] Document rationale and guidance for scion compatibility in repo docs.
 - [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (build/run optional).
 
 ## Roadmap (Iterations)

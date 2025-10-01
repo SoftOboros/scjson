@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
 
       - uses: actions/setup-node@v4
         with:
@@ -46,6 +51,40 @@ jobs:
       - name: Run Python tests
         working-directory: py
         run: python -m pytest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: ruby
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
 
       - name: Install packaging tools (PyPI)
         working-directory: py
@@ -157,6 +196,11 @@ PY
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
 
       - uses: actions/setup-node@v4
         with:
@@ -192,6 +236,85 @@ PY
       - name: Run Python tests
         working-directory: py
         run: python -m pytest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: ruby
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: |
+          ruby <<'RUBY'
+require 'json'
+require 'net/http'
+
+spec = Gem::Specification.load('scjson.gemspec')
+name = spec.name
+version = spec.version.to_s
+
+begin
+  uri = URI("https://rubygems.org/api/v1/versions/#{name}.json")
+  existing = JSON.parse(Net::HTTP.get(uri)).map { |v| v['number'] }
+rescue StandardError
+  existing = []
+end
+
+should_publish = !existing.include?(version)
+
+File.open(ENV['GITHUB_OUTPUT'], 'a') do |fh|
+  fh.puts "name=#{name}"
+  fh.puts "version=#{version}"
+  fh.puts "should_publish=#{should_publish}"
+end
+
+puts "RubyGems target #{name}@#{version}; existing versions: #{existing.inspect}"
+RUBY
+
+      - name: Publish to RubyGems (if version changed)
+        if: steps.determine_rubygems.outputs.should_publish == 'true'
+        working-directory: ruby
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          if [ -z "$RUBYGEMS_API_KEY" ]; then
+            echo "No RubyGems API key provided; skipping publish." && exit 0
+          fi
+          mkdir -p ~/.gem
+          printf "---\n:rubygems_api_key: %s\n" "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push scjson-*.gem || echo "RubyGems publish failed; continuing."
+        continue-on-error: true
 
       - id: determine
         name: Determine publish necessity
