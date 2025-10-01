@@ -274,7 +274,7 @@ jobs:
         name: Determine publish necessity
         working-directory: js
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
         run: |
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
@@ -283,18 +283,32 @@ jobs:
           echo "Existing versions: $EXISTING"
           SHOULD_PUBLISH=$(node -e "const v=process.argv[1]; let arr=[]; try{arr=JSON.parse(process.argv[2])}catch{}; console.log(!arr.includes(v))" "$VERSION" "$EXISTING")
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "npm_should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine.outputs.should_publish == 'true'
+        if: github.ref == 'refs/heads/main' && steps.determine.outputs.npm_should_publish == 'true'
         working-directory: js
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
+          TOKEN="${NPM_AUTH_TOKEN:-$NODE_AUTH_TOKEN}"
+          export NODE_AUTH_TOKEN="$TOKEN"
+          if [ -z "$TOKEN" ]; then
             echo "No npm token available; skipping publish." && exit 0
           fi
           CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           mkdir -p "$(dirname "$CONFIG_PATH")"
+          echo "//registry.npmjs.org/:_authToken=${TOKEN}" > "$CONFIG_PATH"
+          publish_output=$(npm publish --provenance --access public 2>&1)
+          status=$?
+          echo "$publish_output"
+          if [ $status -ne 0 ]; then
+            if echo "$publish_output" | grep -q "E404"; then
+              echo "npm publish returned 404 (package likely requires manual setup); skipping."
+              exit 0
+            fi
+            exit $status
+          fi
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > "$CONFIG_PATH"
           publish_output=$(npm publish --provenance --access public 2>&1)
           status=$?
