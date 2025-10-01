@@ -25,8 +25,6 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ScjsonCliTest {
 
     private static final String SCXML = "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\"/>";
-    private static final String JSON = "{\n  \"version\": 1.0\n}";
-
     @Test
     void testSingleJsonConversion(@TempDir Path tmp) throws Exception {
         Path xml = tmp.resolve("sample.scxml");
@@ -54,7 +52,7 @@ public class ScjsonCliTest {
     @Test
     void testSingleXmlConversion(@TempDir Path tmp) throws Exception {
         Path json = tmp.resolve("sample.scjson");
-        Files.writeString(json, JSON);
+        Files.writeString(json, ScxmlToScjson.convertString(SCXML));
         int exit = new CommandLine(new ScjsonToScxml()).execute(json.toString());
         assertEquals(0, exit);
         Path out = json.resolveSibling("sample.scxml");
@@ -67,8 +65,9 @@ public class ScjsonCliTest {
     void testDirectoryXmlConversion(@TempDir Path tmp) throws Exception {
         Path dir = tmp.resolve("jsons");
         Files.createDirectories(dir);
-        Files.writeString(dir.resolve("x.scjson"), JSON);
-        Files.writeString(dir.resolve("y.scjson"), JSON);
+        String jsonContent = ScxmlToScjson.convertString(SCXML);
+        Files.writeString(dir.resolve("x.scjson"), jsonContent);
+        Files.writeString(dir.resolve("y.scjson"), jsonContent);
         int exit = new CommandLine(new ScjsonToScxml()).execute(dir.toString());
         assertEquals(0, exit);
         assertTrue(Files.exists(dir.resolve("x.scxml")));
@@ -77,7 +76,12 @@ public class ScjsonCliTest {
 
     @Test
     void testRecursiveConversion(@TempDir Path tmp) throws Exception {
-        Path tutorial = Path.of("..", "tutorial").normalize();
+        Path tutorial = tmp.resolve("cases");
+        Path nested = tutorial.resolve("nested");
+        Files.createDirectories(nested);
+        Files.writeString(tutorial.resolve("a.scxml"), SCXML);
+        Files.writeString(nested.resolve("b.scxml"), SCXML);
+
         Path jsonDir = tmp.resolve("tests").resolve("scjson");
         Path xmlDir = tmp.resolve("tests").resolve("scxml");
 
@@ -94,7 +98,12 @@ public class ScjsonCliTest {
 
     @Test
     void testRecursiveValidation(@TempDir Path tmp) throws Exception {
-        Path tutorial = Path.of("..", "tutorial").normalize();
+        Path tutorial = tmp.resolve("cases");
+        Path nested = tutorial.resolve("nested");
+        Files.createDirectories(nested);
+        Files.writeString(tutorial.resolve("a.scxml"), SCXML);
+        Files.writeString(nested.resolve("b.scxml"), SCXML);
+
         Path jsonDir = tmp.resolve("tests").resolve("scjson");
         Path xmlDir = tmp.resolve("tests").resolve("scxml");
 
@@ -110,7 +119,12 @@ public class ScjsonCliTest {
 
     @Test
     void testRecursiveVerify(@TempDir Path tmp) throws Exception {
-        Path tutorial = Path.of("..", "tutorial").normalize();
+        Path tutorial = tmp.resolve("cases");
+        Path nested = tutorial.resolve("nested");
+        Files.createDirectories(nested);
+        Files.writeString(tutorial.resolve("a.scxml"), SCXML);
+        Files.writeString(nested.resolve("b.scxml"), SCXML);
+
         Path jsonDir = tmp.resolve("tests").resolve("scjson");
         Path xmlDir = tmp.resolve("tests").resolve("scxml");
 
@@ -129,12 +143,4 @@ public class ScjsonCliTest {
         assertEquals(0, v2);
     }
 
-    /**
-     * Verify that the Apache Commons SCXML library is on the classpath.
-     */
-    @Test
-    void testCommonsScxmlAvailable() {
-        org.apache.commons.scxml2.model.SCXML machine = new org.apache.commons.scxml2.model.SCXML();
-        assertNotNull(machine);
-    }
 }

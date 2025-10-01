@@ -1,10 +1,10 @@
 /**
- * scjsonProps.ts : Properties runtime file for scjson types
+ * Agent Name: ts-props
  *
  * Part of the scjson project.
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
- */
+*/
 
 /**
  * update a datamodel location with an expression or value.

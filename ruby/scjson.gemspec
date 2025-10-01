@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name        = 'scjson'
-  spec.version     = '0.1.4'
+  spec.version     = '0.3.3'
   spec.summary     = 'SCXML <-> scjson converter and validator'
   spec.authors     = ['Softoboros Technology Inc.']
   spec.email       = ['info@softoboros.com']

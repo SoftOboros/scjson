@@ -1,0 +1,299 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  pr-checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: js/package-lock.json
+
+      - name: Install JS dependencies
+        working-directory: js
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck + compile (JS)
+        working-directory: js
+        run: npm run build
+
+      - name: Lint (JS)
+        working-directory: js
+        run: npm run lint
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: py/requirements.txt
+
+      - name: Install Python dependencies
+        working-directory: py
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python tests
+        working-directory: py
+        run: python -m pytest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          RUBYOPT: -rbundler/setup
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
+      - id: determine_pypi
+        name: Determine PyPI publish necessity
+        working-directory: py
+        run: python ../.github/scripts/determine_pypi_publish.py
+
+      - id: determine_crates
+        name: Determine crates.io publish necessity
+        run: python .github/scripts/determine_crates_publish.py
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: ruby ../.github/scripts/determine_rubygems_publish.rb
+
+      - name: Install packaging tools (PyPI)
+        working-directory: py
+        run: pip install build twine
+
+      - name: Build Python package
+        working-directory: py
+        run: |
+          rm -rf dist
+          python -m build
+
+      - name: Publish to PyPI (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
+        working-directory: py
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "No PYPI_API_KEY provided; skipping PyPI publish." && exit 0
+          fi
+          twine upload --non-interactive dist/* || echo "PyPI publish failed; continuing."
+        continue-on-error: true
+
+      - name: Publish to crates.io (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
+        working-directory: rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish." && exit 0
+          fi
+          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
+        continue-on-error: true
+
+  main-checks:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: js/package-lock.json
+
+      - name: Install JS dependencies
+        working-directory: js
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck + compile (JS)
+        working-directory: js
+        run: npm run build
+
+      - name: Lint (JS)
+        working-directory: js
+        run: npm run lint
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: py/requirements.txt
+
+      - name: Install Python dependencies
+        working-directory: py
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python tests
+        working-directory: py
+        run: python -m pytest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          RUBYOPT: -rbundler/setup
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
+      - id: determine_pypi
+        name: Determine PyPI publish necessity
+        working-directory: py
+        run: python ../.github/scripts/determine_pypi_publish.py
+
+      - id: determine_crates
+        name: Determine crates.io publish necessity
+        run: python .github/scripts/determine_crates_publish.py
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: ruby ../.github/scripts/determine_rubygems_publish.rb
+
+
+      - name: Publish to RubyGems (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
+        working-directory: ruby
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          if [ -z "$RUBYGEMS_API_KEY" ]; then
+            echo "No RubyGems API key provided; skipping publish." && exit 0
+          fi
+          mkdir -p ~/.gem
+          printf "---\n:rubygems_api_key: %s\n" "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push scjson-*.gem || echo "RubyGems publish failed; continuing."
+        continue-on-error: true
+
+      - id: determine
+        name: Determine publish necessity
+        working-directory: js
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Package: $NAME@$VERSION"
+          EXISTING=$(npm view "$NAME" versions --json || echo "[]")
+          echo "Existing versions: $EXISTING"
+          SHOULD_PUBLISH=$(node -e "const v=process.argv[1]; let arr=[]; try{arr=JSON.parse(process.argv[2])}catch{}; console.log(!arr.includes(v))" "$VERSION" "$EXISTING")
+          echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine.outputs.should_publish == 'true'
+        working-directory: js
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "No npm token available; skipping publish." && exit 0
+          fi
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          npm publish --provenance --access public || echo "Publish failed; continuing as green per policy."
+        continue-on-error: true
+
+      - name: Skip publish (no version change)
+        if: steps.determine.outputs.should_publish != 'true'
+        run: echo "Package version unchanged; skipping publish."

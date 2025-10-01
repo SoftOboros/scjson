@@ -8,29 +8,30 @@
 package com.softobros;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.scxml2.SCXMLExecutor;
-import org.apache.commons.scxml2.env.SimpleDispatcher;
-import org.apache.commons.scxml2.env.SimpleErrorReporter;
-import org.apache.commons.scxml2.env.SimpleSCXMLListener;
-import org.apache.commons.scxml2.env.jexl.JexlEvaluator;
-import org.apache.commons.scxml2.env.jexl.JexlContext;
-import org.apache.commons.scxml2.io.SCXMLReader;
-import org.apache.commons.scxml2.model.EnterableState;
-import org.apache.commons.scxml2.model.SCXML;
-import org.apache.commons.scxml2.model.TransitionTarget;
-import org.apache.commons.scxml2.TriggerEvent;
-
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Standalone runner using Apache Commons SCXML.
+ * Runner that proxies execution to the SCION Node.js CLI.
  */
 public final class ScxmlRunner {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Duration PROCESS_TIMEOUT = Duration.ofMinutes(5);
 
     private ScxmlRunner() {
     }
@@ -49,6 +50,10 @@ public final class ScxmlRunner {
         public String type;
         /** State or transition identifier. */
         public String id;
+        /** Step index in the trace. */
+        public int step;
+        /** Triggering event name, if any. */
+        public String event;
     }
 
     /** Collection of trace entries. */
@@ -65,9 +70,9 @@ public final class ScxmlRunner {
      * @throws Exception on parse errors
      */
     public static List<Event> loadEvents(File file) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
         try (FileInputStream in = new FileInputStream(file)) {
-            return mapper.readValue(in, new TypeReference<List<Event>>() {});
+            return MAPPER.readValue(in, new TypeReference<List<Event>>() {
+            });
         }
     }
 
@@ -79,9 +84,8 @@ public final class ScxmlRunner {
      * @throws Exception on serialization errors
      */
     public static void writeTrace(ExecutionTrace trace, File file) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
         try (FileOutputStream out = new FileOutputStream(file)) {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(out, trace);
+            MAPPER.writerWithDefaultPrettyPrinter().writeValue(out, trace);
         }
     }
 
@@ -94,47 +98,150 @@ public final class ScxmlRunner {
      * @throws Exception if execution fails
      */
     public static ExecutionTrace run(File scxmlFile, List<Event> inputs) throws Exception {
-        SCXML scxml;
-        try (FileInputStream in = new FileInputStream(scxmlFile)) {
-            scxml = SCXMLReader.read(in);
+        Path script = locateScionScript();
+        if (!Files.exists(script)) {
+            throw new IllegalStateException("SCION runner script not found: " + script);
         }
 
+        Path traceFile = Files.createTempFile("scjson-trace", ".jsonl");
+        Path eventsFile = inputs.isEmpty() ? null : Files.createTempFile("scjson-events", ".jsonl");
+        try {
+            if (eventsFile != null) {
+                writeEventsFile(eventsFile, inputs);
+            }
+            List<String> command = new ArrayList<>();
+            command.add("node");
+            command.add(script.toString());
+            command.add("-I");
+            command.add(scxmlFile.getAbsolutePath());
+            command.add("-o");
+            command.add(traceFile.toString());
+            if (eventsFile != null) {
+                command.add("-e");
+                command.add(eventsFile.toString());
+            }
+
+            ProcessBuilder builder = new ProcessBuilder(command);
+            builder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            Process process = builder.start();
+            boolean finished = process.waitFor(PROCESS_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IOException("SCION runner timed out");
+            }
+            if (process.exitValue() != 0) {
+                throw new IOException("SCION runner exited with code " + process.exitValue());
+            }
+            return parseTrace(traceFile);
+        } finally {
+            Files.deleteIfExists(traceFile);
+            if (eventsFile != null) {
+                Files.deleteIfExists(eventsFile);
+            }
+        }
+    }
+
+    private static Path locateScionScript() {
+        Path cwd = Paths.get("").toAbsolutePath();
+        Path script = cwd.resolve("tools").resolve("scion-runner").resolve("scion-trace.cjs");
+        if (Files.exists(script)) {
+            return script;
+        }
+        Path parent = cwd.getParent();
+        if (parent != null) {
+            Path candidate = parent.resolve("tools").resolve("scion-runner").resolve("scion-trace.cjs");
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        // Attempt relative to jar location when running from packaged artifact.
+        try {
+            Path jarLocation = Paths.get(ScjsonCli.class.getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI());
+            Path root = jarLocation.getParent();
+            if (root != null) {
+                Path candidate = root.resolve("../tools/scion-runner/scion-trace.cjs").normalize();
+                if (Files.exists(candidate)) {
+                    return candidate;
+                }
+            }
+        } catch (Exception ignored) {
+            // Fallback handled below.
+        }
+        return script;
+    }
+
+    private static void writeEventsFile(Path path, List<Event> events) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            for (Event event : events) {
+                Map<String, Object> line = new LinkedHashMap<>();
+                String name = event.name != null ? event.name : "";
+                line.put("event", name);
+                if (event.data != null) {
+                    line.put("data", event.data);
+                }
+                writer.write(MAPPER.writeValueAsString(line));
+                writer.write('\n');
+            }
+        }
+    }
+
+    private static ExecutionTrace parseTrace(Path traceFile) throws IOException {
         ExecutionTrace trace = new ExecutionTrace();
-        JexlEvaluator evaluator = new JexlEvaluator();
-        SCXMLExecutor exec = new SCXMLExecutor(evaluator, new SimpleDispatcher(), new SimpleErrorReporter());
-        exec.setStateMachine(scxml);
-        exec.setRootContext(new JexlContext());
-        exec.addListener(scxml, new SimpleSCXMLListener() {
-            @Override
-            public void onEntry(EnterableState state) {
-                TraceEntry e = new TraceEntry();
-                e.type = "enter";
-                e.id = state.getId();
-                trace.entries.add(e);
+        List<String> lines = Files.readAllLines(traceFile, StandardCharsets.UTF_8);
+        int stepIndex = 0;
+        for (String line : lines) {
+            if (line == null || line.isBlank()) {
+                continue;
             }
-
-            @Override
-            public void onExit(EnterableState state) {
-                TraceEntry e = new TraceEntry();
-                e.type = "exit";
-                e.id = state.getId();
-                trace.entries.add(e);
+            JsonNode node = MAPPER.readTree(line);
+            stepIndex = node.has("step") ? node.get("step").asInt(stepIndex) : stepIndex + 1;
+            String eventName = null;
+            if (node.has("event") && node.get("event").has("name")) {
+                eventName = node.get("event").get("name").asText(null);
             }
-
-            @Override
-            public void onTransition(TransitionTarget from, TransitionTarget to, org.apache.commons.scxml2.model.Transition transition, String event) {
-                TraceEntry e = new TraceEntry();
-                e.type = "transition";
-                e.id = from.getId() + "->" + to.getId();
-                trace.entries.add(e);
+            appendEntries(trace, node.path("enteredStates"), "enter", stepIndex, eventName);
+            appendEntries(trace, node.path("exitedStates"), "exit", stepIndex, eventName);
+            if (node.has("firedTransitions") && node.get("firedTransitions").isArray()) {
+                for (JsonNode tr : node.get("firedTransitions")) {
+                    String source = tr.path("source").asText("?");
+                    List<String> targets = new ArrayList<>();
+                    if (tr.has("targets") && tr.get("targets").isArray()) {
+                        for (JsonNode tgt : tr.get("targets")) {
+                            targets.add(tgt.asText());
+                        }
+                    }
+                    String id = source + "->" + String.join(",", targets);
+                    TraceEntry entry = new TraceEntry();
+                    entry.type = "transition";
+                    entry.id = id;
+                    entry.step = stepIndex;
+                    entry.event = eventName;
+                    trace.entries.add(entry);
+                }
             }
-        });
-        exec.go();
-
-        for (Event evt : inputs) {
-            exec.triggerEvent(new TriggerEvent(evt.name, TriggerEvent.SIGNAL_EVENT, evt.data));
         }
         return trace;
+    }
+
+    private static void appendEntries(ExecutionTrace trace, JsonNode node, String type, int step, String eventName) {
+        if (!node.isArray()) {
+            return;
+        }
+        for (JsonNode item : node) {
+            String id = item.asText();
+            if (id == null || id.isEmpty()) {
+                continue;
+            }
+            TraceEntry entry = new TraceEntry();
+            entry.type = type;
+            entry.id = id;
+            entry.step = step;
+            entry.event = eventName;
+            trace.entries.add(entry);
+        }
     }
 
     /**
@@ -148,14 +255,17 @@ public final class ScxmlRunner {
      */
     public static void main(String[] args) throws Exception {
         if (args.length != 3) {
-            System.err.println("Usage: java ScxmlRunner <machine.scxml> <events.json> <trace.json>");
+            System.err.println("Usage: java com.softobros.ScxmlRunner <machine.scxml> <events.json> <trace.json>");
             System.exit(1);
         }
         File scxmlFile = new File(args[0]);
         File eventsFile = new File(args[1]);
         File traceFile = new File(args[2]);
 
-        List<Event> events = loadEvents(eventsFile);
+        List<Event> events = new ArrayList<>();
+        if (eventsFile.exists()) {
+            events = loadEvents(eventsFile);
+        }
         ExecutionTrace trace = run(scxmlFile, events);
         writeTrace(trace, traceFile);
     }

@@ -11,6 +11,7 @@ build
 *.egg-info
 
 js/node_modules
+tools/scion-runner/node_modules
 
 # Rust build artifacts
 rust/target/
@@ -22,5 +23,9 @@ swift/.build/
 csharp/**/bin/
 csharp/**/obj/
 csharp/tmp*/
+
 py/uber_out/
+uber_out/
 java/lib/*.jar
+ruby/vendor/
+ruby/.bundle/

@@ -24,30 +24,48 @@ public static class Program
     /// <returns>Exit code.</returns>
     public static int Main(string[] args)
     {
-        if (args.Length == 0)
+        if (args.Length == 0 || args[0] is "-h" or "--help")
         {
-            Console.WriteLine("scjson [xml|json|validate] <path> [options]");
+            PrintUsage();
             return 0;
         }
 
-        var command = args[0];
+        var command = args[0].ToLowerInvariant();
         var options = ParseOptions(args);
         string path = options.Path ?? string.Empty;
         try
         {
-            return command switch
+            switch (command)
             {
-                "xml" => RunXml(path, options.Output, options.Recursive, options.Verify, options.KeepEmpty),
-                "json" => RunJson(path, options.Output, options.Recursive, options.Verify, options.KeepEmpty),
-                "validate" => RunValidate(path, options.Recursive),
-                _ => 1,
-            };
+                case "xml":
+                    return RunXml(path, options.Output, options.Recursive, options.Verify, options.KeepEmpty);
+                case "json":
+                    return RunJson(path, options.Output, options.Recursive, options.Verify, options.KeepEmpty);
+                case "validate":
+                    return RunValidate(path, options.Recursive);
+                default:
+                    PrintUsage();
+                    return 1;
+            }
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Failed to convert {path}: {ex.Message}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Display command usage information.
+    /// </summary>
+    private static void PrintUsage()
+    {
+        Console.WriteLine("scjson [xml|json|validate] <path> [options]");
+        Console.WriteLine("  --help, -h          Show this message");
+        Console.WriteLine("  -o, --output PATH   Output file or directory");
+        Console.WriteLine("  -r, --recursive     Process directories recursively");
+        Console.WriteLine("  -v, --verify        Verify conversions without writing files");
+        Console.WriteLine("      --keep-empty    Preserve empty elements during conversion");
     }
 
     /// <summary>

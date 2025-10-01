@@ -14,6 +14,7 @@ import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
 from .context import DocumentContext
+from .events import Event
 from .json_stream import JsonStreamDecoder
 from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError
@@ -305,6 +306,105 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
             ctx.run()
     if sink is not sys.stdout:
         sink.close()
+
+
+@main.command(help="Emit a standardized JSONL execution trace for a document.")
+@click.option(
+    "--input",
+    "-I",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="SCJSON/SCXML document",
+)
+@click.option(
+    "--events",
+    "-e",
+    "events_path",
+    required=False,
+    type=click.Path(exists=False, path_type=Path),
+    help="JSONL stream of events; defaults to stdin when omitted",
+)
+@click.option("--xml", "is_xml", is_flag=True, default=False, help="Input is SCXML")
+@click.option(
+    "--out",
+    "-o",
+    "out_path",
+    required=False,
+    type=click.Path(path_type=Path),
+    help="Destination trace file; defaults to stdout",
+)
+def engine_trace(input_path: Path, events_path: Path | None, is_xml: bool, out_path: Path | None) -> None:
+    """Produce a JSON lines trace of engine steps for comparison harnesses.
+
+    Parameters
+    ----------
+    input_path: Path
+        SCJSON or SCXML chart.
+    events_path: Path | None
+        Optional JSONL file of events; reads stdin when omitted.
+    is_xml: bool
+        Treat ``input_path`` as SCXML when ``True``.
+    out_path: Path | None
+        Optional destination file; writes to stdout when omitted.
+
+    Returns
+    -------
+    None
+        Writes one JSON object per line.
+    """
+
+    ctx = (
+        DocumentContext.from_xml_file(input_path)
+        if is_xml
+        else DocumentContext.from_json_file(input_path)
+    )
+
+    sink: TextIO
+    if out_path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        sink = open(out_path, "w", encoding="utf-8")
+    else:
+        sink = sys.stdout
+
+    stream_handle: TextIO | None = None
+    try:
+        # Initial snapshot step (step 0)
+        filtered_start = ctx._filter_states(ctx.configuration)
+        init = {
+            "step": 0,
+            "event": None,
+            "firedTransitions": [],
+            "enteredStates": sorted(filtered_start, key=ctx._activation_order_key),
+            "exitedStates": [],
+            "configuration": sorted(filtered_start, key=ctx._activation_order_key),
+            "actionLog": [],
+            "datamodelDelta": dict(ctx.data_model),
+        }
+        sink.write(dumps(init) + "\n")
+
+        # Event stream
+        if events_path:
+            stream_handle = open(events_path, "r", encoding="utf-8")
+            stream: TextIO = stream_handle
+        else:
+            stream = sys.stdin
+
+        step_no = 1
+        for msg in JsonStreamDecoder(stream):
+            evt_name = msg.get("event") or msg.get("name")
+            if not evt_name:
+                continue
+            evt_data = msg.get("data")
+            trace = ctx.trace_step(Event(name=evt_name, data=evt_data))
+            trace["step"] = step_no
+            sink.write(dumps(trace) + "\n")
+            step_no += 1
+    finally:
+        if sink is not sys.stdout:
+            sink.close()
+        if stream_handle is not None:
+            stream_handle.close()
 
 if __name__ == "__main__":
     main()

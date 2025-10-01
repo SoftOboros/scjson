@@ -88,12 +88,12 @@ public class ScxmlToScjson implements java.util.concurrent.Callable<Integer> {
     }
 
     /**
-     * Convert XML content to JSON (placeholder implementation).
+     * Convert XML content to canonical SCJSON.
      *
      * @param xml XML string
-     * @return JSON string
+     * @return JSON string matching the reference Python implementation
      */
     public static String convertString(String xml) {
-        return "{\n  \"version\": 1.0\n}";
+        return ScjsonConverter.xmlToJson(xml);
     }
 }

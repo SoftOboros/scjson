@@ -1,0 +1,14 @@
+{
+  "name": "scjson-scion-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "bin": {
+    "scjson-scion-trace": "./scion-trace.cjs"
+  },
+  "dependencies": {
+    "jsdom": "^24.1.0",
+    "regenerator-runtime": "^0.14.1",
+    "scxml": "file:vendor/scxml-5.0.4.tgz"
+  }
+}

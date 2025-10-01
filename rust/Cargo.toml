@@ -1,8 +1,8 @@
 [package]
 name = "scjson"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Ira Abbott ira@softobotos.com"]
-edition = "2024"
+edition = "2021"
 license = "BSD-1-Clause"
 description = "SCXML to JSON converter, part of the multi-language scjson ecosystem"
 readme = "README.md"
@@ -27,4 +27,3 @@ tempfile = "3.9"
 [[bin]]
 name = "scjson_rust"
 path = "src/main.rs"
-

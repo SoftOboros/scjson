@@ -22,4 +22,4 @@ scjson xml path/to/machine.scjson
 scjson validate path/to/dir -r
 ```
 
-All source code in this directory is released under the BSD\u00A01-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.
+All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.
