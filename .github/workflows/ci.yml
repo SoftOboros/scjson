@@ -65,8 +65,15 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: ruby
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
 
       - name: Run Ruby specs
         working-directory: ruby
@@ -200,8 +207,15 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: ruby
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
 
       - name: Run Ruby specs
         working-directory: ruby
