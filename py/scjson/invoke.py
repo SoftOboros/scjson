@@ -229,6 +229,13 @@ class SCXMLChildHandler(InvokeHandler):
             if not evt:
                 break
             if evt.name == f"done.state.{root_id}":
+                # Ordering guard: run onexit for any active <final> states
+                # so that their sends (e.g. target="#_parent") are emitted
+                # before the parent receives done.invoke.
+                try:
+                    self._run_child_final_onexit()
+                except Exception:
+                    pass
                 self._on_done(evt.data)
                 break
             # Bubble the child's event to the parent
@@ -236,6 +243,31 @@ class SCXMLChildHandler(InvokeHandler):
                 self._emit(Event(name=evt.name, data=evt.data, send_id=evt.send_id))
             except Exception:
                 pass
+
+    def _run_child_final_onexit(self) -> None:
+        if not self.child:
+            return
+        try:
+            # Lazy import to avoid cycles
+            from .pydantic import ScxmlFinalType  # type: ignore
+        except Exception:
+            ScxmlFinalType = None  # type: ignore
+        if ScxmlFinalType is None:
+            return
+        # Identify active final states and run their onexit blocks
+        for act in self.child.activations.values():
+            try:
+                node = getattr(act, 'node', None)
+                if node is None:
+                    continue
+                if not isinstance(node, ScxmlFinalType):
+                    continue
+                if act.id not in self.child.configuration:
+                    continue
+                for onexit in getattr(node, 'onexit', []) or []:
+                    self.child._run_actions(onexit, act)
+            except Exception:
+                continue
 
     def _xml_from_payload_content(self, payload: Any) -> str | None:
         content = None
