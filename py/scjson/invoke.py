@@ -238,7 +238,13 @@ class SCXMLChildHandler(InvokeHandler):
                 # so that their sends (e.g. target="#_parent") are emitted
                 # before the parent receives done.invoke.
                 try:
-                    self._run_child_final_onexit()
+                    emitted = self._run_child_final_onexit()
+                except Exception:
+                    emitted = False
+                # Prefer front for done.invoke when no child-bubbled events exist
+                # so done.invoke outranks pending timeouts (e.g., W3C 239/240/241)
+                try:
+                    setattr(self, '_prefer_front_done', not emitted)
                 except Exception:
                     pass
                 self._on_done(evt.data)
@@ -249,7 +255,7 @@ class SCXMLChildHandler(InvokeHandler):
             except Exception:
                 pass
 
-    def _run_child_final_onexit(self) -> None:
+    def _run_child_final_onexit(self) -> bool:
         if not self.child:
             return
         try:
@@ -258,7 +264,8 @@ class SCXMLChildHandler(InvokeHandler):
         except Exception:
             ScxmlFinalType = None  # type: ignore
         if ScxmlFinalType is None:
-            return
+            return False
+        emitted = False
         # Identify active final states and run their onexit blocks
         for act in self.child.activations.values():
             try:
@@ -269,10 +276,24 @@ class SCXMLChildHandler(InvokeHandler):
                     continue
                 if act.id not in self.child.configuration:
                     continue
-                for onexit in getattr(node, 'onexit', []) or []:
-                    self.child._run_actions(onexit, act)
+                exits = getattr(node, 'onexit', []) or []
+                if exits:
+                    # Wrap emitter to detect any bubbled output
+                    original_emitter = getattr(self.child, '_external_emitter', None)
+                    def mark_emit(evt):
+                        nonlocal emitted
+                        emitted = True
+                        if callable(original_emitter):
+                            original_emitter(evt)
+                    try:
+                        self.child._external_emitter = mark_emit
+                        for onexit in exits:
+                            self.child._run_actions(onexit, act)
+                    finally:
+                        self.child._external_emitter = original_emitter
             except Exception:
                 continue
+        return emitted
 
     def _inject_payload_into_child(self) -> None:
         """Write invoke payload variables into the child's datamodel.

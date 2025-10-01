@@ -1147,12 +1147,15 @@ class DocumentContext(BaseModel):
                 pass
         # Enqueue done.invoke with priority so immediate completions
         # take precedence over previously queued timeouts.
-        try:
-            # Maintain generic before id-specific ordering while using front
+        # Prefer front for done.invoke when the invoker indicates it (no child
+        # bubbled events), otherwise keep normal order so bubbled events remain ahead.
+        handler = self.invocations.get(inv_id)
+        prefer_front = bool(getattr(handler, '_prefer_front_done', False))
+        if prefer_front and hasattr(self.events, 'push_front'):
+            # push id-specific first, then generic, so generic ends up ahead
             self.events.push_front(Event(name=f"done.invoke.{inv_id}", data=data))
             self.events.push_front(Event(name="done.invoke", data=data))
-        except Exception:
-            # Fallback to normal enqueue if push_front unavailable
+        else:
             self.events.push(Event(name="done.invoke", data=data))
             self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
         handler = self.invocations.pop(inv_id, None)
