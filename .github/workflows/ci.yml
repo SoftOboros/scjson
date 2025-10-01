@@ -284,15 +284,12 @@ jobs:
             echo "No RubyGems API key provided; skipping publish." && exit 0
           fi
           mkdir -p ~/.gem
-          cat <<'EOF' > ~/.gem/credentials
----
-:rubygems_api_key: ${RUBYGEMS_API_KEY}
-EOF
+          printf '---\n:rubygems_api_key: %s\n' "$RUBYGEMS_API_KEY" > ~/.gem/credentials
           chmod 0600 ~/.gem/credentials
-          gem push scjson-*.gem || echo "RubyGems publish failed; continuing."
+          gem push scjson-*.gem
 
-      - id: determine
-        name: Determine publish necessity
+      - id: determine_npm
+        name: Determine npm publish necessity
         working-directory: js
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
@@ -306,7 +303,7 @@ EOF
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine.outputs.should_publish == 'true'
+        if: github.ref == 'refs/heads/main' && steps.determine_npm.outputs.should_publish == 'true'
         working-directory: js
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
@@ -319,5 +316,5 @@ EOF
           npm publish --provenance --access public
 
       - name: Skip publish (no version change)
-        if: steps.determine.outputs.should_publish != 'true'
+        if: steps.determine_npm.outputs.should_publish != 'true'
         run: echo "Package version unchanged; skipping publish."
