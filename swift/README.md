@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Swift Package
 
 This directory contains the Swift implementation of **scjson**. The package exposes a reusable library (`SCJSONKit`) and a command line tool that can convert between `.scxml` and `.scjson` and perform validation using the shared schema.

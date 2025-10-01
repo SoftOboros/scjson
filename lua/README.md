@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # Lua SCJSON
 
 This directory provides a Lua-based implementation of the SCXML ↔ scjson utility.

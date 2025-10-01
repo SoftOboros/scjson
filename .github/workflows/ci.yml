@@ -130,7 +130,6 @@ jobs:
             echo "No PYPI_API_KEY provided; skipping PyPI publish." && exit 0
           fi
           twine upload --non-interactive dist/* || echo "PyPI publish failed; continuing."
-        continue-on-error: true
 
       - name: Publish to crates.io (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
@@ -142,7 +141,6 @@ jobs:
             echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish." && exit 0
           fi
           cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
-        continue-on-error: true
 
   main-checks:
     if: github.event_name == 'push'
@@ -262,13 +260,12 @@ jobs:
             echo "No RubyGems API key provided; skipping publish." && exit 0
           fi
           mkdir -p ~/.gem
-          cat <<EOF > ~/.gem/credentials
-          ---
-          :rubygems_api_key: ${RUBYGEMS_API_KEY}
-          EOF
+          cat <<'EOF' > ~/.gem/credentials
+---
+:rubygems_api_key: ${RUBYGEMS_API_KEY}
+EOF
           chmod 0600 ~/.gem/credentials
           gem push scjson-*.gem || echo "RubyGems publish failed; continuing."
-        continue-on-error: true
 
       - id: determine
         name: Determine publish necessity
@@ -292,36 +289,15 @@ jobs:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
         run: |
           TOKEN="${NPM_AUTH_TOKEN:-$NODE_AUTH_TOKEN}"
-          export NODE_AUTH_TOKEN="$TOKEN"
           if [ -z "$TOKEN" ]; then
             echo "No npm token available; skipping publish." && exit 0
           fi
+          export NODE_AUTH_TOKEN="$TOKEN"
           CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           mkdir -p "$(dirname "$CONFIG_PATH")"
-          echo "//registry.npmjs.org/:_authToken=${TOKEN}" > "$CONFIG_PATH"
-          publish_output=$(npm publish --provenance --access public 2>&1)
-          status=$?
-          echo "$publish_output"
-          if [ $status -ne 0 ]; then
-            if echo "$publish_output" | grep -q "E404"; then
-              echo "npm publish returned 404 (package likely requires manual setup); skipping."
-              exit 0
-            fi
-            exit $status
-          fi
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > "$CONFIG_PATH"
-          publish_output=$(npm publish --provenance --access public 2>&1)
-          status=$?
-          echo "$publish_output"
-          if [ $status -ne 0 ]; then
-            if echo "$publish_output" | grep -q "E404"; then
-              echo "npm publish returned 404 (package likely requires manual setup); skipping."
-              exit 0
-            fi
-            exit $status
-          fi
-        continue-on-error: true
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > "$CONFIG_PATH"
+          npm publish --provenance --access public
 
       - name: Skip publish (no version change)
-        if: steps.determine.outputs.should_publish != 'true'
+        if: steps.determine.outputs.npm_should_publish != 'true'
         run: echo "Package version unchanged; skipping publish."

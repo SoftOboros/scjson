@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 Agent Name: python-engine-todo
 
 Part of the scjson project.

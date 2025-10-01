@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # LEGAL NOTICE
 
 This repository contains original work developed for the `scjson` format and its associated tooling, schema, and converters. The project also incorporates third-party materials under their respective licenses, as outlined below.

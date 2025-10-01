@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Rust Crate
 
 This directory contains the Rust implementation of **scjson**. It offers a command line tool and supporting library to convert between `.scxml` and `.scjson` files and to validate documents.

@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Python Package
 
 This directory contains the Python implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface and utility functions to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
