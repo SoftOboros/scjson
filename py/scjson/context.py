@@ -1098,7 +1098,7 @@ class DocumentContext(BaseModel):
                 handler = self.invoke_registry.create(inv_type, inv_src, payload, autostart=True,
                                                       on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data))
                 try:
-                    handler.set_emitter(lambda e: self.events.push(e))
+                    handler.set_emitter(lambda e: getattr(self.events, 'push_front', self.events.push)(e))
                 except Exception:
                     pass
                 self.invocations[inv_id] = handler
@@ -1145,9 +1145,16 @@ class DocumentContext(BaseModel):
                 self._run_finalize(spec, act, inv_id, data)
             except Exception:
                 pass
-        # Enqueue generic done.invoke first for engines/tests that expect it
-        self.events.push(Event(name="done.invoke", data=data))
-        self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
+        # Enqueue done.invoke with priority so immediate completions
+        # take precedence over previously queued timeouts.
+        try:
+            # Maintain generic before id-specific ordering while using front
+            self.events.push_front(Event(name=f"done.invoke.{inv_id}", data=data))
+            self.events.push_front(Event(name="done.invoke", data=data))
+        except Exception:
+            # Fallback to normal enqueue if push_front unavailable
+            self.events.push(Event(name="done.invoke", data=data))
+            self.events.push(Event(name=f"done.invoke.{inv_id}", data=data))
         handler = self.invocations.pop(inv_id, None)
         if handler:
             try:

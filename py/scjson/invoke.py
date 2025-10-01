@@ -195,6 +195,11 @@ class SCXMLChildHandler(InvokeHandler):
             self.child._external_emitter = self._emit  # type: ignore[attr-defined]
         except Exception:
             pass
+        # Inject payload params/namelist into child datamodel prior to entry
+        try:
+            self._inject_payload_into_child()
+        except Exception:
+            pass
         # If initial was deferred, enter now so onentry sends can bubble
         try:
             if self.child and len(self.child.configuration) == 1:
@@ -266,6 +271,29 @@ class SCXMLChildHandler(InvokeHandler):
                     continue
                 for onexit in getattr(node, 'onexit', []) or []:
                     self.child._run_actions(onexit, act)
+            except Exception:
+                continue
+
+    def _inject_payload_into_child(self) -> None:
+        """Write invoke payload variables into the child's datamodel.
+
+        Only applies to dict payloads; keys named 'content' are ignored.
+        """
+        if not self.child:
+            return
+        if not isinstance(self.payload, dict):
+            return
+        for k, v in self.payload.items():
+            if k == 'content':
+                continue
+            try:
+                # Set in both global data_model and root activation locals
+                self.child.data_model[k] = v
+                self.child.root_activation.local_data[k] = v
+                # Override across all activation frames to ensure params/namelist
+                # take precedence over any child <datamodel> entries.
+                for act in self.child.activations.values():
+                    act.local_data[k] = v
             except Exception:
                 continue
 
