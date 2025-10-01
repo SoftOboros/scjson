@@ -45,7 +45,7 @@ def main() -> int:
     except Exception:  # pragma: no cover - network may be unavailable in CI
         existing = set()
 
-    should_publish = "true"  # Always attempt; failures are tolerated downstream
+    should_publish = "true" if version not in existing else "false" downstream
 
     output_path = os.environ.get("GITHUB_OUTPUT")
     if output_path:
