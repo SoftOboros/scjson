@@ -1117,6 +1117,140 @@ def test_invoke_type_uri_and_file_src(tmp_path):
     assert "pass" in ctx.configuration
 
 
+def test_invoke_src_and_content_parity(tmp_path):
+    """Invoking equivalent children via src and via content should behave the same."""
+    child = tmp_path / "child_final.scxml"
+    child.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="f">
+  <final id="f"/>
+  <final id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    parent = tmp_path / "parent_src_content_parity.scxml"
+    parent.write_text(
+        f"""
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s1">
+  <state id="s1">
+    <invoke type="scxml" id="c1" src="{child}"/>
+    <transition event="done.invoke.c1" target="s2"/>
+  </state>
+  <state id="s2">
+    <invoke type="scxml">
+      <content>
+        <scxml initial="f" datamodel="python">
+          <final id="f"/>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="done.invoke" target="pass"/>
+  </state>
+  <state id="pass"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(parent)
+    ctx.run()
+    assert "pass" in ctx.configuration
+
+
+def test_invoke_namelist_param_parity(tmp_path):
+    """Child sees Var1==1 regardless of whether passed by namelist or param."""
+    chart = tmp_path / "invoke_namelist_param_parity.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s01">
+  <datamodel><data id="Var1" expr="1"/></datamodel>
+  <state id="s01">
+    <invoke type="scxml" namelist="Var1">
+      <content>
+        <scxml initial="sub01" datamodel="python">
+          <datamodel><data id="Var1" expr="0"/></datamodel>
+          <state id="sub01">
+            <transition cond="Var1==1" target="subFinal1">
+              <send target="#_parent" event="ok1"/>
+            </transition>
+            <transition target="subFinal1">
+              <send target="#_parent" event="bad1"/>
+            </transition>
+          </state>
+          <final id="subFinal1"/>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="ok1" target="s02"/>
+    <transition event="bad1" target="fail"/>
+  </state>
+  <state id="s02">
+    <invoke type="scxml">
+      <param name="Var1" expr="1"/>
+      <content>
+        <scxml initial="sub02" datamodel="python">
+          <datamodel><data id="Var1" expr="0"/></datamodel>
+          <state id="sub02">
+            <transition cond="Var1==1" target="subFinal2">
+              <send target="#_parent" event="ok2"/>
+            </transition>
+            <transition target="subFinal2">
+              <send target="#_parent" event="bad2"/>
+            </transition>
+          </state>
+          <final id="subFinal2"/>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="ok2" target="pass"/>
+    <transition event="bad2" target="fail"/>
+  </state>
+  <state id="pass"/>
+  <state id="fail"/>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    ctx.run()
+    assert "pass" in ctx.configuration
+def test_invoke_bad_src_emits_error_communication(tmp_path):
+    chart = tmp_path / "invoke_bad_src.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke type="scxml" src="file:missing_child.scxml" id="child"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt and evt.name == "error.communication"
+
+
+def test_invoke_bad_typeexpr_emits_error_execution(tmp_path):
+    chart = tmp_path / "invoke_bad_typeexpr.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+  <state id="s">
+    <invoke typeexpr="undefined_var + 1"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+    ctx = DocumentContext.from_xml_file(chart)
+    evt = ctx.events.pop()
+    assert evt and evt.name == "error.execution"
+
+
 def test_invoke_child_bubbles_event_to_parent(tmp_path):
     child = tmp_path / "child_bubble.scxml"
     child.write_text(
