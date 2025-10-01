@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    scjson (0.1.4)
+    scjson (0.3.3)
       nokogiri
 
 GEM
