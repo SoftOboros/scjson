@@ -88,7 +88,6 @@ jobs:
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
-
       - id: determine_pypi
         name: Determine PyPI publish necessity
         working-directory: py
@@ -224,6 +223,20 @@ jobs:
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
+      - id: determine_pypi
+        name: Determine PyPI publish necessity
+        working-directory: py
+        run: python ../.github/scripts/determine_pypi_publish.py
+
+      - id: determine_crates
+        name: Determine crates.io publish necessity
+        run: python .github/scripts/determine_crates_publish.py
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: ruby ../.github/scripts/determine_rubygems_publish.rb
+
 
       - name: Publish to RubyGems (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
