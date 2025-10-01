@@ -755,15 +755,19 @@ class DocumentContext(BaseModel):
         if target and str(target) in {"#_parent", "#_scxml_parent"}:
             payload = self._build_send_payload(send, env, act)
             event_obj = Event(name=str(event_name), data=payload, send_id=getattr(send, "id", None))
-            emitter = getattr(self, "_external_emitter", None)
-            if callable(emitter):
+            # Respect delay/delayexpr semantics: schedule on the child's queue,
+            # then the invoker will bubble to the parent when due.
+            if getattr(send, "delayexpr", None) is not None:
                 try:
-                    emitter(event_obj)
-                except Exception:
-                    self.events.push(Event(name="error.communication"))
+                    delay_value = self._evaluate_expr(send.delayexpr, env)
+                except (SafeEvaluationError, Exception):
+                    delay_value = None
+                delay_seconds = self._parse_delay(delay_value)
             else:
-                # No emitter available; treat as communication error
-                self.events.push(Event(name="error.communication"))
+                delay_seconds = self._parse_delay(getattr(send, "delay", None))
+            if delay_seconds is None:
+                delay_seconds = 0.0
+            self._schedule_event(event_obj, delay_seconds)
             return
 
         # Special target to send to invoked child(ren) from this state
@@ -1225,7 +1229,8 @@ class DocumentContext(BaseModel):
         text = str(value).strip()
         if not text:
             return 0.0
-        match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h|d)?", text)
+        # Accept numbers like ".5s", "0.5s", "1s", "100ms"
+        match = re.fullmatch(r"((?:[0-9]*\.[0-9]+)|(?:[0-9]+))(ms|s|m|h|d)?", text)
         if not match:
             return None
         magnitude = float(match.group(1))
