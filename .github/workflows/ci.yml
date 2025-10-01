@@ -262,7 +262,10 @@ jobs:
             echo "No RubyGems API key provided; skipping publish." && exit 0
           fi
           mkdir -p ~/.gem
-          printf "---\n:rubygems_api_key: %s\n" "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          cat <<EOF > ~/.gem/credentials
+          ---
+          :rubygems_api_key: ${RUBYGEMS_API_KEY}
+          EOF
           chmod 0600 ~/.gem/credentials
           gem push scjson-*.gem || echo "RubyGems publish failed; continuing."
         continue-on-error: true
