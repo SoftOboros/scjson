@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Go Package
 
 This directory contains the Go implementation of **scjson**, a format for representing SCXML state machines in JSON. The command line tool can convert between `.scxml` and `.scjson` files and validate documents using the shared schema.

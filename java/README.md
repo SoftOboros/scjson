@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Java Package
 
 This directory contains the Java implementation of **scjson** using Maven. It provides a command line interface to convert between `.scxml` and `.scjson` documents and validate them against the shared schema.

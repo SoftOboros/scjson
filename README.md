@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson
 
 > A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.
