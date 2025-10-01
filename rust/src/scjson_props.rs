@@ -67,9 +67,8 @@ impl Default for BooleanDatatypeProps {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-///     Describes the processor execution mode for this document, being either "lax"
-/// or
-///     "strict".
+/// Describes the processor execution mode for this document, being either "lax"
+/// or "strict".
 pub enum ExmodeDatatypeProps {
     Lax,
     Strict,
