@@ -175,6 +175,17 @@ new scenario is exercised against scion-core.
   - The child engine recognizes `<send target="#_parent">` and emits directly
     into the parent's event queue when an emitter is attached by the invoker.
 
+Ordering policy
+- The engine exposes an ordering knob for child→parent emissions and done.invoke
+  delivery. Configure via CLI `--ordering` or by setting `ctx.ordering_mode`.
+  - `tolerant` (default): child→parent emissions are inserted at the front; done.invoke
+    uses front insertion only when the child did not emit to the parent earlier in the step.
+  - `strict`: child→parent emissions use normal enqueue (tail); done.invoke uses normal enqueue
+    (id-specific then generic).
+  - `scion`: emulate SCION’s ordering: child→parent emissions use normal enqueue, while
+    `done.invoke` is pushed to the front with generic before id-specific, enabling same‑microstep
+    transitions in a SCION-compatible order.
+
 Limitations:
 - Full SCXML invoke semantics (processor coupling, nested machines, error
   handling parity) are not implemented. The current behavior is designed to

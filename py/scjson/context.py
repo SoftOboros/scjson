@@ -1200,7 +1200,13 @@ class DocumentContext(BaseModel):
                     on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data)
                 )
                 try:
-                    if str(self.ordering_mode).lower() == "strict":
+                    mode = str(self.ordering_mode).lower()
+                    # strict: enqueue child→parent events normally (tail)
+                    # scion: emulate SCION by using normal enqueue for child emissions,
+                    #        while done.invoke is pushed to front in _on_invoke_done.
+                    # tolerant (default): be generous and use front insertion to surface
+                    # child emissions earlier when charts rely on it.
+                    if mode in {"strict", "scion"}:
                         handler.set_emitter(lambda e: self.events.push(e))
                     else:
                         handler.set_emitter(lambda e: getattr(self.events, 'push_front', self.events.push)(e))
@@ -1327,18 +1333,23 @@ class DocumentContext(BaseModel):
                 self._run_finalize(spec, act, inv_id, data)
             except Exception:
                 pass
-        # Enqueue done.invoke with priority so immediate completions
-        # take precedence over previously queued timeouts.
-        # Prefer front for done.invoke when the invoker indicates it (no child
-        # bubbled events), otherwise keep normal order so bubbled events remain ahead.
+        # Enqueue done.invoke using the configured ordering policy.
+        #
+        # scion: push to front with generic before id-specific to enable
+        #        same-microstep transitions following SCION's observed order.
+        # tolerant: push to front only when handler indicated preference
+        #           (i.e., no child→parent emissions yet); otherwise use tail.
+        # strict: always use tail ordering (id-specific then generic).
         handler = self.invocations.get(inv_id)
+        mode = str(getattr(self, 'ordering_mode', 'tolerant')).lower()
         prefer_front = bool(getattr(handler, '_prefer_front_done', False))
-        if prefer_front and hasattr(self.events, 'push_front'):
-            # push id-specific first, then generic, so generic ends up ahead
+        if mode == "scion" and hasattr(self.events, 'push_front'):
+            self.events.push_front(Event(name="done.invoke", data=data, send_id=inv_id))
+            self.events.push_front(Event(name=f"done.invoke.{inv_id}", data=data, send_id=inv_id))
+        elif prefer_front and hasattr(self.events, 'push_front'):
             self.events.push_front(Event(name=f"done.invoke.{inv_id}", data=data, send_id=inv_id))
             self.events.push_front(Event(name="done.invoke", data=data, send_id=inv_id))
         else:
-            # default order: id-specific first, then generic
             self.events.push(Event(name=f"done.invoke.{inv_id}", data=data, send_id=inv_id))
             self.events.push(Event(name="done.invoke", data=data, send_id=inv_id))
         handler = self.invocations.pop(inv_id, None)

@@ -84,6 +84,7 @@ This expanded snapshot is designed to fast‑track resumption after a cold resta
 - Added shim `py/py/exec_compare.py` for test path stability
 - uber_test: parameterized per-chart tests; CLI smoke mode with per-chart progress
 - Docs updated: control tokens, vector injection, invoke/finalize semantics
+ - Engine ordering: new `--ordering scion` mode. Child→parent emissions enqueue normally; `done.invoke` is pushed to front with generic before id-specific to better match SCION.
 
 ## Reproduction Recipes
 Unit tests
