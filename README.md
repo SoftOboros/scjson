@@ -67,10 +67,10 @@ Each directory is designed to be independently usable as a library or CLI tool.
 | Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Matches Python output on the tutorial corpus |
 | Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
 | Java      | ✅ Parity | [java](./java/README.md) | Uses SCION-backed runner; matches Python output |
-| Go        | ⚠️ Beta | [go](./go/README.md) | Functional CLI; parity work in progress |
-| Swift     | ⚠️ Beta | [swift](./swift/README.md) | Functional CLI; parity work in progress |
+| Go        | ✅ Parity | [go](./go/README.md) | Matches Python output on the tutorial corpus |
+| Swift     | ✅ Parity | [swift](./swift/README.md) | Matches Python output on the tutorial corpus |
 | C#        | ⚠️ Beta | [csharp](./csharp/README.md) | Functional CLI; parity work in progress |
-| Lua       | 🚧 Experimental | [lua](./lua/README.md) | Minimal feature set |
+| Lua       | ✅ Parity | [lua](./lua/README.md) | Matches Python output on the tutorial corpus |
 
 See [docs/COMPATIBILITY.md](./docs/COMPATIBILITY.md) for the latest cross-language
 parity details and test notes.
