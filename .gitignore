@@ -27,3 +27,5 @@ csharp/tmp*/
 py/uber_out/
 uber_out/
 java/lib/*.jar
+ruby/vendor/
+ruby/.bundle/

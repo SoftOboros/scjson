@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.softobros</groupId>
     <artifactId>scjson</artifactId>
-    <version>0.3.1-SNAPSHOT</version>
+    <version>0.3.3-SNAPSHOT</version>
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
@@ -28,11 +28,6 @@
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>
             <version>4.7.5</version>
-        </dependency>
-        <dependency>
-            <groupId>local.apache.commons</groupId>
-            <artifactId>commons-scxml</artifactId>
-            <version>0.9</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>

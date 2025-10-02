@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Ruby Gem
 
 This directory contains the Ruby implementation of **scjson**. The gem provides a command line tool and library functions to convert between `.scxml` and `.scjson` files.

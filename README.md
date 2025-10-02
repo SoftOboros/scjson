@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson
 
 > A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.
@@ -60,15 +62,18 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 | Language  | Status | Path | Notes |
 |-----------|--------|------|-------|
-| Python    | ✅ Stable | [py](./py/README.md) | Reference CLI |
-| JavaScript| ✅ Beta | [js](./js/README.md) | Node CLI |
-| Ruby      | ✅ Beta | [ruby](./ruby/README.md) | Gem CLI |
-| Go        | ✅ Beta | [go](./go/README.md) | Go binary |
-| Rust      | ✅ Beta | [rust](./rust/README.md) | Cargo crate |
-| Swift     | ✅ Beta | [swift](./swift/README.md) | Swift package |
-| Java      | ✅ Beta | [java](./java/README.md) | Maven CLI |
-| Lua       | ✅ Basic | [lua](./lua/README.md) | Lua scripts |
-| C#        | ✅ Beta | [csharp](./csharp/README.md) | .NET CLI |
+| Python    | ✅ Canonical | [py](./py/README.md) | Reference implementation and compatibility baseline |
+| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus |
+| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Matches Python output on the tutorial corpus |
+| Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
+| Java      | ✅ Parity | [java](./java/README.md) | Uses SCION-backed runner; matches Python output |
+| Go        | ⚠️ Beta | [go](./go/README.md) | Functional CLI; parity work in progress |
+| Swift     | ⚠️ Beta | [swift](./swift/README.md) | Functional CLI; parity work in progress |
+| C#        | ⚠️ Beta | [csharp](./csharp/README.md) | Functional CLI; parity work in progress |
+| Lua       | 🚧 Experimental | [lua](./lua/README.md) | Minimal feature set |
+
+See [docs/COMPATIBILITY.md](./docs/COMPATIBILITY.md) for the latest cross-language
+parity details and test notes.
 
 ---
 

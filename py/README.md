@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson Python Package
 
 This directory contains the Python implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface and utility functions to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
@@ -118,6 +120,26 @@ Operational conformance testing is performed via [uber_test.py](https://github.c
 ```
 Note: [uber_test.py](https://github.com/SoftOboros/scjson/blob/main/py/uber_test.py) applies all scxml files in [Zhornyak's ScxmlEditor-Tutorial](https://alexzhornyak.github.io/ScxmlEditor-Tutorial/) which provides a robest set of scxml test vectors useful for standard compliance verification.  This is the only file in the test suite which fails to verify round-trip.
 
+### Uber Test Harness
+
+Run across all languages or a single language with alias support:
+
+```bash
+# All languages detected on PATH
+python py/uber_test.py
+
+# Single language (aliases allowed): py, python, js, ts, javascript, rs, rust, swift, java, csharp
+python py/uber_test.py -l js
+python py/uber_test.py -l swfit   # typo tolerated → swift
+
+# Limit the corpus and treat consensus as warnings only
+python py/uber_test.py -l swift -s "Examples/Qt/StopWatch/*.scxml" --consensus-warn
+```
+
+- `-s/--subset` filters SCXML files by a glob relative to `tutorial/`.
+- `--consensus-warn` downgrades mismatches to warnings when reference languages (Python/JavaScript/Rust) match the canonical structure.
+- The harness normalizes structural differences (see INFERENCE.md) to produce actionable diffs and prints a triage line with a recommendation.
+
 ## Model Variants
 
 The Python package exposes four sets of generated models that mirror the
@@ -224,4 +246,3 @@ docker pull iraa/scjson:latest
 ## License
 
 All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.
-

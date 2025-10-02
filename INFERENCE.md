@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # SCXML to SCJSON Inference Guide
 
 This document describes how the JavaScript converter transforms SCXML into the `scjson` format. It captures the *inference logic* encoded in [`js/src/converters.js`](js/src/converters.js) so that other language implementations can reproduce identical behaviour.

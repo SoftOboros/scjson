@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # Testing Guide
 
 This project contains implementations across multiple languages. Below are the commands used to run the automated test suites for each language-specific module.

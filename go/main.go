@@ -12,9 +12,48 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	cli "github.com/urfave/cli/v2"
 )
+
+// collectFiles gathers files with the provided extension under the root path.
+//
+// @param root string - directory to scan.
+// @param extension string - file extension to match (including the dot).
+// @param recursive bool - traverse subdirectories when true.
+// @returns []string and error - matching file paths and failures.
+func collectFiles(root, extension string, recursive bool) ([]string, error) {
+	var files []string
+	if recursive {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if strings.EqualFold(filepath.Ext(path), extension) {
+				files = append(files, path)
+			}
+			return nil
+		})
+		return files, err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(entry.Name()), extension) {
+			files = append(files, filepath.Join(root, entry.Name()))
+		}
+	}
+	return files, nil
+}
 
 // convertScxmlFile converts a single SCXML file to scjson.
 //
@@ -99,6 +138,29 @@ func main() {
 					return err
 				}
 				out := c.String("output")
+				recursive := c.Bool("recursive")
+				verify := c.Bool("verify")
+				keepEmpty := c.Bool("keep-empty")
+				args := c.Args().Slice()
+				for i := 0; i < len(args); i++ {
+					arg := args[i]
+					if !strings.HasPrefix(arg, "-") {
+						continue
+					}
+					switch arg {
+					case "-o", "--output":
+						if i+1 < len(args) {
+							out = args[i+1]
+							i++
+						}
+					case "-r", "--recursive":
+						recursive = true
+					case "-v", "--verify":
+						verify = true
+					case "--keep-empty":
+						keepEmpty = true
+					}
+				}
 				info, err := os.Stat(src)
 				if err != nil {
 					return err
@@ -108,32 +170,29 @@ func main() {
 					if out != "" {
 						destDir, _ = filepath.Abs(out)
 					}
-					pattern := "*.scxml"
-					if c.Bool("recursive") {
-						pattern = "**/*.scxml"
+					files, err := collectFiles(src, ".scxml", recursive)
+					if err != nil {
+						return err
 					}
-					matches, _ := filepath.Glob(filepath.Join(src, pattern))
-					for _, f := range matches {
-						if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
-							rel, _ := filepath.Rel(src, f)
-							var dest string
-							if c.Bool("verify") {
-								dest = ""
-							} else {
-								dest = filepath.Join(destDir, rel[:len(rel)-len(filepath.Ext(rel))]+".scjson")
-							}
-							if err := convertScxmlFile(f, dest, c.Bool("verify"), c.Bool("keep-empty")); err != nil {
-								fmt.Fprintf(os.Stderr, "Failed to convert %s: %v\n", f, err)
-							}
+					for _, f := range files {
+						rel, _ := filepath.Rel(src, f)
+						var dest string
+						if verify {
+							dest = ""
+						} else {
+							dest = filepath.Join(destDir, rel[:len(rel)-len(filepath.Ext(rel))]+".scjson")
+						}
+						if err := convertScxmlFile(f, dest, verify, keepEmpty); err != nil {
+							fmt.Fprintf(os.Stderr, "Failed to convert %s: %v\n", f, err)
 						}
 					}
 					return nil
 				}
 				dest := out
-				if !c.Bool("verify") && dest == "" {
+				if !verify && dest == "" {
 					dest = src[:len(src)-len(filepath.Ext(src))] + ".scjson"
 				}
-				return convertScxmlFile(src, dest, c.Bool("verify"), c.Bool("keep-empty"))
+				return convertScxmlFile(src, dest, verify, keepEmpty)
 			},
 		},
 		{
@@ -155,6 +214,26 @@ func main() {
 					return err
 				}
 				out := c.String("output")
+				recursive := c.Bool("recursive")
+				verify := c.Bool("verify")
+				args := c.Args().Slice()
+				for i := 0; i < len(args); i++ {
+					arg := args[i]
+					if !strings.HasPrefix(arg, "-") {
+						continue
+					}
+					switch arg {
+					case "-o", "--output":
+						if i+1 < len(args) {
+							out = args[i+1]
+							i++
+						}
+					case "-r", "--recursive":
+						recursive = true
+					case "-v", "--verify":
+						verify = true
+					}
+				}
 				info, err := os.Stat(src)
 				if err != nil {
 					return err
@@ -164,32 +243,29 @@ func main() {
 					if out != "" {
 						destDir, _ = filepath.Abs(out)
 					}
-					pattern := "*.scjson"
-					if c.Bool("recursive") {
-						pattern = "**/*.scjson"
+					files, err := collectFiles(src, ".scjson", recursive)
+					if err != nil {
+						return err
 					}
-					matches, _ := filepath.Glob(filepath.Join(src, pattern))
-					for _, f := range matches {
-						if fi, err := os.Stat(f); err == nil && !fi.IsDir() {
-							rel, _ := filepath.Rel(src, f)
-							var dest string
-							if c.Bool("verify") {
-								dest = ""
-							} else {
-								dest = filepath.Join(destDir, rel[:len(rel)-len(filepath.Ext(rel))]+".scxml")
-							}
-							if err := convertScjsonFile(f, dest, c.Bool("verify")); err != nil {
-								fmt.Fprintf(os.Stderr, "Failed to convert %s: %v\n", f, err)
-							}
+					for _, f := range files {
+						rel, _ := filepath.Rel(src, f)
+						var dest string
+						if verify {
+							dest = ""
+						} else {
+							dest = filepath.Join(destDir, rel[:len(rel)-len(filepath.Ext(rel))]+".scxml")
+						}
+						if err := convertScjsonFile(f, dest, verify); err != nil {
+							fmt.Fprintf(os.Stderr, "Failed to convert %s: %v\n", f, err)
 						}
 					}
 					return nil
 				}
 				dest := out
-				if !c.Bool("verify") && dest == "" {
+				if !verify && dest == "" {
 					dest = src[:len(src)-len(filepath.Ext(src))] + ".scxml"
 				}
-				return convertScjsonFile(src, dest, c.Bool("verify"))
+				return convertScjsonFile(src, dest, verify)
 			},
 		},
 		{

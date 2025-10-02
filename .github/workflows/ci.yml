@@ -12,6 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+<<<<<<< HEAD
+=======
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
+>>>>>>> main
 
       - uses: actions/setup-node@v4
         with:
@@ -47,6 +55,66 @@ jobs:
         working-directory: py
         run: python -m pytest
 
+<<<<<<< HEAD
+=======
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          RUBYOPT: -rbundler/setup
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
+      - id: determine_pypi
+        name: Determine PyPI publish necessity
+        working-directory: py
+        run: python ../.github/scripts/determine_pypi_publish.py
+
+      - id: determine_crates
+        name: Determine crates.io publish necessity
+        run: python .github/scripts/determine_crates_publish.py
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: ruby ../.github/scripts/determine_rubygems_publish.rb
+
+>>>>>>> main
       - name: Install packaging tools (PyPI)
         working-directory: py
         run: pip install build twine
@@ -57,6 +125,7 @@ jobs:
           rm -rf dist
           python -m build
 
+<<<<<<< HEAD
       - id: determine_pypi
         name: Determine PyPI publish necessity
         working-directory: py
@@ -92,12 +161,17 @@ print(f"PyPI target {name}@{version}; existing versions: {sorted(existing)}")
 PY
 
       - name: Publish to PyPI
+=======
+      - name: Publish to PyPI (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
+>>>>>>> main
         working-directory: py
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
         run: |
           if [ -z "$TWINE_PASSWORD" ]; then
+<<<<<<< HEAD
             echo "No PYPI_API_KEY provided; skipping PyPI publish."
             exit 0
           fi
@@ -137,16 +211,30 @@ PY
 
       - name: Publish to crates.io (if version changed)
         if: steps.determine_crates.outputs.should_publish == 'true'
+=======
+            echo "No PYPI_API_KEY provided; skipping PyPI publish." && exit 0
+          fi
+          twine upload --non-interactive dist/* || echo "PyPI publish failed; continuing."
+
+      - name: Publish to crates.io (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
+>>>>>>> main
         working-directory: rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+<<<<<<< HEAD
             echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish."
             exit 0
           fi
           cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
         continue-on-error: true
+=======
+            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish." && exit 0
+          fi
+          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
+>>>>>>> main
 
   main-checks:
     if: github.event_name == 'push'
@@ -157,6 +245,14 @@ PY
       id-token: write
     steps:
       - uses: actions/checkout@v4
+<<<<<<< HEAD
+=======
+        with:
+          submodules: recursive
+
+      - name: Update submodules
+        run: git submodule update --init --recursive
+>>>>>>> main
 
       - uses: actions/setup-node@v4
         with:
@@ -193,11 +289,115 @@ PY
         working-directory: py
         run: python -m pytest
 
+<<<<<<< HEAD
       - id: determine
         name: Determine publish necessity
         working-directory: js
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+=======
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo build (Rust)
+        working-directory: rust
+        run: cargo build --locked
+
+      - name: Cargo test (Rust)
+        working-directory: rust
+        run: cargo test --locked
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install Ruby dependencies
+        working-directory: ruby
+        env:
+          BUNDLE_FROZEN: 'false'
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle config set --local frozen false
+          bundle install --jobs 4 --retry 3
+
+      - name: Run Ruby specs
+        working-directory: ruby
+        run: bundle exec rspec
+
+      - name: Build Ruby gem
+        working-directory: ruby
+        run: |
+          rm -f scjson-*.gem
+          gem build scjson.gemspec
+
+      - name: Run uber_test for release languages
+        working-directory: py
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          RUBYOPT: -rbundler/setup
+        run: |
+          python uber_test.py -l python
+          python uber_test.py -l javascript
+          python uber_test.py -l ruby
+          python uber_test.py -l rust
+      - id: determine_pypi
+        name: Determine PyPI publish necessity
+        working-directory: py
+        run: python ../.github/scripts/determine_pypi_publish.py
+
+      - id: determine_crates
+        name: Determine crates.io publish necessity
+        run: python .github/scripts/determine_crates_publish.py
+
+      - id: determine_rubygems
+        name: Determine RubyGems publish necessity
+        working-directory: ruby
+        run: ruby ../.github/scripts/determine_rubygems_publish.rb
+
+
+      - name: Publish to PyPI (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
+        working-directory: py
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
+        run: |
+          if [ -z "$TWINE_PASSWORD" ]; then
+            echo "No PYPI_API_KEY provided; skipping publish."
+            exit 0
+          fi
+          twine upload --non-interactive dist/*
+
+      - name: Publish to crates.io (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
+        working-directory: rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish."
+            exit 0
+          fi
+          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
+      - name: Publish to RubyGems (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
+        working-directory: ruby
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          if [ -z "$RUBYGEMS_API_KEY" ]; then
+            echo "No RubyGems API key provided; skipping publish." && exit 0
+          fi
+          mkdir -p ~/.gem
+          printf '---\n:rubygems_api_key: %s\n' "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push scjson-*.gem
+
+      - id: determine_npm
+        name: Determine npm publish necessity
+        working-directory: js
+        env:
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+>>>>>>> main
         run: |
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
@@ -208,6 +408,7 @@ PY
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm (if version changed)
+<<<<<<< HEAD
         if: steps.determine.outputs.should_publish == 'true'
         working-directory: js
         env:
@@ -222,4 +423,21 @@ PY
 
       - name: Skip publish (no version change)
         if: steps.determine.outputs.should_publish != 'true'
+=======
+        if: github.ref == 'refs/heads/main' && steps.determine_npm.outputs.should_publish == 'true'
+        working-directory: js
+        env:
+          NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
+        run: |
+          TOKEN="${NPM_AUTH_TOKEN:-$NODE_AUTH_TOKEN}"
+          if [ -z "$TOKEN" ]; then
+            echo "No npm token available; skipping publish."
+            exit 0
+          fi
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > ~/.npmrc
+          npm publish --provenance --access public
+
+      - name: Skip publish (no version change)
+        if: steps.determine_npm.outputs.should_publish != 'true'
+>>>>>>> main
         run: echo "Package version unchanged; skipping publish."

@@ -1,3 +1,5 @@
+<p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
+
 # AGENTS
 
 This file defines agents and their respective roles for the `scjson` project. Each agent is responsible for a specific transformation, validation, or extraction task.

@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
+
 # scjson C# Package
 
 This directory contains the .NET implementation of **scjson**, providing a command line tool and library to convert between `.scxml` and `.scjson` files.

@@ -1,3 +1,5 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
 Agent Name: python-engine-todo
 
 Part of the scjson project.
@@ -35,7 +37,7 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 - [x] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
 - [x] Parallel completion: parent final when all regions complete; propagate finalization.
 - [x] History: shallow with default transition fallback.
- - [x] History: deep (restore deep descendants).
+- [x] History: deep (restore deep descendants).
 - [x] Parallel: initial entry enters all child regions.
 
 3) Executable Content Phase 1
@@ -47,7 +49,7 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 4) Events, Timers, and External I/O
 - [x] Basic internal `EventQueue` for external/internal events.
 - [x] `<send>` (delay, target), `<cancel>` by ID; external sinks.
- - [x] Emit error events (`error.execution`, `error.communication`, …) into trace.
+- [x] Emit error events (`error.execution`, `error.communication`, …) into trace.
 - [x] Timers with mock clock for deterministic tests. (Delayed `<send>` scheduling uses `DocumentContext.advance_time` for deterministic control.)
 
 5) Invoke / Finalize
@@ -115,8 +117,8 @@ CLI Additions (Python)
   - [x] `--max-steps`
 
 Comparison Tooling
-- [x] Add `py/exec_compare.py` (or integrate into `uber_test.py`) to drive both runners and diff traces with CI‑friendly exit codes.
-- [x] Support optional secondary comparisons (e.g., Scion vs Apache Commons) via CLI/env overrides.
+- [x] Add `py/exec_compare.py` to drive both runners and diff traces with CI‑friendly exit codes.
+- [x] Support optional secondary comparisons via CLI/env overrides.
 
 ## Milestones & Deliverables
 - [ ] M1: Core trace + macrostep + CLI; trace unit tests; 10 simple charts pass vs chosen runner.
@@ -146,14 +148,8 @@ Comparison Tooling
 - [x] Invoke start semantics: execute `<invoke>` at macrostep end for states entered and not exited; implement multi-event matching for transitions (`event="a b"`).
 - [x] W3C sweep (253/338/422/554): `engine-verify` outcomes are pass when using `--advance-time`; `exec_compare` leaf-only normalization matches on 554; others differ at step 0 due to initial transition visibility. Step-0 normalization now strips `datamodelDelta` and `firedTransitions`, with optional stripping of `enteredStates`/`exitedStates` gated by `--keep-step0-states`.
 - [x] Emit a generic `error` alias alongside `error.execution` to improve compatibility with charts listening for `error.*`.
- - [x] Add spec-conformant invalid-assign handling: assigning to a non-existent location now enqueues `error.execution` and does not create a new variable; this enables W3C `test401.scxml`. Removed from `ENGINE_KNOWN_UNSUPPORTED`.
- - [ ] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py:44-58` and plan removals as features land.
-
-### Notes
-- As of Sept 2025, Apache Commons SCXML is considered deprecated/legacy; scion-core is the authoritative implementation for behavioral compatibility.
-- Historical Commons SCXML builds (0.x) may be kept for reference but are not required for CI.
-- External send targets (e.g., `#_scxml_*`, HTTP processors) now enqueue `error.communication` and are skipped; `<script>` actions still emit warnings and are no-ops.
-- Tutorial sweep guardrails live in `py/uber_test.py::ENGINE_KNOWN_UNSUPPORTED`; revisit after expanding coverage.
+- [x] Add spec-conformant invalid-assign handling: assigning to a non-existent location now enqueues `error.execution` and does not create a new variable; this enables W3C `test401.scxml`. Removed from `ENGINE_KNOWN_UNSUPPORTED`.
+- [ ] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py` and plan removals as features land.
 
 ---
 
@@ -161,76 +157,28 @@ Comparison Tooling
 
 Goal: Automatically generate event vectors for each chart to maximize behavioral coverage and compare Python traces vs scion for those vectors. This replaces ad‑hoc fixtures with a principled, repeatable process that scales.
 
-Why now: The runtime and comparison tooling are stable enough (macro/microstep, history, parallel, send/cancel, delayed timers via `advance_time`, invoke lifecycle, safe eval, engine‑trace/exec_compare) to support a chart‑agnostic vector generator.
-
 Planned Components
 - Analyzer & Alphabet
-  - Walk the Pydantic model (or `DocumentContext.activations`) to extract:
-    - Transition event tokens (split space‑separated lists; handle `*` and prefix patterns e.g., `error.*`).
-    - Done/state targets for `<final>` and `<parallel>` (e.g., `done.state.<id>`), invoke presence, and child completion (`done.invoke.*`).
-    - Hints for `invoke` types (mock:immediate, mock:deferred → “complete” event), and child SCXML/SCJSON where applicable.
-  - Output a per‑chart event alphabet and a lightweight transition graph.
-
+  - Extract transition event tokens (split lists; ignore wildcard/prefix patterns), done/state and invoke hints.
 - Simulator & Coverage
-  - Run candidate sequences through the Python engine (optionally with `advance_time` steps) and collect coverage:
-    - States entered (leaf/compound), transitions fired (source/targets), occurrence of `done.state.*`, `done.invoke.*`, and `error.*`.
-  - Provide a sim API: given a sequence, return coverage deltas and the resulting trace.
-
+  - Track entered states, fired transitions, and done/error events from engine traces.
 - Vector Search (bounded)
-  - BFS/iterative deepening over sequences from the alphabet with depth limits (e.g., ≤ 3–5), pruning by coverage delta.
-  - Seeds: single events, then pairs/triples; bail out when no new coverage is observed.
-  - Invokes: include “complete” when an active deferred invocation is detected.
-  - Timers: inject `advance_time` after sequences that schedule delayed sends.
-
+  - Coverage‑guided BFS over the event alphabet (depth ≤ 2–3), prune when no delta.
+  - Include “complete” when mock:deferred invoke is present; insert advance_time when needed.
 - Payload Heuristics (Phase 2)
-  - Parse `cond`/`expr` identifiers and try boolean/numeric toggles in datamodel and event payloads to flip branches.
-  - Start simple (true/false, 0/1) with guardrails for sandboxed evaluation.
-
+  - Toggle simple booleans/numerics from cond/expr identifiers to flip branches.
 - Emission & Compare
-  - Emit vectors as `.events.jsonl` (same schema used by exec harness).
-  - Integrate with `py/exec_compare.py`: generate vectors into a temp dir when no events file is present (or via `--generate-vectors`), then compare Python vs scion per vector.
-
+  - Emit vectors as `.events.jsonl` + `.coverage.json`, integrate with `exec_compare --generate-vectors` and `exec_sweep --generate-vectors`.
 - Minimization & Reporting
-  - Trim vectors (remove leading/trailing events that don’t contribute to coverage delta).
-  - Produce per‑chart coverage reports: counts of entered states, fired transitions, done/raise events exercised, etc.
-
-- Optional Init Alignment (Opt‑in)
-  - Add an engine‑trace flag (e.g., `--drain-init-events`) to process internal init events before step 0 for charts that differ only on initialization visibility. Off by default; generator can opt‑in where appropriate for reference parity.
+  - Trim vectors; aggregate coverage across charts into a sweep summary.
 
 Deliverables
-- `py/vector_gen.py`: CLI to analyze → generate vectors → emit coverage summary.
-- `py/vector_lib/` (or similar): analyzer, simulator, coverage helpers.
-- `py/exec_compare.py`: `--generate-vectors` and flags to pass `advance_time`/normalization as needed.
-- Docs: ENGINE.md section on vector generation; this TODO updated as phases land.
-- Tests: small fixtures to validate analyzer extraction and coverage accounting.
+- `py/vector_gen.py`, `py/vector_lib/*`: generator + helpers
+- `py/exec_compare.py`: vector integration flags and coverage printout
+- `py/exec_sweep.py`: vector generation, coverage aggregation, JSON summary in workdir
 
 Phases & Checklists
-- Phase 1: Core generator (no payload heuristics)
-  - [ ] Implement ModelAnalyzer: event alphabet, done/invoke/delay hints.
-  - [ ] Implement CoverageTracker: states, transitions, done.*, error.*.
-  - [ ] Implement BFS generator (depth 1–3) with coverage‑guided pruning.
-  - [ ] Support `advance_time` injections after delayed `<send>` scheduling.
-  - [ ] Emit `.events.jsonl` and integrate `exec_compare --generate-vectors`.
-  - [ ] Produce coverage summary per chart and persist mismatches.
+- Phase 1 (landed): core generator, depth‑limited BFS, coverage sidecar, compare integration.
+- Phase 2 (next): payload heuristics and branch flipping.
+- Phase 3: parallel/invoke refinements and minimization.
 
-- Phase 2: Payload heuristics & branch flipping
-  - [ ] Parse `cond`/`expr` for identifiers; try boolean/numeric toggles in datamodel.
-  - [ ] Event payload toggles for `<send><param>`/namelist variables.
-  - [ ] Heuristic ordering to minimize vector length while increasing coverage.
-
-- Phase 3: Parallel/invoke refinements & minimization
-  - [ ] Region‑aware scheduling for `<parallel>` to hit parent/region done ordering.
-  - [ ] Invoke call‑outs: ensure `mock:deferred` completes via “complete”; child propagation.
-  - [ ] Vector minimization pass and reproducibility checks.
-
-Acceptance Criteria
-- [ ] For a curated set (e.g., 20x/23x/24x/25x/338/422/554), generator emits at least one vector each that:
-  - [ ] Improves coverage vs empty events; and
-  - [ ] Matches scion’s reference trace under current normalization rules.
-- [ ] Coverage report per chart (states, transitions, done/error events) is produced.
-- [ ] CLI plumbing in `exec_compare` can transparently generate/use vectors for charts without events.
-
-Immediate Next Steps (Vectors)
-- [ ] Stub `py/vector_gen.py` with Analyzer + CoverageTracker scaffolding.
-- [ ] Wire `exec_compare --generate-vectors` path (temp dir for vectors).
-- [ ] Prototype BFS depth‑2 sequences on a small chart set and print coverage deltas.
