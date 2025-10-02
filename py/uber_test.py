@@ -69,6 +69,7 @@ LANG_ALIASES = {
     "rs": "rust",
     "cs": "csharp",
     "dotnet": "csharp",
+    "swfit": "swift",
 }
 
 # Structural fields lifted from content
@@ -98,11 +99,21 @@ STRUCTURAL_FIELDS = {
 SCXML_NAMESPACE_KEYS = {"xmlns", "xmlns:scxml", "xmlns:xsi", "xsi:schemaLocation"}
 SCXML_FORCE_STR_KEYS = {"content", "expr", "event", "cond"}
 SCXML_FORCE_NUMERIC_KEYS = {"version"}
+SCXML_BOOLEAN_STR_KEYS = {"autoforward"}
+SCXML_DROP_KEYS = {"tag", "tail"}
 KEY_SYNONYMS = {
     "type": "type_value",
     "raise": "raise_value",
+    "if": "if_value",
+    "else": "else_value",
     "initial": "initial_attribute",
     "datamodelAttribute": "datamodel_attribute",
+    # Common camelCase variants emitted by some implementations
+    "eventExpr": "eventexpr",
+    "targetExpr": "targetexpr",
+    "typeExpr": "typeexpr",
+    "srcExpr": "srcexpr",
+    "idLocation": "idlocation",
 }
 
 
@@ -138,7 +149,7 @@ class MismatchInvestigator:
         canonical: dict[Path, dict],
         tutorial_root: Path,
         out_root: Path | str,
-        reference_langs: tuple[str, ...] = ("python", "javascript", "rust"),
+        reference_langs: tuple[str, ...] = ("python", "javascript", "ruby", "rust", "java"),
     ) -> None:
         self._canonical = canonical
         self._tutorial_root = tutorial_root
@@ -171,7 +182,7 @@ class MismatchInvestigator:
             return []
         lines: list[str] = []
         for stage, counts in self._stats[lang].items():
-            lines.append("Triage summary [{lang}][{stage}]: " + ", ".join(f"{k}:{v}" for k, v in counts.items()))
+            lines.append(f"Triage summary [{lang}][{stage}]: " + ", ".join(f"{k}:{v}" for k, v in counts.items()))
         return lines
 
     def _classify(self, canonical: dict | None, actual: Any | None) -> str:
@@ -288,7 +299,7 @@ def _normalize_for_diff(obj: Any, path: str = "", field_key: str | None = None):
         new: dict[str, Any] = {}
         for k, v in obj.items():
             k = KEY_SYNONYMS.get(k, k)
-            if k in SCXML_NAMESPACE_KEYS or k == "tag":
+            if k in SCXML_NAMESPACE_KEYS or k in SCXML_DROP_KEYS:
                 continue
             if k == "other_attributes" and isinstance(v, dict):
                 for sub_k, sub_v in v.items():
@@ -305,6 +316,8 @@ def _normalize_for_diff(obj: Any, path: str = "", field_key: str | None = None):
                     pass
             elif k in SCXML_FORCE_STR_KEYS and isinstance(v, (int, float)):
                 v = str(v)
+            elif k in SCXML_BOOLEAN_STR_KEYS and isinstance(v, bool):
+                v = "true" if v else "false"
             if k == "target":
                 if isinstance(v, str):
                     parts = [p for p in v.split() if p]
@@ -471,6 +484,10 @@ def main(
                 if lines:
                     print(f"{lang} JSON mismatch: {rel}")
                     print(diff)
+                    note = None
+                    triage = investigator.capture_issue(lang, src, "json", data, note)
+                    if triage:
+                        print(triage)
                     mismatch_items += lines
                     scjson_mismatch_items += lines
                     diff_lines = _verify_with_python(jpath, canonical[src], handler)
@@ -517,6 +534,9 @@ def main(
                 if lines:
                     print(f"{lang} XML mismatch: {rel}")
                     print(diff)
+                    triage = investigator.capture_issue(lang, src, "xml", parsed)
+                    if triage:
+                        print(triage)
                     mismatch_items += lines
                     refs = investigator._reference_summary(src, skip_lang=lang)
                     match_count = sum(1 for v in refs.values() if v == "match")
@@ -524,6 +544,8 @@ def main(
                         errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items.")
+            for line in investigator.summary(lang):
+                print(line)
         except subprocess.CalledProcessError as exc:
             err = exc.stderr
             if isinstance(err, (bytes, bytearray)):
