@@ -42,7 +42,7 @@ LANG_CMDS: dict[str, list[str]] = {
     "javascript": ["node", str(ROOT / "js")],
     "ruby": ["ruby", str(ROOT / "ruby" / "bin" / "scjson")],
     "lua": ["lua", str(ROOT / "lua" / "bin" / "scjson")],
-    "go": [str(ROOT / "go" / "go")],
+    "go": [str(ROOT / "go" / "scjson")],
     "rust": [str(ROOT / "rust" / "target" / "debug" / "scjson_rust")],
     "swift": [str(ROOT / "swift" / ".build" / "x86_64-unknown-linux-gnu" / "debug" / "scjson-swift")],
     "java": [
@@ -433,14 +433,20 @@ def main(
         json_dir.mkdir(parents=True, exist_ok=True)
         xml_dir.mkdir(parents=True, exist_ok=True)
         try:
-            if lang == "swift":
+            if lang in {"swift", "go"}:
                 for src in scxml_files:
                     rel = src.relative_to(TUTORIAL)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     jpath.parent.mkdir(parents=True, exist_ok=True)
-                    subprocess.run(cmd + ["json", str(src), "-o", str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                    if lang == "go":
+                        subprocess.run(cmd + ["json", "-o", str(jpath), str(src)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                    else:
+                        subprocess.run(cmd + ["json", str(src), "-o", str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             else:
-                json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
+                if lang == "go":
+                    json_args = ["json", "-o", str(json_dir), "-r", str(TUTORIAL)]
+                else:
+                    json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
                 if lang == "python":
                     json_args.append("--skip-unknown")
                 subprocess.run(cmd + json_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
@@ -477,16 +483,23 @@ def main(
                         errors += 1
             if scjson_errors:
                 print(f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items.")
-            if lang == "swift":
+            if lang in {"swift", "go"}:
                 for src in scxml_files:
                     rel = src.relative_to(TUTORIAL)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     xpath = xml_dir / rel
                     xpath.parent.mkdir(parents=True, exist_ok=True)
                     if jpath.exists():
-                        subprocess.run(cmd + ["xml", str(jpath), "-o", str(xpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                        if lang == "go":
+                            subprocess.run(cmd + ["xml", "-o", str(xpath), str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                        else:
+                            subprocess.run(cmd + ["xml", str(jpath), "-o", str(xpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             else:
-                subprocess.run(cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                if lang == "go":
+                    xml_args = ["xml", "-o", str(xml_dir), "-r", str(json_dir)]
+                else:
+                    xml_args = ["xml", str(json_dir), "-o", str(xml_dir), "-r"]
+                subprocess.run(cmd + xml_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 xpath = xml_dir / rel
@@ -530,4 +543,3 @@ if __name__ == "__main__":
     parser.add_argument("--consensus-warn", action="store_true", help="warn-only when reference languages match canonical")
     opts = parser.parse_args()
     main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)
-
