@@ -1,0 +1,28 @@
+<scxml initial="P" xmlns="http://www.w3.org/2005/07/scxml">
+  <parallel id="P">
+    <state id="left" initial="L">
+      <state id="L" initial="LA">
+        <state id="LA">
+          <transition event="goL" target="LB"/>
+        </state>
+        <state id="LB"/>
+      </state>
+      <history type="deep" id="HL">
+        <transition target="L"/>
+      </history>
+      <transition event="resetL" target="HL"/>
+    </state>
+    <state id="right" initial="R">
+      <state id="R" initial="RA">
+        <state id="RA">
+          <transition event="goR" target="RB"/>
+        </state>
+        <state id="RB"/>
+      </state>
+      <history type="deep" id="HR">
+        <transition target="R"/>
+      </history>
+      <transition event="resetR" target="HR"/>
+    </state>
+  </parallel>
+</scxml>

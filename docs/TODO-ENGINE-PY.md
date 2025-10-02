@@ -16,12 +16,16 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 - [ ] Implement executable content: assign, log, raise, if/elseif/else, foreach, script, send/cancel, invoke/finalize, param/content.
 - [x] Provide a CLI to run a chart against an event script and emit a deterministic JSON trace for comparison. (`scjson engine-trace`)
 - [ ] Validate behavior across a stock corpus by comparing traces against a canonical engine.
+  - [x] Add exec_compare options (leaf-only toggle, omit fields, step-0 controls, python advance-time) and a sweep tool (`py/exec_sweep.py`).
 
 ## Reference Semantics
 - [x] Decide canonical reference engine.
   - [x] Use scion-core (Node.js) as the canonical reference for behavior.
-  - [x] Document rationale and guidance for scion compatibility in repo docs.
-- [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (build/run optional).
+  - [x] Document rationale and guidance for scion compatibility in repo docs. (`py/scjson/ENGINE.md`)
+- [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (optional, for historical parity).
+
+Decision notes (invoke/finalize ordering)
+- Finalize ordering across multiple invocations completing in the same step is treated as implementation-defined in our engine by default. We defer to SCION’s behavior where observable and stable, but tests are tolerant (presence of both finalize-emitted events) to avoid over-constraining ordering across parallel regions. Once SCION’s behavior is confirmed stable for these charts, we can lock a deterministic order (e.g., document/creation order) and tighten tests accordingly.
 
 ## Roadmap (Iterations)
 
@@ -34,32 +38,48 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 
 2) Compound, Parallel, Final, History
 - [x] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
-- [ ] Parallel completion: parent final when all regions complete; propagate finalization.
+- [x] Parallel completion: parent final when all regions complete; propagate finalization.
 - [x] History: shallow with default transition fallback.
-- [ ] History: deep (restore deep descendants).
+- [x] History: deep (restore deep descendants).
 - [x] Parallel: initial entry enters all child regions.
 
 3) Executable Content Phase 1
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.
-- [ ] Implement if/elseif/else.
-- [ ] Implement foreach.
-- [ ] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
+- [x] Implement if/elseif/else.
+- [x] Implement foreach.
+- [x] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
 
 4) Events, Timers, and External I/O
 - [x] Basic internal `EventQueue` for external/internal events.
-- [ ] `<send>` (delay, target), `<cancel>` by ID; external sinks.
-- [ ] Emit error events (`error.execution`, `error.communication`, …) into trace.
-- [ ] Timers with mock clock for deterministic tests.
+- [x] `<send>` (delay, target), `<cancel>` by ID; external sinks.
+- [x] Emit error events (`error.execution`, `error.communication`, …) into trace.
+- [x] Timers with mock clock for deterministic tests. (Delayed `<send>` scheduling uses `DocumentContext.advance_time` for deterministic control.)
 
 5) Invoke / Finalize
-- [ ] `<invoke>` lifecycle with `autoforward`.
-- [ ] `<param>` and `<finalize>` handling.
-- [ ] Pluggable InvokeRegistry with test/mocked invokers.
+ - [x] Add scaffolding: InvokeRegistry + mock handler; start/cancel on state entry/exit; `<finalize>` executes on completion/cancel; emits `done.invoke` and `done.invoke.<id>`.
+ - [x] Implement basic `<invoke>` lifecycle with `autoforward` and child bubbling.
+ - [x] Support child `<send target="#_parent">` and parent `<send target="#_child">`.
+ - [x] Handle inline `<invoke><content>` SCXML and file: URIs, type URI normalization.
+ - [x] Complete `<param>`/`<content>` mapping and `_event` exposure for finalize (tests added).
+ - [x] Expand registry: `mock:immediate`, `mock:record`, `mock:deferred`, `scxml`/`scjson` child; tests for ordering and concurrency.
 
 6) Robustness & Performance
-- [ ] Lax vs strict execution modes; unknown element/attribute behavior.
-- [ ] Snapshot sizing/log filters; reproducible ordering for sets.
-- [ ] Update `ENGINE.md` to match implementation and trace schema.
+- [x] Lax vs strict execution modes; unknown element/attribute behavior.
+- [x] Snapshot sizing/log filters; reproducible ordering for sets. (engine-trace: --leaf-only, --omit-actions, --omit-delta, --omit-transitions; deterministic ordering for datamodelDelta)
+ - [x] Update `ENGINE.md` to match implementation and trace schema.
+
+## Status Snapshot — 2025-09-30
+- Engine executes `if`/`elseif`/`else`, `foreach`, `<send>` (immediate + delayed), `<cancel>`, and transition bodies in authoring order.
+- Parallel completion: emits `done.state.<regionId>` events per region and `done.state.<parallelId>` when all regions are final. Compound states emit `done.state.<parentId>` with `<donedata>` payload.
+- History: shallow and deep restore supported. Default history transition actions execute when no snapshot exists.
+- Delayed `<send>` tasks schedule against `DocumentContext` and are advanced deterministically with `advance_time`; external targets enqueue `error.communication` and are skipped.
+- Error events: non-boolean/failed `cond`, `<foreach>` array errors, and `<assign>` evaluation failures enqueue `error.execution`.
+  - Engine-generated error events are prioritized to the front of the queue so they are processed before subsequently enqueued normal events.
+- Tutorial sweep (`py/uber_test.py::test_python_engine_executes_python_charts`) honors `ENGINE_KNOWN_UNSUPPORTED` and is being reduced as features land.
+- Textual `<send><content>` blocks are normalized during JSON ingestion; location attributes receive autogenerated IDs before Pydantic validation.
+- Integration tests cover textual, expression, and nested markup payloads emitted by `<send>`.
+- Documentation in `py/scjson/ENGINE.md` describes done events, history semantics, transition-body ordering, and error events.
+- Invoke coverage (W3C): with timer advance (`--advance-time 3`), tests 253, 338, 422, 554 pass via `engine-verify`.
 
 ## Test Strategy
 
@@ -72,6 +92,7 @@ Reference Engine Runner
 Artifacts & Datasets
 - [ ] Use tutorial submodule + permissible W3C tests as stock corpus.
 - [x] Add `tests/exec/` with curated charts and JSONL event scripts.
+- [x] `py/uber_test.py` sweeps tutorial Python charts with skip-aware `ENGINE_KNOWN_UNSUPPORTED` handling and aggregated failure output.
 
 Trace Schema (per line JSON)
 - [x] `step`: integer.
@@ -88,16 +109,19 @@ Harness Logic
 - [x] Reference runner produces `ref.trace.jsonl`.
 - [x] Normalizer for ordering and simple type normalization.
 - [x] Step-by-step diff and summary (first differing step, mismatch counts).
-- [ ] Report totals similar to `uber_test` (files and item mismatches).
+- [x] Report totals similar to `uber_test` (files and item mismatches).
 
 CLI Additions (Python)
 - [x] Implement `scjson engine-trace`.
 - [x] Inputs: `--xml`, `-I/--input`, `-e/--events`, `-o/--out`.
-- [ ] Options: `--lax/--strict`, `--unsafe-eval` (default off), `--max-steps`.
+ - [x] Options:
+  - [x] `--lax/--strict`
+  - [x] `--unsafe-eval` (default off)
+  - [x] `--max-steps`
 
 Comparison Tooling
-- [x] Add `py/exec_compare.py` (or integrate into `uber_test.py`) to drive both runners and diff traces with CI‑friendly exit codes.
-- [x] Support optional secondary comparisons (e.g., Scion vs Apache Commons) via CLI/env overrides.
+- [x] Add `py/exec_compare.py` to drive both runners and diff traces with CI‑friendly exit codes.
+- [x] Support optional secondary comparisons via CLI/env overrides.
 
 ## Milestones & Deliverables
 - [ ] M1: Core trace + macrostep + CLI; trace unit tests; 10 simple charts pass vs chosen runner.
@@ -108,7 +132,7 @@ Comparison Tooling
 
 ## Risks & Mitigations
 - [ ] Decide on reference engine if Maven hoops block Java; switch to a free alternative with comparable authority (e.g., scion-core).
-- [ ] Constrain expression features to cross‑engine subset or inject via event data; provide Python‑only mode for advanced expressions.
+- [x] Constrain expression features to cross‑engine subset or inject via event data; provide Python‑only mode for advanced expressions. (safe sandbox by default; presets via --expr-preset with optional --expr-allow/--expr-deny; Python eval with --unsafe-eval)
 - [ ] Enforce deterministic ordering where SCXML permits implementation choice.
 
 ## Acceptance Criteria
@@ -117,10 +141,68 @@ Comparison Tooling
 - [ ] Documentation (`ENGINE.md`, this TODO, CLI help) is updated.
 
 ## Immediate Next Steps
-- [x] Add `engine-trace` subcommand emitting the standardized trace.
-- [x] Draft Java (or Node) runner that emits the same trace format.
-- [x] Create `tests/exec/` with 5–10 seed charts and event scripts; add a minimal `exec_compare.py` to run both and diff.
+ - [x] Update `py/scjson/ENGINE.md` with current limitations (skip list, `<script>` noop, external send targets) and safe-eval guidance.
+- [x] Add focused unit tests covering delayed `<send>` scheduling/cancellation via `DocumentContext.advance_time`.
+- [x] Add integration coverage for normalized `<send><content>` payloads to ensure parity with scion-core. (`py/tests/test_engine.py::test_send_content_*`)
+- [x] Add focused tests for deep history across parallel and donedata precedence (content dominates params).
+- [x] Add ordering tests for `error.execution` and `error.communication` vs normal events; prioritize error events in the queue.
+- [x] Finalize evaluation in parallel (234): Added unit ensuring only the completing invocation's `<finalize>` runs and canceled siblings do not. (`py/tests/test_engine.py::test_finalize_only_runs_in_invoking_state_in_parallel`)
+- [x] SCXML Event I/O metadata: `_event.origintype` and `_event.invokeid` populated for child↔parent sends; explicit `#_<invokeId>` parent→child target supported.
+- [x] Invoke start semantics: execute `<invoke>` at macrostep end for states entered and not exited; implement multi-event matching for transitions (`event="a b"`).
+- [x] W3C sweep (253/338/422/554): `engine-verify` outcomes are pass when using `--advance-time`; `exec_compare` leaf-only normalization matches on 554; others differ at step 0 due to initial transition visibility. Step-0 normalization now strips `datamodelDelta` and `firedTransitions`, with optional stripping of `enteredStates`/`exitedStates` gated by `--keep-step0-states`.
+- [x] Emit a generic `error` alias alongside `error.execution` to improve compatibility with charts listening for `error.*`.
+- [x] Add spec-conformant invalid-assign handling: assigning to a non-existent location now enqueues `error.execution` and does not create a new variable; this enables W3C `test401.scxml`. Removed from `ENGINE_KNOWN_UNSUPPORTED`.
+- [ ] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py` and plan removals as features land.
 
-### Notes
-- As of Sept 2025, Apache Commons SCXML is considered deprecated/legacy; scion-core is the authoritative implementation for behavioral compatibility.
-- Historical Commons SCXML builds (0.x) may be kept for reference but are not required for CI.
+New work items (updated plan)
+- [ ] Invoke/finalize
+  - [ ] Investigate SCION finalize ordering across multiple simultaneous completes; if stable, adopt the same deterministic policy (e.g., document order) and tighten ordering tests; otherwise keep tolerant presence checks.
+  - [ ] Add CI knob to run SCION-backed comparisons on a subset of invoke/finalize charts when Node is available.
+- [ ] Vector generation (Phase 3)
+  - [ ] Delta-preserving minimization focused on unique firedTransitions and enteredStates.
+  - [ ] Heuristics for disjunctions and nested structures; expand negative payload construction.
+  - [x] Optional injection of advance_time within sequences when delayed sends are detected after init.
+  - [ ] Expand sweep corpus with more parallel + history + invoke combinations and step-0 variance charts.
+  - [ ] Documentation
+  - [x] docs/ENGINE-PY.md: add “Invoke & Finalize semantics” section describing done.invoke id-specific vs generic, finalize-before-done behavior in same microstep, and ordering notes across parallel.
+
+---
+
+## Vector Generation & Coverage (New Initiative)
+
+Goal: Automatically generate event vectors for each chart to maximize behavioral coverage and compare Python traces vs scion for those vectors. This replaces ad‑hoc fixtures with a principled, repeatable process that scales.
+
+Planned Components
+- Analyzer & Alphabet
+  - Extract transition event tokens (split lists; ignore wildcard/prefix patterns), done/state and invoke hints.
+- Simulator & Coverage
+  - Track entered states, fired transitions, and done/error events from engine traces.
+- Vector Search (bounded)
+  - Coverage‑guided BFS over the event alphabet (depth ≤ 2–3), prune when no delta.
+  - Include “complete” when mock:deferred invoke is present; insert advance_time when needed.
+- Payload Heuristics (Phase 2)
+  - Toggle simple booleans/numerics from cond/expr identifiers to flip branches.
+  - Auto-detect delayed sends during init and recommend an advance_time.
+- Emission & Compare
+  - Emit vectors as `.events.jsonl` + `.coverage.json`, integrate with `exec_compare --generate-vectors` and `exec_sweep --generate-vectors`.
+- Minimization & Reporting
+  - Trim vectors; aggregate coverage across charts into a sweep summary.
+
+Deliverables
+- `py/vector_gen.py`, `py/vector_lib/*`: generator + helpers
+- `py/exec_compare.py`: vector integration flags and coverage printout
+- `py/exec_sweep.py`: vector generation, coverage aggregation, JSON summary in workdir
+
+Phases & Checklists
+- Phase 1 (landed): core generator, depth‑limited BFS, coverage sidecar, compare integration.
+- Phase 2 (landed): payload heuristics and branch flipping, auto-advance detection, limits.
+  - [x] Analyzer extracts ``_event.data`` paths and comparators from ``cond``.
+  - [x] Membership (including reversed and datamodel containers); chained/split ranges.
+  - [x] Search accepts data-bearing stimuli and simulates payloads.
+  - [x] One‑hot payload fusion to flip branches; bounded by ``--variants-per-event``.
+  - [x] Generator emits events with ``data`` payloads and writes sidecars:
+        ``.coverage.json`` and ``.vector.json`` (with ``advanceTime`` hint).
+  - [x] exec_compare/exec_sweep adopt ``advanceTime`` from ``.vector.json``
+        when ``--advance-time`` is not explicitly provided.
+  - [x] Add ``--variants-per-event`` knobs on vector_gen/compare/sweep.
+- Phase 3: parallel/invoke refinements and minimization.

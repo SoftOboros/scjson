@@ -29,12 +29,24 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Iterable
+
+import pytest
 
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+from scjson.context import DocumentContext, ExecutionMode
 
 ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = ROOT / "tutorial"
+
+# Optional features known unsupported by the Python engine for now
+ENGINE_KNOWN_UNSUPPORTED = {
+    Path("Tests/python/W3C/Optional/Auto/test457.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test520.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test532.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test562.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test578.scxml"),
+}
 
 # CLI entrypoints for each language implementation
 LANG_CMDS: dict[str, list[str]] = {
@@ -48,7 +60,7 @@ LANG_CMDS: dict[str, list[str]] = {
     "java": [
         "java",
         "-cp",
-        str(ROOT / "java" / "target" / "scjson-0.3.1-SNAPSHOT.jar"),
+        str(ROOT / "java" / "target" / "scjson-0.3.3-SNAPSHOT.jar"),
         "com.softobros.ScjsonCli",
     ],
     "csharp": [
@@ -127,6 +139,57 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
         return True
     except Exception:
         return False
+
+
+def _python_engine_available() -> bool:
+    try:
+        from scjson.context import DocumentContext  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _iter_python_datamodel_charts(root: Path) -> Iterable[Path]:
+    import xml.etree.ElementTree as ET
+
+    for scxml in root.rglob("*.scxml"):
+        try:
+            tree = ET.parse(scxml)
+        except ET.ParseError:
+            continue
+        root_node = tree.getroot()
+        datamodel_attr = (
+            root_node.attrib.get("datamodel")
+            or root_node.attrib.get("datamodel_attribute")
+        )
+        if datamodel_attr and datamodel_attr.strip().lower() != "python":
+            continue
+        rel = scxml.relative_to(root)
+        if rel in ENGINE_KNOWN_UNSUPPORTED:
+            continue
+        yield scxml
+
+
+def _python_smoke_chart(chart: Path) -> tuple[bool, str]:
+    """Execute a single chart minimally to validate the Python engine.
+
+    Parameters
+    ----------
+    chart : Path
+        SCXML chart path.
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(ok, message)`` where ``ok`` indicates success and ``message``
+        contains an error string on failure.
+    """
+    try:
+        ctx = DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
+        ctx.trace_step()
+        return True, ""
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
 
 
 class MismatchInvestigator:
@@ -557,11 +620,46 @@ def main(
             print(f"Skipping {lang}: {exc}")
 
 
+@pytest.mark.skipif(not _python_engine_available(), reason="Python engine not available")
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "chart",
+    list(_iter_python_datamodel_charts(TUTORIAL)),
+    ids=lambda p: str(p.relative_to(TUTORIAL)) if p.is_absolute() else str(p),
+)
+def test_python_engine_executes_chart(chart: Path):
+    ok, msg = _python_smoke_chart(chart)
+    if not ok:
+        pytest.fail(f"{chart}: {msg}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out_dir", nargs="?", default="uber_out", help="directory for intermediate files")
     parser.add_argument("-l", "--language", dest="language", help="limit testing to a single language")
     parser.add_argument("-s", "--subset", dest="subset", help="limit to SCXML files matching a glob (relative to tutorial)")
     parser.add_argument("--consensus-warn", action="store_true", help="warn-only when reference languages match canonical")
+    parser.add_argument("--python-smoke", action="store_true", help="run Python engine smoke over charts with per-chart progress")
+    parser.add_argument("--chart", type=Path, help="run only a single chart for Python smoke mode")
     opts = parser.parse_args()
-    main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)
+    if opts.python_smoke:
+        import sys
+
+        charts = [opts.chart] if opts.chart else list(_iter_python_datamodel_charts(TUTORIAL))
+        if not charts:
+            print("No charts found for smoke run.")
+            sys.exit(0)
+        total = len(charts)
+        failures = 0
+        for idx, chart in enumerate(charts, 1):
+            ok, msg = _python_smoke_chart(chart)
+            rel = chart.relative_to(TUTORIAL) if chart.is_absolute() and TUTORIAL in chart.parents else chart
+            status = "OK" if ok else "FAIL"
+            print(f"[{idx}/{total}] {rel} ... {status}")
+            if not ok and msg:
+                print(f"    {msg}")
+            if not ok:
+                failures += 1
+        sys.exit(1 if failures else 0)
+    else:
+        main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)

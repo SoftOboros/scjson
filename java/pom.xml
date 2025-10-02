@@ -6,6 +6,7 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
+        <commons.scxml.version>0.9</commons.scxml.version>
     </properties>
 <dependencies>
         <dependency>

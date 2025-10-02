@@ -52,6 +52,30 @@ jobs:
         working-directory: py
         run: python -m pytest
 
+      - name: Sweep small corpus (Python/SCION reference)
+        run: |
+          python py/exec_sweep.py tests/sweep_corpus --generate-vectors --workdir uber_out/sweep
+      - name: Print sweep coverage totals
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path('uber_out/sweep/coverage-summary.json')
+          if p.exists():
+              data = json.loads(p.read_text())
+              t = data.get('totals', {})
+              print(f"Sweep coverage totals: entered={t.get('enteredStates',0)} fired={t.get('firedTransitions',0)} done={t.get('doneEvents',0)} error={t.get('errorEvents',0)}")
+          else:
+              print('No coverage-summary.json found')
+          PY
+
+      - name: Upload sweep coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-coverage-summary-pr
+          path: uber_out/sweep/coverage-summary.json
+          if-no-files-found: ignore
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (Rust)
@@ -95,52 +119,6 @@ jobs:
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
-      - id: determine_pypi
-        name: Determine PyPI publish necessity
-        working-directory: py
-        run: python ../.github/scripts/determine_pypi_publish.py
-
-      - id: determine_crates
-        name: Determine crates.io publish necessity
-        run: python .github/scripts/determine_crates_publish.py
-
-      - id: determine_rubygems
-        name: Determine RubyGems publish necessity
-        working-directory: ruby
-        run: ruby ../.github/scripts/determine_rubygems_publish.rb
-
-      - name: Install packaging tools (PyPI)
-        working-directory: py
-        run: pip install build twine
-
-      - name: Build Python package
-        working-directory: py
-        run: |
-          rm -rf dist
-          python -m build
-
-      - name: Publish to PyPI (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
-        working-directory: py
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
-        run: |
-          if [ -z "$TWINE_PASSWORD" ]; then
-            echo "No PYPI_API_KEY provided; skipping PyPI publish." && exit 0
-          fi
-          twine upload --non-interactive dist/* || echo "PyPI publish failed; continuing."
-
-      - name: Publish to crates.io (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
-        working-directory: rust
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish." && exit 0
-          fi
-          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
 
   main-checks:
     if: github.event_name == 'push'
@@ -192,6 +170,30 @@ jobs:
         working-directory: py
         run: python -m pytest
 
+      - name: Sweep small corpus (Python/SCION reference)
+        run: |
+          python py/exec_sweep.py tests/sweep_corpus --generate-vectors --workdir uber_out/sweep
+      - name: Print sweep coverage totals
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path('uber_out/sweep/coverage-summary.json')
+          if p.exists():
+              data = json.loads(p.read_text())
+              t = data.get('totals', {})
+              print(f"Sweep coverage totals: entered={t.get('enteredStates',0)} fired={t.get('firedTransitions',0)} done={t.get('doneEvents',0)} error={t.get('errorEvents',0)}")
+          else:
+              print('No coverage-summary.json found')
+          PY
+
+      - name: Upload sweep coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-coverage-summary-main
+          path: uber_out/sweep/coverage-summary.json
+          if-no-files-found: ignore
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (Rust)
@@ -228,13 +230,14 @@ jobs:
       - name: Run uber_test for release languages
         working-directory: py
         env:
-          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile }
           RUBYOPT: -rbundler/setup
         run: |
           python uber_test.py -l python
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
+
       - id: determine_pypi
         name: Determine PyPI publish necessity
         working-directory: py
@@ -249,7 +252,6 @@ jobs:
         working-directory: ruby
         run: ruby ../.github/scripts/determine_rubygems_publish.rb
 
-
       - name: Publish to PyPI (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
         working-directory: py
@@ -261,6 +263,9 @@ jobs:
             echo "No PYPI_API_KEY provided; skipping publish."
             exit 0
           fi
+          pip install build twine
+          rm -rf dist
+          python -m build
           twine upload --non-interactive dist/*
 
       - name: Publish to crates.io (if version changed)
@@ -274,6 +279,7 @@ jobs:
             exit 0
           fi
           cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
+
       - name: Publish to RubyGems (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
         working-directory: ruby

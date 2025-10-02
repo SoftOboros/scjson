@@ -1,4 +1,4 @@
-<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
 
 # scjson Python Package
 
@@ -32,6 +32,14 @@ cd py && pip install -e .
 - ruby
 - rust
 - swift
+
+## Python Engine — User Guide
+
+For end‑to‑end usage of the Python execution engine (tracing, comparing against a reference, generating vectors, sweeping corpora), see:
+
+- docs/ENGINE-PY.md (in this repository)
+
+Online: https://github.com/SoftOboros/scjson/blob/main/docs/ENGINE-PY.md
 
 ## Command Line Usage
 

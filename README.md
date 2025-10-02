@@ -152,6 +152,15 @@ docker pull iraa/scjson:latest
 For a full example of installing toolchains and dependencies across languages see [`codex/startup.sh`](codex/startup.sh).
 
 
+## Documentation
+
+- User guide (Python engine): `docs/ENGINE-PY.md`
+- Architecture & in-depth reference (Python): `py/ENGINE-PY-DETAILS.md`
+- Compatibility matrix: `docs/COMPATIBILITY.md`
+- Testing guide: `TESTING.md`
+- Agents overview: `AGENTS.md`
+
+
 ## Quick Installs.
 
 ### Python Module
