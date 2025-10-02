@@ -9,7 +9,9 @@ Sweep a corpus of charts and compare Python engine traces to a reference.
 
 This utility discovers SCXML/SCJSON files under a root directory, locates
 matching JSONL event streams, and invokes ``py/exec_compare.py`` for each
-chart. It summarizes mismatches and optionally retains artifacts.
+chart. It summarizes mismatches and optionally retains artifacts. When
+``--generate-vectors`` is provided, it generates event vectors and a coverage
+summary for charts without events using ``py/vector_gen.py`` before compare.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Tuple
 from tempfile import TemporaryDirectory
+import json
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -102,6 +105,23 @@ def main() -> None:
         type=Path,
         help="Optional file with one glob/substring per line to skip",
     )
+    parser.add_argument(
+        "--generate-vectors",
+        action="store_true",
+        help="Generate vectors when a chart lacks an events.jsonl",
+    )
+    parser.add_argument(
+        "--gen-depth",
+        type=int,
+        default=2,
+        help="Vector generation max depth",
+    )
+    parser.add_argument(
+        "--gen-limit",
+        type=int,
+        default=1,
+        help="Vector generation max vectors to emit",
+    )
     opts = parser.parse_args()
 
     # Load skip patterns from file, if provided
@@ -124,6 +144,9 @@ def main() -> None:
 
     mismatches: List[Tuple[Path, str]] = []
     total = 0
+    cov_total = {"enteredStates": 0, "firedTransitions": 0, "doneEvents": 0, "errorEvents": 0}
+    cov_count = 0
+    cov_by_chart: dict[str, dict] = {}
 
     base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve())]
     if opts.reference:
@@ -156,9 +179,47 @@ def main() -> None:
     try:
         for chart in charts:
             events = _default_events_path(chart)
-            # Create an empty event stream when none is available so we can
-            # still compare at least step-0 semantics.
-            if events is None:
+            # Generate vector + coverage when requested and no events exist
+            if events is None and opts.generate_vectors:
+                # Decide vector output directory
+                if artifacts_root:
+                    rel = chart.relative_to(opts.root)
+                    vec_dir = artifacts_root / rel.parent / rel.stem / "vectors"
+                else:
+                    if temp_dir is None:
+                        temp_dir = TemporaryDirectory(prefix="scjson-sweep-")
+                    vec_dir = Path(temp_dir.name) / "vectors"
+                vec_dir.mkdir(parents=True, exist_ok=True)
+                vg_cmd = [
+                    sys.executable,
+                    str((ROOT / "py" / "vector_gen.py").resolve()),
+                    str(chart),
+                    "--out",
+                    str(vec_dir),
+                ]
+                if chart.suffix.lower() == ".scxml":
+                    vg_cmd.append("--xml")
+                if opts.advance_time and opts.advance_time > 0:
+                    vg_cmd.extend(["--advance-time", str(opts.advance_time)])
+                if opts.gen_depth:
+                    vg_cmd.extend(["--max-depth", str(opts.gen_depth)])
+                if opts.gen_limit:
+                    vg_cmd.extend(["--limit", str(opts.gen_limit)])
+                _run(vg_cmd)
+                gen_events = vec_dir / f"{chart.stem}.events.jsonl"
+                events = gen_events if gen_events.exists() else None
+                cov_path = vec_dir / f"{chart.stem}.coverage.json"
+                if cov_path.exists():
+                    try:
+                        cov = json.loads(cov_path.read_text(encoding="utf-8"))
+                        for k in cov_total:
+                            cov_total[k] += int(cov.get(k, 0))
+                        cov_by_chart[str(chart)] = cov
+                        cov_count += 1
+                    except Exception:
+                        pass
+            # Otherwise, create an empty stream to enable at least step-0 compare
+            if events is None and not opts.generate_vectors:
                 if temp_dir is None:
                     temp_dir = TemporaryDirectory(prefix="scjson-sweep-")
                 tmp = Path(temp_dir.name) / (chart.stem + ".events.jsonl")
@@ -188,9 +249,40 @@ def main() -> None:
         for path, out in mismatches[:10]:
             print(f"- {path}:")
             print(out.strip())
+        if cov_count:
+            print(
+                f"Coverage (generated vectors): charts={cov_count} entered={cov_total['enteredStates']} fired={cov_total['firedTransitions']} done={cov_total['doneEvents']} error={cov_total['errorEvents']}"
+            )
+            # Write a summary file when workdir has been provided
+            if artifacts_root:
+                summary_path = artifacts_root / "coverage-summary.json"
+                try:
+                    summary = {
+                        "totals": cov_total,
+                        "charts": cov_by_chart,
+                    }
+                    summary_path.write_text(json.dumps(summary, indent=2))
+                    print(f"Coverage summary written to {summary_path}")
+                except Exception:
+                    pass
         sys.exit(1)
 
     print(f"✔ All charts matched reference ({total} compared)")
+    if cov_count:
+        print(
+            f"Coverage (generated vectors): charts={cov_count} entered={cov_total['enteredStates']} fired={cov_total['firedTransitions']} done={cov_total['doneEvents']} error={cov_total['errorEvents']}"
+        )
+        if artifacts_root:
+            summary_path = artifacts_root / "coverage-summary.json"
+            try:
+                summary = {
+                    "totals": cov_total,
+                    "charts": cov_by_chart,
+                }
+                summary_path.write_text(json.dumps(summary, indent=2))
+                print(f"Coverage summary written to {summary_path}")
+            except Exception:
+                pass
     sys.exit(0)
 
 

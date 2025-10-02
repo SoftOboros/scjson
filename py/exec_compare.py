@@ -29,7 +29,7 @@ try:
 except Exception:  # pragma: no cover - fallback when package not importable
     DocumentContext = None  # type: ignore
     ExecutionMode = None  # type: ignore
-    PyEvent = None  # type: ignore
+PyEvent = None  # type: ignore
 
 
 PYTHON_TRACE_CMD = [sys.executable, "-m", "scjson.cli", "engine-trace"]
@@ -45,6 +45,57 @@ def _default_events_path(chart: Path) -> Path | None:
         return candidate
     candidate = chart.parent / (chart.stem + ".events.jsonl")
     return candidate if candidate.exists() else None
+
+
+def _load_events_list(path: Path) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    if not path.exists():
+        return items
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            items.append(json.loads(line))
+        except Exception:
+            continue
+    return items
+
+
+def _coverage_from_vector(chart: Path, events_path: Path, treat_as_xml: bool, advance_time: float) -> Dict[str, int] | None:
+    if DocumentContext is None or PyEvent is None:
+        return None
+    try:
+        ctx = (
+            DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
+            if treat_as_xml
+            else DocumentContext.from_json_file(chart, execution_mode=ExecutionMode.STRICT)
+        )
+        if advance_time and advance_time > 0:
+            ctx.advance_time(advance_time)
+        entered: Set[str] = set()
+        fired = 0
+        done = 0
+        err = 0
+        for item in _load_events_list(events_path):
+            name = item.get("event") or item.get("name")
+            data = item.get("data") if "data" in item else None
+            if not name:
+                continue
+            trace = ctx.trace_step(PyEvent(name=str(name), data=data))
+            fired += len(trace.get("firedTransitions", []) or [])
+            for s in trace.get("enteredStates", []) or []:
+                entered.add(str(s))
+            evt = trace.get("event") or {}
+            ename = evt.get("name") if isinstance(evt, dict) else None
+            if isinstance(ename, str):
+                if ename.startswith("done."):
+                    done += 1
+                if ename.startswith("error"):
+                    err += 1
+        return {"enteredStates": len(entered), "firedTransitions": fired, "doneEvents": done, "errorEvents": err}
+    except Exception:
+        return None
 
 
 def _load_trace(path: Path) -> List[dict]:
@@ -452,6 +503,10 @@ def main() -> None:
             if not gen_path.exists():
                 raise SystemExit("Vector generator did not produce an events file.")
             events = gen_path
+            # Print a brief coverage summary for the generated vector
+            cov = _coverage_from_vector(chart, events, treat_as_xml, args.advance_time)
+            if cov is not None:
+                print(f"Generated vector coverage: entered={cov['enteredStates']} fired={cov['firedTransitions']} done={cov['doneEvents']} error={cov['errorEvents']}")
         elif auto is not None:
             events = auto
         else:

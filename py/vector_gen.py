@@ -23,6 +23,8 @@ from scjson.context import DocumentContext, ExecutionMode
 from scjson.events import Event
 from vector_lib.analyzer import extract_event_alphabet, extract_invoke_hints
 from vector_lib.search import generate_sequences
+from vector_lib.coverage import CoverageTracker
+import json
 
 
 def _ctx_factory(chart: Path, treat_as_xml: bool, advance_time: float) -> callable:
@@ -87,7 +89,10 @@ def generate_vectors(
 
     alphabet = extract_event_alphabet(ctx)
     hints = extract_invoke_hints(ctx)
-    # Phase 1: ignore hints; generate sequences from alphabet only.
+    # Include a generic "complete" stimulus when a deferred invocation is present.
+    if hints.get("has_deferred") and "complete" not in alphabet:
+        alphabet = list(alphabet) + ["complete"]
+    # Phase 1: generate sequences from alphabet only.
     sequences = generate_sequences(
         _ctx_factory(chart, treat_as_xml, advance_time),
         alphabet,
@@ -101,6 +106,17 @@ def generate_vectors(
     with dest.open("w", encoding="utf-8") as fh:
         for ev in top:
             fh.write(f"{{\"event\": \"{ev}\"}}\n")
+    # Emit a coverage summary sidecar for sweeps/reporting
+    try:
+        ctx2 = _ctx_factory(chart, treat_as_xml, advance_time)()
+        cov = CoverageTracker()
+        for ev in top:
+            trace = ctx2.trace_step(Event(name=ev))
+            cov.add_step(trace)
+        cov_path = out_dir / f"{chart.stem}.coverage.json"
+        cov_path.write_text(json.dumps(cov.summary(), indent=2))
+    except Exception:
+        pass
     return dest
 
 
