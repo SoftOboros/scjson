@@ -586,6 +586,7 @@ def main(
 
 
 @pytest.mark.skipif(not _python_engine_available(), reason="Python engine not available")
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "chart",
     list(_iter_python_datamodel_charts(TUTORIAL)),

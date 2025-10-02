@@ -1,9 +1,16 @@
-# Python Engine Convergence — Expanded Context Snapshot (2025-10-01)
+# Python Engine Convergence — Expanded Context Snapshot (2025-10-02)
 
 This expanded snapshot is designed to fast‑track resumption after a cold restart. It captures what matters right now: where things live, what changed, how to reproduce, and what to do next.
 
 ## Quick Resume
 - Run unit tests: `PYTHONPATH=py pytest -q py/tests`
+- Enable slow smoke explicitly: `PYTHONPATH=py pytest -q -m slow -k "uber_test and executes_chart"`
+- Parameterized smoke (one test per tutorial chart):
+  - All: `PYTHONPATH=py pytest -q -k "uber_test and executes_chart"`
+  - Filter by name: `PYTHONPATH=py pytest -q -k "executes_chart and parallel_invoke_complete.scxml"`
+- CLI smoke with progress output:
+  - All: `python py/uber_test.py --python-smoke`
+  - Single chart: `python py/uber_test.py --python-smoke --chart tutorial/Tests/python/W3C/Mandatory/Auto/test253.scxml`
 - Verify W3C outcomes (advance timers):
   - `PYTHONPATH=py python -m scjson.cli engine-verify -I tutorial/Tests/python/W3C/Mandatory/Auto/test253.scxml --xml --advance-time 3`
   - Repeat for 338, 422, 554 → expected: pass
@@ -25,6 +32,7 @@ This expanded snapshot is designed to fast‑track resumption after a cold resta
 - Events/queue: `py/scjson/events.py` (`Event` includes `origin`, `origintype`, `invokeid`)
 - CLI: `py/scjson/cli.py` (`engine-trace`, `engine-verify`)
 - Trace compare tool: `py/exec_compare.py`
+- Exec compare wrapper for tests: `py/py/exec_compare.py`
 - Design/Docs: `py/scjson/ENGINE.md`, `docs/TODO-ENGINE-PY.md`
 - Tutorial/Corpus: `tutorial/` (W3C + examples), skip list: `py/uber_test.py::ENGINE_KNOWN_UNSUPPORTED`
 
@@ -44,6 +52,7 @@ This expanded snapshot is designed to fast‑track resumption after a cold resta
   - Internal: `#_internal`/`_internal` enqueue into the engine queue
   - External: unsupported targets raise `error.communication` and are skipped
   - Deterministic delayed sends: `advance_time(seconds)` releases in order
+  - Control tokens: `engine-trace` accepts event-stream lines like `{"advance_time": N}` to advance time without emitting a step (used by vector generation)
 - Invoke
   - Macrostep-end start for states entered and not exited during the step
   - Parent↔Child: `#_parent` bubbling; parent `#_child`/`#_invokedChild` and explicit `#_<invokeId>`
@@ -69,13 +78,12 @@ This expanded snapshot is designed to fast‑track resumption after a cold resta
 - Ad-hoc sample of 50 charts: no failures to construct a step via `trace_step()`
 
 ## Diff (Since Prior Snapshot)
-- New `_emit_error` helper; generic `error` alias for `error.execution` only
-- Invalid assign location errors without creating variables; alias can be front‑inserted to preserve onentry ordering
-- Event pattern matching: `*` and `error.*` supported in `_select_transition`
-- Invoke scxml/scjson child start failure enqueues `error.communication`
-- exec_compare: added `--keep-step0-states` and `_strip_step0_states()`
-- Skip list: removed W3C `test401.scxml` from `ENGINE_KNOWN_UNSUPPORTED`
-- Docs updated to reflect the above
+- engine-trace: supports `{"advance_time": N}` control tokens within events JSONL
+- vector_gen: injects mid-sequence `advance_time` tokens when timers are pending after a step
+- Added curated `tests/sweep_corpus/*` and advanced exec_compare tests
+- Added shim `py/py/exec_compare.py` for test path stability
+- uber_test: parameterized per-chart tests; CLI smoke mode with per-chart progress
+- Docs updated: control tokens, vector injection, invoke/finalize semantics
 
 ## Reproduction Recipes
 Unit tests
@@ -93,8 +101,8 @@ Trace compare
 
 Uber harness (cross‑lang conversion)
 - Path: `py/uber_test.py`
-- Python engine smoke check (skips external runtimes): `PYTHONPATH=py pytest -q py/uber_test.py::test_python_engine_executes_python_charts`
-  - Note: can take a while on large corpora; prefer ad‑hoc samples for quick checks
+- Python engine smoke (parameterized): `PYTHONPATH=py pytest -q -k "uber_test and executes_chart"`
+- CLI smoke with progress: `python py/uber_test.py --python-smoke [--chart <path>]`
 
 ## Known Differences & Notes
 - Initialization visibility varies across engines; step-0 normalization mitigates diffs
@@ -104,11 +112,11 @@ Uber harness (cross‑lang conversion)
 ## Next Steps
 - Broader tutorial sweep and incremental skip‑list reductions
 - Validate more charts with exec_compare and adjust normalization only if required
-- If needed, document nuanced done ordering/finalize timing in detail and add explicit tests
+- Consider marking parameterized smoke as `@pytest.mark.slow` and using `-k` filters by default
 
 ## Handy Greps
 - Jump to key spots:
   - `rg -n "_emit_error|_select_transition|finalize|#_parent|invokeid|error\.execution|error\.communication" py`
   - `rg -n "engine-verify|engine-trace" py/scjson/cli.py`  
   - `rg -n "InvokeRegistry|SCXMLChildHandler|send\(\)" py/scjson/invoke.py`
-
+  - `rg -n "advance_time|control token|advance-time" py`
