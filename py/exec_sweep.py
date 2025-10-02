@@ -122,6 +122,19 @@ def main() -> None:
         default=1,
         help="Vector generation max vectors to emit",
     )
+    parser.add_argument(
+        "--gen-variants-per-event",
+        type=int,
+        default=3,
+        help="Max fused payload variants per event during vector generation",
+    )
+    parser.add_argument(
+        "--ordering",
+        type=str,
+        choices=["tolerant", "strict", "scion"],
+        default="tolerant",
+        help="Ordering policy for child→parent emissions (finalize, etc.)",
+    )
     opts = parser.parse_args()
 
     # Load skip patterns from file, if provided
@@ -151,6 +164,13 @@ def main() -> None:
     base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve())]
     if opts.reference:
         base_cmd.extend(["--reference", opts.reference])
+    else:
+        # Default to SCION Node reference when available; otherwise fall back to Python engine
+        scion = (ROOT / "tools" / "scion-runner" / "scion-trace.cjs").resolve()
+        if scion.exists():
+            base_cmd.extend(["--reference", f"node {scion}"])
+        else:
+            base_cmd.extend(["--reference", f"{sys.executable} -m scjson.cli engine-trace"])
     if opts.workdir:
         artifacts_root = Path(opts.workdir)
         artifacts_root.mkdir(parents=True, exist_ok=True)
@@ -173,6 +193,8 @@ def main() -> None:
         common_flags.append("--omit-transitions")
     if opts.advance_time and opts.advance_time > 0:
         common_flags.extend(["--advance-time", str(opts.advance_time)])
+    if opts.ordering:
+        common_flags.extend(["--ordering", opts.ordering])
 
     # Temporary directory for auto-generated empty event streams
     temp_dir: TemporaryDirectory[str] | None = None
@@ -205,9 +227,23 @@ def main() -> None:
                     vg_cmd.extend(["--max-depth", str(opts.gen_depth)])
                 if opts.gen_limit:
                     vg_cmd.extend(["--limit", str(opts.gen_limit)])
+                if opts.gen_variants_per_event:
+                    vg_cmd.extend(["--variants-per-event", str(opts.gen_variants_per_event)])
                 _run(vg_cmd)
                 gen_events = vec_dir / f"{chart.stem}.events.jsonl"
                 events = gen_events if gen_events.exists() else None
+                # Adopt recommended advance time from vector metadata when user did not pass one
+                try:
+                    if (not opts.advance_time) or opts.advance_time <= 0:
+                        meta_path = vec_dir / f"{chart.stem}.vector.json"
+                        if meta_path.exists():
+                            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                            adv = float(meta.get("advanceTime", 0.0) or 0.0)
+                            if adv > 0:
+                                # Stash as a per-chart override via a tuple entry in cov_by_chart
+                                cov_by_chart.setdefault(str(chart), {})["_advanceTime"] = adv
+                except Exception:
+                    pass
                 cov_path = vec_dir / f"{chart.stem}.coverage.json"
                 if cov_path.exists():
                     try:
@@ -233,6 +269,14 @@ def main() -> None:
                 workdir = artifacts_root / rel.parent / rel.stem
                 cmd.extend(["--workdir", str(workdir)])
             cmd.extend(common_flags)
+            # If vector meta suggested an advance time and no global was provided, apply per chart
+            try:
+                if (not opts.advance_time) or opts.advance_time <= 0:
+                    adv = cov_by_chart.get(str(chart), {}).get("_advanceTime")
+                    if isinstance(adv, (int, float)) and adv > 0:
+                        cmd.extend(["--advance-time", str(adv)])
+            except Exception:
+                pass
             cmd.append(str(chart))
             if events:
                 cmd.extend(["--events", str(events)])

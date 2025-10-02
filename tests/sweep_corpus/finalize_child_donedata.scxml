@@ -1,0 +1,22 @@
+<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="s0">
+    <invoke id="child" type="scxml">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="done">
+          <final id="done">
+            <donedata>
+              <param name="z" expr="'abc'"/>
+            </donedata>
+          </final>
+        </scxml>
+      </content>
+      <finalize>
+        <send event="seen">
+          <param name="y" expr="_event.data.z"/>
+        </send>
+      </finalize>
+    </invoke>
+    <transition event="seen" target="ok"/>
+  </state>
+  <state id="ok"/>
+</scxml>

@@ -403,6 +403,13 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     default=False,
     help="Omit firedTransitions entries from the trace output",
 )
+@click.option(
+    "--ordering",
+    type=click.Choice(["tolerant", "strict", "scion"], case_sensitive=False),
+    default="tolerant",
+    show_default=True,
+    help="Ordering policy for child→parent emissions (finalize, etc.)",
+)
 def engine_trace(
     input_path: Path,
     events_path: Path | None,
@@ -419,6 +426,7 @@ def engine_trace(
     omit_delta: bool,
     omit_transitions: bool,
     advance_time: float,
+    ordering: str,
 ) -> None:
     """Produce a JSON lines trace of engine steps for comparison harnesses.
 
@@ -467,6 +475,10 @@ def engine_trace(
         if is_xml
         else DocumentContext.from_json_file(input_path, **ctx_kwargs)
     )
+    try:
+        ctx.ordering_mode = (ordering or "tolerant").lower()
+    except Exception:
+        pass
 
     sink: TextIO
     if out_path:
@@ -510,6 +522,18 @@ def engine_trace(
 
         step_no = 1
         for msg in JsonStreamDecoder(stream):
+            # Support control tokens in the event stream to advance time
+            # without emitting a trace step. This enables vectors to flush
+            # delayed <send> events between external stimuli.
+            try:
+                adv = msg.get("advance_time") if isinstance(msg, dict) else None
+                if isinstance(adv, (int, float)) and adv > 0:
+                    ctx.advance_time(float(adv))
+                    # Do not emit a trace step for time advancement
+                    continue
+            except Exception:
+                # Fall through to normal event handling
+                pass
             if max_steps is not None and step_no > max_steps:
                 click.echo(
                     f"Reached max step limit ({max_steps}); remaining events skipped.",

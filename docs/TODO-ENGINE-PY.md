@@ -24,6 +24,9 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
   - [x] Document rationale and guidance for scion compatibility in repo docs. (`py/scjson/ENGINE.md`)
 - [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (optional, for historical parity).
 
+Decision notes (invoke/finalize ordering)
+- Finalize ordering across multiple invocations completing in the same step is treated as implementation-defined in our engine by default. We defer to SCION’s behavior where observable and stable, but tests are tolerant (presence of both finalize-emitted events) to avoid over-constraining ordering across parallel regions. Once SCION’s behavior is confirmed stable for these charts, we can lock a deterministic order (e.g., document/creation order) and tighten tests accordingly.
+
 ## Roadmap (Iterations)
 
 1) Core Algorithm & Trace
@@ -151,6 +154,18 @@ Comparison Tooling
 - [x] Add spec-conformant invalid-assign handling: assigning to a non-existent location now enqueues `error.execution` and does not create a new variable; this enables W3C `test401.scxml`. Removed from `ENGINE_KNOWN_UNSUPPORTED`.
 - [ ] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py` and plan removals as features land.
 
+New work items (updated plan)
+- [ ] Invoke/finalize
+  - [ ] Investigate SCION finalize ordering across multiple simultaneous completes; if stable, adopt the same deterministic policy (e.g., document order) and tighten ordering tests; otherwise keep tolerant presence checks.
+  - [ ] Add CI knob to run SCION-backed comparisons on a subset of invoke/finalize charts when Node is available.
+- [ ] Vector generation (Phase 3)
+  - [ ] Delta-preserving minimization focused on unique firedTransitions and enteredStates.
+  - [ ] Heuristics for disjunctions and nested structures; expand negative payload construction.
+  - [x] Optional injection of advance_time within sequences when delayed sends are detected after init.
+  - [ ] Expand sweep corpus with more parallel + history + invoke combinations and step-0 variance charts.
+  - [ ] Documentation
+  - [x] docs/ENGINE-PY.md: add “Invoke & Finalize semantics” section describing done.invoke id-specific vs generic, finalize-before-done behavior in same microstep, and ordering notes across parallel.
+
 ---
 
 ## Vector Generation & Coverage (New Initiative)
@@ -167,6 +182,7 @@ Planned Components
   - Include “complete” when mock:deferred invoke is present; insert advance_time when needed.
 - Payload Heuristics (Phase 2)
   - Toggle simple booleans/numerics from cond/expr identifiers to flip branches.
+  - Auto-detect delayed sends during init and recommend an advance_time.
 - Emission & Compare
   - Emit vectors as `.events.jsonl` + `.coverage.json`, integrate with `exec_compare --generate-vectors` and `exec_sweep --generate-vectors`.
 - Minimization & Reporting
@@ -179,6 +195,14 @@ Deliverables
 
 Phases & Checklists
 - Phase 1 (landed): core generator, depth‑limited BFS, coverage sidecar, compare integration.
-- Phase 2 (next): payload heuristics and branch flipping.
+- Phase 2 (landed): payload heuristics and branch flipping, auto-advance detection, limits.
+  - [x] Analyzer extracts ``_event.data`` paths and comparators from ``cond``.
+  - [x] Membership (including reversed and datamodel containers); chained/split ranges.
+  - [x] Search accepts data-bearing stimuli and simulates payloads.
+  - [x] One‑hot payload fusion to flip branches; bounded by ``--variants-per-event``.
+  - [x] Generator emits events with ``data`` payloads and writes sidecars:
+        ``.coverage.json`` and ``.vector.json`` (with ``advanceTime`` hint).
+  - [x] exec_compare/exec_sweep adopt ``advanceTime`` from ``.vector.json``
+        when ``--advance-time`` is not explicitly provided.
+  - [x] Add ``--variants-per-event`` knobs on vector_gen/compare/sweep.
 - Phase 3: parallel/invoke refinements and minimization.
-

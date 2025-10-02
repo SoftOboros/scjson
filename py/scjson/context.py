@@ -91,6 +91,8 @@ class DocumentContext(BaseModel):
     _invocations_started_for_state: Set[str] = PrivateAttr(default_factory=set)
     _base_dir: Optional[Path] = PrivateAttr(default=None)
     _external_emitter: Optional[Any] = PrivateAttr(default=None)
+    # Ordering policy for parent queue emission from child invokes
+    ordering_mode: str = "tolerant"  # tolerant | strict | scion
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -1193,10 +1195,15 @@ class DocumentContext(BaseModel):
             payload = self._build_invoke_payload(inv, env, act)
 
             try:
-                handler = self.invoke_registry.create(inv_type, inv_src, payload, autostart=True,
-                                                      on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data))
+                handler = self.invoke_registry.create(
+                    inv_type, inv_src, payload, autostart=True,
+                    on_done=lambda data, _id=inv_id: self._on_invoke_done(_id, data)
+                )
                 try:
-                    handler.set_emitter(lambda e: getattr(self.events, 'push_front', self.events.push)(e))
+                    if str(self.ordering_mode).lower() == "strict":
+                        handler.set_emitter(lambda e: self.events.push(e))
+                    else:
+                        handler.set_emitter(lambda e: getattr(self.events, 'push_front', self.events.push)(e))
                 except Exception:
                     pass
                 # Inform handler of invocation id for SCXML Event I/O metadata if supported

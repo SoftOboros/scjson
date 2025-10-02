@@ -29,7 +29,7 @@ try:
 except Exception:  # pragma: no cover - fallback when package not importable
     DocumentContext = None  # type: ignore
     ExecutionMode = None  # type: ignore
-PyEvent = None  # type: ignore
+    PyEvent = None  # type: ignore
 
 
 PYTHON_TRACE_CMD = [sys.executable, "-m", "scjson.cli", "engine-trace"]
@@ -337,6 +337,7 @@ def _write_python_trace_inline(
     events: Path | None,
     out: Path,
     treat_as_xml: bool,
+    ordering: str = "tolerant",
 ) -> None:
     if DocumentContext is None or PyEvent is None:
         raise SystemExit(
@@ -349,6 +350,10 @@ def _write_python_trace_inline(
         if treat_as_xml
         else DocumentContext.from_json_file(chart, execution_mode=execution_mode)
     )
+    try:
+        ctx.ordering_mode = (ordering or "tolerant").lower()
+    except Exception:
+        pass
     with out.open("w", encoding="utf-8") as sink:
         # Step 0 snapshot
         config = sorted(ctx._filter_states(ctx.configuration), key=ctx._activation_order_key)
@@ -469,11 +474,26 @@ def main() -> None:
         default=1,
         help="Generation max vectors to emit when using --generate-vectors",
     )
+    parser.add_argument(
+        "--gen-variants-per-event",
+        type=int,
+        default=3,
+        help="Max fused payload variants to consider per event during vector generation",
+    )
+    parser.add_argument(
+        "--ordering",
+        type=str,
+        choices=["tolerant", "strict", "scion"],
+        default="tolerant",
+        help="Ordering policy for child→parent emissions (finalize, etc.)",
+    )
     args = parser.parse_args()
 
     chart = args.chart.resolve()
     if not chart.exists():
         raise SystemExit(f"Chart not found: {chart}")
+    # Determine input type early (used by vector generation branch below)
+    treat_as_xml = chart.suffix.lower() == ".scxml"
 
     events = args.events
     if events is None:
@@ -498,11 +518,24 @@ def main() -> None:
                 vg_cmd.extend(["--max-depth", str(args.gen_depth)])
             if args.gen_limit:
                 vg_cmd.extend(["--limit", str(args.gen_limit)])
+            if args.gen_variants_per_event:
+                vg_cmd.extend(["--variants-per-event", str(args.gen_variants_per_event)])
             _run(vg_cmd)
             gen_path = vectors_dir / f"{chart.stem}.events.jsonl"
             if not gen_path.exists():
                 raise SystemExit("Vector generator did not produce an events file.")
             events = gen_path
+            # Adopt recommended advance time from vector metadata when none provided
+            try:
+                if (not args.advance_time) or args.advance_time <= 0:
+                    meta_path = vectors_dir / f"{chart.stem}.vector.json"
+                    if meta_path.exists():
+                        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                        adv = float(meta.get("advanceTime", 0.0) or 0.0)
+                        if adv > 0:
+                            args.advance_time = adv
+            except Exception:
+                pass
             # Print a brief coverage summary for the generated vector
             cov = _coverage_from_vector(chart, events, treat_as_xml, args.advance_time)
             if cov is not None:
@@ -515,7 +548,7 @@ def main() -> None:
     if not events.exists():
         raise SystemExit(f"Event stream not found: {events}")
 
-    treat_as_xml = chart.suffix.lower() == ".scxml"
+    # treat_as_xml already computed above
     ref_cmd = _resolve_reference_cmd(args)
 
     temp_dir: TemporaryDirectory[str] | None = None
@@ -544,12 +577,14 @@ def main() -> None:
         py_flags.append("--omit-transitions")
     if args.advance_time and args.advance_time > 0:
         py_flags.extend(["--advance-time", str(args.advance_time)])
+    if args.ordering:
+        py_flags.extend(["--ordering", args.ordering])
 
     try:
         _run(_build_trace_cmd(py_cmd, chart, events, py_trace, treat_as_xml, py_flags))
     except SystemExit:
         # Fallback to inline generation when package CLI is unavailable
-        _write_python_trace_inline(chart, events, py_trace, treat_as_xml)
+        _write_python_trace_inline(chart, events, py_trace, treat_as_xml, ordering=args.ordering)
     _run(_build_trace_cmd(ref_cmd, chart, events, ref_trace, treat_as_xml))
 
     py_steps = _load_trace(py_trace)

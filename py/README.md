@@ -33,6 +33,14 @@ cd py && pip install -e .
 - rust
 - swift
 
+## Python Engine — User Guide
+
+For end‑to‑end usage of the Python execution engine (tracing, comparing against a reference, generating vectors, sweeping corpora), see:
+
+- docs/ENGINE-PY.md (in this repository)
+
+Online: https://github.com/SoftOboros/scjson/blob/main/docs/ENGINE-PY.md
+
 ## Command Line Usage
 
 After installation the `scjson` command is available:

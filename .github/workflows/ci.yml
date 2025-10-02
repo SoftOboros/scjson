@@ -52,6 +52,30 @@ jobs:
         working-directory: py
         run: python -m pytest
 
+      - name: Sweep small corpus (Python/SCION reference)
+        run: |
+          python py/exec_sweep.py tests/sweep_corpus --generate-vectors --workdir uber_out/sweep
+      - name: Print sweep coverage totals
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path('uber_out/sweep/coverage-summary.json')
+          if p.exists():
+              data = json.loads(p.read_text())
+              t = data.get('totals', {})
+              print(f"Sweep coverage totals: entered={t.get('enteredStates',0)} fired={t.get('firedTransitions',0)} done={t.get('doneEvents',0)} error={t.get('errorEvents',0)}")
+          else:
+              print('No coverage-summary.json found')
+          PY
+
+      - name: Upload sweep coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-coverage-summary-pr
+          path: uber_out/sweep/coverage-summary.json
+          if-no-files-found: ignore
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (Rust)
@@ -145,6 +169,30 @@ jobs:
       - name: Run Python tests
         working-directory: py
         run: python -m pytest
+
+      - name: Sweep small corpus (Python/SCION reference)
+        run: |
+          python py/exec_sweep.py tests/sweep_corpus --generate-vectors --workdir uber_out/sweep
+      - name: Print sweep coverage totals
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          p = Path('uber_out/sweep/coverage-summary.json')
+          if p.exists():
+              data = json.loads(p.read_text())
+              t = data.get('totals', {})
+              print(f"Sweep coverage totals: entered={t.get('enteredStates',0)} fired={t.get('firedTransitions',0)} done={t.get('doneEvents',0)} error={t.get('errorEvents',0)}")
+          else:
+              print('No coverage-summary.json found')
+          PY
+
+      - name: Upload sweep coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-coverage-summary-main
+          path: uber_out/sweep/coverage-summary.json
+          if-no-files-found: ignore
 
       - uses: dtolnay/rust-toolchain@stable
 

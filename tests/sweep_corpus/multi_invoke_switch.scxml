@@ -1,0 +1,45 @@
+<scxml initial="A" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="A">
+    <invoke id="ia" type="scxml">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="wait">
+          <state id="wait">
+            <transition event="poke" target="done"/>
+          </state>
+          <final id="done"/>
+        </scxml>
+      </content>
+      <finalize>
+        <send event="childA"/>
+      </finalize>
+    </invoke>
+    <onentry>
+      <send target="#_child" event="poke"/>
+    </onentry>
+    <transition event="switch" target="B"/>
+    <transition event="childA" target="childA"/>
+    <transition event="childB" target="childB"/>
+  </state>
+  <state id="B">
+    <invoke id="ib" type="scxml">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="wait">
+          <state id="wait">
+            <transition event="poke" target="done"/>
+          </state>
+          <final id="done"/>
+        </scxml>
+      </content>
+      <finalize>
+        <send event="childB"/>
+      </finalize>
+    </invoke>
+    <onentry>
+      <send target="#_child" event="poke"/>
+    </onentry>
+    <transition event="childA" target="childA"/>
+    <transition event="childB" target="childB"/>
+  </state>
+  <state id="childA"/>
+  <state id="childB"/>
+</scxml>

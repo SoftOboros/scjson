@@ -1,0 +1,14 @@
+<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="s0">
+    <invoke id="child" type="mock:deferred">
+      <param name="x" expr="7"/>
+      <finalize>
+        <send event="seen">
+          <param name="y" expr="_event.data.x"/>
+        </send>
+      </finalize>
+    </invoke>
+    <transition event="seen" target="ok"/>
+  </state>
+  <state id="ok"/>
+</scxml>

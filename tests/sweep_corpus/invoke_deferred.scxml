@@ -1,0 +1,5 @@
+<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="s0">
+    <invoke type="mock:deferred"/>
+  </state>
+</scxml>
