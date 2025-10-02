@@ -12,14 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-<<<<<<< HEAD
-=======
         with:
           submodules: recursive
 
       - name: Update submodules
         run: git submodule update --init --recursive
->>>>>>> main
 
       - uses: actions/setup-node@v4
         with:
@@ -55,8 +52,6 @@ jobs:
         working-directory: py
         run: python -m pytest
 
-<<<<<<< HEAD
-=======
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (Rust)
@@ -100,141 +95,6 @@ jobs:
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
-      - id: determine_pypi
-        name: Determine PyPI publish necessity
-        working-directory: py
-        run: python ../.github/scripts/determine_pypi_publish.py
-
-      - id: determine_crates
-        name: Determine crates.io publish necessity
-        run: python .github/scripts/determine_crates_publish.py
-
-      - id: determine_rubygems
-        name: Determine RubyGems publish necessity
-        working-directory: ruby
-        run: ruby ../.github/scripts/determine_rubygems_publish.rb
-
->>>>>>> main
-      - name: Install packaging tools (PyPI)
-        working-directory: py
-        run: pip install build twine
-
-      - name: Build Python package
-        working-directory: py
-        run: |
-          rm -rf dist
-          python -m build
-
-<<<<<<< HEAD
-      - id: determine_pypi
-        name: Determine PyPI publish necessity
-        working-directory: py
-        run: |
-          python <<'PY'
-import json
-import os
-import sys
-import tomllib
-import urllib.request
-
-with open('pyproject.toml', 'rb') as fh:
-    data = tomllib.load(fh)
-name = data['project']['name']
-version = data['project']['version']
-
-url = f"https://pypi.org/pypi/{name}/json"
-try:
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        payload = json.load(resp)
-        existing = set(payload.get('releases', {}).keys())
-except Exception:
-    existing = set()
-
-should_publish = 'true'  # always attempt publish; errors are tolerated
-out = os.environ['GITHUB_OUTPUT']
-with open(out, 'a', encoding='utf-8') as fh:
-    fh.write(f"name={name}\n")
-    fh.write(f"version={version}\n")
-    fh.write(f"existing_versions={' '.join(sorted(existing))}\n")
-    fh.write(f"should_publish={should_publish}\n")
-print(f"PyPI target {name}@{version}; existing versions: {sorted(existing)}")
-PY
-
-      - name: Publish to PyPI
-=======
-      - name: Publish to PyPI (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
->>>>>>> main
-        working-directory: py
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
-        run: |
-          if [ -z "$TWINE_PASSWORD" ]; then
-<<<<<<< HEAD
-            echo "No PYPI_API_KEY provided; skipping PyPI publish."
-            exit 0
-          fi
-          twine upload --non-interactive dist/* || echo "PyPI publish failed or version already exists; continuing."
-        continue-on-error: true
-
-      - id: determine_crates
-        name: Determine crates.io publish necessity
-        run: |
-          python <<'PY'
-import json
-import os
-import tomllib
-import urllib.request
-
-with open('rust/Cargo.toml', 'rb') as fh:
-    data = tomllib.load(fh)
-name = data['package']['name']
-version = data['package']['version']
-
-url = f"https://crates.io/api/v1/crates/{name}"
-try:
-    with urllib.request.urlopen(url, timeout=10) as resp:
-        payload = json.load(resp)
-        existing = [v.get('num') for v in payload.get('versions', []) if v.get('num')]
-except Exception:
-    existing = []
-
-should_publish = 'true' if version not in existing else 'false'
-out = os.environ['GITHUB_OUTPUT']
-with open(out, 'a', encoding='utf-8') as fh:
-    fh.write(f"name={name}\n")
-    fh.write(f"version={version}\n")
-    fh.write(f"should_publish={should_publish}\n")
-print(f"Crates target {name}@{version}; existing versions: {existing}")
-PY
-
-      - name: Publish to crates.io (if version changed)
-        if: steps.determine_crates.outputs.should_publish == 'true'
-=======
-            echo "No PYPI_API_KEY provided; skipping PyPI publish." && exit 0
-          fi
-          twine upload --non-interactive dist/* || echo "PyPI publish failed; continuing."
-
-      - name: Publish to crates.io (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
->>>>>>> main
-        working-directory: rust
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-<<<<<<< HEAD
-            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish."
-            exit 0
-          fi
-          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
-        continue-on-error: true
-=======
-            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish." && exit 0
-          fi
-          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN" || echo "Crates publish failed; continuing."
->>>>>>> main
 
   main-checks:
     if: github.event_name == 'push'
@@ -245,14 +105,11 @@ PY
       id-token: write
     steps:
       - uses: actions/checkout@v4
-<<<<<<< HEAD
-=======
         with:
           submodules: recursive
 
       - name: Update submodules
         run: git submodule update --init --recursive
->>>>>>> main
 
       - uses: actions/setup-node@v4
         with:
@@ -289,13 +146,6 @@ PY
         working-directory: py
         run: python -m pytest
 
-<<<<<<< HEAD
-      - id: determine
-        name: Determine publish necessity
-        working-directory: js
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
-=======
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (Rust)
@@ -332,13 +182,14 @@ PY
       - name: Run uber_test for release languages
         working-directory: py
         env:
-          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile }
           RUBYOPT: -rbundler/setup
         run: |
           python uber_test.py -l python
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
+
       - id: determine_pypi
         name: Determine PyPI publish necessity
         working-directory: py
@@ -353,7 +204,6 @@ PY
         working-directory: ruby
         run: ruby ../.github/scripts/determine_rubygems_publish.rb
 
-
       - name: Publish to PyPI (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
         working-directory: py
@@ -365,6 +215,9 @@ PY
             echo "No PYPI_API_KEY provided; skipping publish."
             exit 0
           fi
+          pip install build twine
+          rm -rf dist
+          python -m build
           twine upload --non-interactive dist/*
 
       - name: Publish to crates.io (if version changed)
@@ -378,6 +231,7 @@ PY
             exit 0
           fi
           cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
+
       - name: Publish to RubyGems (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
         working-directory: ruby
@@ -397,7 +251,6 @@ PY
         working-directory: js
         env:
           NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
->>>>>>> main
         run: |
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
@@ -408,22 +261,6 @@ PY
           echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm (if version changed)
-<<<<<<< HEAD
-        if: steps.determine.outputs.should_publish == 'true'
-        working-directory: js
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN || secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "No npm token available; skipping publish." && exit 0
-          fi
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
-          npm publish --provenance --access public || echo "Publish failed; continuing as green per policy."
-        continue-on-error: true
-
-      - name: Skip publish (no version change)
-        if: steps.determine.outputs.should_publish != 'true'
-=======
         if: github.ref == 'refs/heads/main' && steps.determine_npm.outputs.should_publish == 'true'
         working-directory: js
         env:
@@ -439,5 +276,4 @@ PY
 
       - name: Skip publish (no version change)
         if: steps.determine_npm.outputs.should_publish != 'true'
->>>>>>> main
         run: echo "Package version unchanged; skipping publish."
