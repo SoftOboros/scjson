@@ -315,9 +315,11 @@ jobs:
           fi
           CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           mkdir -p "$(dirname "$CONFIG_PATH")"
-          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > "$CONFIG_PATH"
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > js/.npmrc
           export NODE_AUTH_TOKEN="$TOKEN"
+          pushd js >/dev/null
           npm publish --provenance --access public
+          popd >/dev/null
 
       - name: Skip publish (no version change)
         if: steps.determine_npm.outputs.should_publish != 'true'
