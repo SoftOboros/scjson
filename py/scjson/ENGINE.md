@@ -60,6 +60,24 @@ sandbox by passing `--unsafe-eval` to `scjson engine-trace` (or by constructing
 `DocumentContext` with `allow_unsafe_eval=True`). This re-enables CPython’s
 native `eval`, matching the previous engine behaviour.
 
+Sandbox presets and overrides
+- `--expr-preset` controls the sandbox surface: `standard` (default) or `minimal`.
+  The `minimal` preset denies `math.*` to better approximate a cross‑engine subset.
+- Fine‑tune with `--expr-allow PATTERN` and/or `--expr-deny PATTERN` (repeatable).
+- `--unsafe-eval` bypasses the sandbox entirely (trusted environments only).
+
+## Trace Filters & Determinism
+
+The `engine-trace` command now supports optional size/visibility filters:
+- `--leaf-only` limits `configuration`/`enteredStates`/`exitedStates` to leaf states.
+- `--omit-actions` omits `actionLog` from trace entries.
+- `--omit-delta` omits `datamodelDelta` (step 0 still prints an empty object).
+- `--omit-transitions` omits `firedTransitions` from entries.
+- `--advance-time N` advances the mock clock before event processing to release
+  delayed `<send>` events deterministically in traces.
+
+To improve reproducibility, `datamodelDelta` keys are emitted in sorted order when present.
+
 ## Canonical JSON Ingestion
 
 Even when the CLI receives SCXML, the runtime first converts it into its
@@ -162,6 +180,34 @@ Limitations:
   handling parity) are not implemented. The current behavior is designed to
   unblock engine testing and can be extended behind the `InvokeRegistry`.
 
+### Custom Invokers
+
+You can extend the registry with your own invocation types. At startup, the
+engine constructs a default `InvokeRegistry` which you can augment:
+
+```python
+from scjson.invoke import InvokeHandler
+
+class MyService(InvokeHandler):
+    def start(self) -> None:
+        # perform setup, and optionally complete immediately
+        pass
+
+    def send(self, name: str, data=None) -> None:
+        # receive autoforwarded parent events or explicit #_child sends
+        if name == 'complete':
+            self._on_done({'result': 'ok'})
+
+# during context creation or before run
+ctx.invoke_registry.register('my:service', lambda t, src, payload, on_done=None: MyService(t, src, payload, on_done))
+```
+
+Once registered, an `<invoke type="my:service"/>` entry will use your handler.
+Handlers can bubble events to the parent via the engine's emitter; the runtime
+automatically attaches an emitter for child machines so `#_parent` sends work
+out-of-the-box. For external services, prefer emitting parent events with
+`self._emit` where appropriate.
+
 ### Finalization and Done Events
 
 - Entering a `<final>` child of a compound state immediately enqueues
@@ -187,9 +233,19 @@ Limitations:
   `error.execution` and evaluate to false.
 - `<foreach>` evaluation failures also enqueue `error.execution` and iterate
   over an empty sequence.
-- `<assign>` expression failures enqueue `error.execution` and store the raw
-  expression string as the value.
+- `<assign>`
+  - Expression failures enqueue `error.execution` and store the raw expression
+    string as the value.
+  - Invalid locations (no matching variable in scope) enqueue
+    `error.execution` and do not create a new variable.
 - External `<send>` targets enqueue `error.communication` and are skipped.
+
+### Transition Event Matching
+
+- Event attributes support:
+  - Space-separated lists of names (any match enables the transition)
+  - Wildcard `*` (matches any external event)
+  - Prefix patterns like `error.*` (matches e.g., `error.execution`)
 
 ### Tutorial Sweep & Skip List
 

@@ -41,8 +41,6 @@ ROOT = Path(sep.join(pathsplit(str(Path(__file__).resolve().parent))[:-1]))
 TUTORIAL = ROOT / "tutorial"
 
 ENGINE_KNOWN_UNSUPPORTED = {
-    # Still pending or require broader feature support
-    Path("Tests/python/W3C/Mandatory/Auto/test401.scxml"),  # expects generic 'error' event
     # Optional features not yet targeted by the Python engine
     Path("Tests/python/W3C/Optional/Auto/test457.scxml"),
     Path("Tests/python/W3C/Optional/Auto/test520.scxml"),

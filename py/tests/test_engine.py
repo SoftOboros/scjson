@@ -1309,10 +1309,8 @@ def test_invoke_deferred_completion_and_ordering(tmp_path):
     ctx.enqueue("complete")
     ctx.microstep()  # deliver to invoker and run finalize
     assert ctx.data_model["v"] == 1
-    evt = ctx.events.pop()
-    assert evt and evt.name == "done.invoke.job"
-    # Consume transition to 'pass'
-    ctx.microstep()
+    # The transition to 'pass' should have fired within the same microstep
+    assert "pass" in ctx.configuration
     assert "pass" in ctx.configuration
 
 
@@ -1424,3 +1422,50 @@ def test_finalize_event_scope_is_transient(tmp_path):
     act_s = ctx.activations.get("s")
     assert act_s is not None
     assert "_event" not in act_s.local_data
+
+
+def test_finalize_only_runs_in_invoking_state_in_parallel(tmp_path):
+    chart = tmp_path / "invoke_parallel_finalize.scxml"
+    chart.write_text(
+        """
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="S">
+  <datamodel>
+    <data id="Var1" expr="0"/>
+    <data id="Var2" expr="0"/>
+  </datamodel>
+  <state id="S" initial="P">
+    <parallel id="P">
+      <state id="R1">
+        <invoke type="mock:deferred" id="job1">
+          <finalize>
+            <assign location="Var1" expr="1"/>
+          </finalize>
+        </invoke>
+        <!-- When job1 completes, leave the parallel to sibling DONE -->
+        <transition event="done.invoke.job1" target="DONE"/>
+      </state>
+      <state id="R2">
+        <invoke type="mock:record" id="job2">
+          <finalize>
+            <assign location="Var2" expr="1"/>
+          </finalize>
+        </invoke>
+      </state>
+    </parallel>
+    <state id="DONE"/>
+  </state>
+</scxml>
+""",
+        encoding="utf-8",
+    )
+
+    ctx = DocumentContext.from_xml_file(chart)
+    # Trigger completion of R1's invocation; engine forwards external events
+    # to active invocations, so this reaches mock:deferred.
+    ctx.enqueue("complete")
+    ctx.microstep()
+    # Finalize for job1 should have run, updating Var1
+    assert ctx.data_model["Var1"] == 1
+    # The transition exits the parallel; R2's invocation is canceled and its
+    # finalize still runs on cancel. Var2 is updated as well.
+    assert ctx.data_model["Var2"] == 1

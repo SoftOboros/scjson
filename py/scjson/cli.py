@@ -14,6 +14,7 @@ import click
 from pathlib import Path
 from .SCXMLDocumentHandler import SCXMLDocumentHandler
 from .context import DocumentContext, ExecutionMode
+from .safe_eval import SafeExpressionEvaluator
 from .events import Event
 from .json_stream import JsonStreamDecoder
 from .jinja_gen import JinjaGenPydantic
@@ -341,6 +342,25 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     help="Disable sandboxing and allow Python eval for expressions",
 )
 @click.option(
+    "--expr-preset",
+    type=click.Choice(["standard", "minimal"], case_sensitive=False),
+    default="standard",
+    show_default=True,
+    help="Select sandbox preset for expressions (ignored when --unsafe-eval)",
+)
+@click.option(
+    "--expr-allow",
+    multiple=True,
+    metavar="PATTERN",
+    help="Additional allow-list patterns for the sandbox (can be repeated)",
+)
+@click.option(
+    "--expr-deny",
+    multiple=True,
+    metavar="PATTERN",
+    help="Additional deny-list patterns for the sandbox (can be repeated)",
+)
+@click.option(
     "--max-steps",
     type=click.IntRange(min=1),
     default=None,
@@ -352,14 +372,53 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     default=False,
     help="Use lax execution mode when set (default strict).",
 )
+@click.option(
+    "--advance-time",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Advance mock time by N seconds before processing events",
+)
+@click.option(
+    "--leaf-only/--full-states",
+    "leaf_only",
+    default=False,
+    help="Restrict configuration/entered/exited sets to leaf states",
+)
+@click.option(
+    "--omit-actions",
+    is_flag=True,
+    default=False,
+    help="Omit actionLog entries from the trace output",
+)
+@click.option(
+    "--omit-delta",
+    is_flag=True,
+    default=False,
+    help="Omit datamodelDelta entries from the trace output",
+)
+@click.option(
+    "--omit-transitions",
+    is_flag=True,
+    default=False,
+    help="Omit firedTransitions entries from the trace output",
+)
 def engine_trace(
     input_path: Path,
     events_path: Path | None,
     is_xml: bool,
     out_path: Path | None,
     unsafe_eval: bool,
+    expr_preset: str,
+    expr_allow: tuple[str, ...],
+    expr_deny: tuple[str, ...],
     max_steps: int | None,
     lax_mode: bool,
+    leaf_only: bool,
+    omit_actions: bool,
+    omit_delta: bool,
+    omit_transitions: bool,
+    advance_time: float,
 ) -> None:
     """Produce a JSON lines trace of engine steps for comparison harnesses.
 
@@ -388,10 +447,21 @@ def engine_trace(
     """
 
     execution_mode = ExecutionMode.LAX if lax_mode else ExecutionMode.STRICT
+    # Configure evaluator unless unsafe is requested
+    evaluator = None
+    if not unsafe_eval:
+        # Minimal preset denies math.* and trims to a smaller surface
+        deny: list[str] = list(expr_deny or ())
+        allow: list[str] = list(expr_allow or ())
+        if (expr_preset or "standard").lower() == "minimal":
+            deny.append("math.*")
+        evaluator = SafeExpressionEvaluator(allow_patterns=allow or None, deny_patterns=deny or None)
     ctx_kwargs = {
         "allow_unsafe_eval": unsafe_eval,
         "execution_mode": execution_mode,
     }
+    if evaluator is not None:
+        ctx_kwargs["evaluator"] = evaluator
     ctx = (
         DocumentContext.from_xml_file(input_path, **ctx_kwargs)
         if is_xml
@@ -407,17 +477,27 @@ def engine_trace(
 
     stream_handle: TextIO | None = None
     try:
+        # Optional time advance to release delayed sends scheduled during init
+        if advance_time and advance_time > 0:
+            ctx.advance_time(advance_time)
+        # Note: we do not drain queued events at init here; step 0 represents
+        # initial configuration after internal (eventless) transitions only.
         # Initial snapshot step (step 0)
         filtered_start = ctx._filter_states(ctx.configuration)
+        if leaf_only:
+            leaf_ids = ctx.leaf_state_ids()
+            filtered_start = [s for s in filtered_start if s in leaf_ids]
         init = {
             "step": 0,
             "event": None,
-            "firedTransitions": [],
+            "firedTransitions": [] if not omit_transitions else [],
             "enteredStates": sorted(filtered_start, key=ctx._activation_order_key),
             "exitedStates": [],
             "configuration": sorted(filtered_start, key=ctx._activation_order_key),
-            "actionLog": [],
-            "datamodelDelta": dict(ctx.data_model),
+            "actionLog": [] if not omit_actions else [],
+            "datamodelDelta": (
+                {} if omit_delta else {k: ctx.data_model[k] for k in sorted(ctx.data_model)}
+            ),
         }
         sink.write(dumps(init) + "\n")
 
@@ -441,6 +521,23 @@ def engine_trace(
                 continue
             evt_data = msg.get("data")
             trace = ctx.trace_step(Event(name=evt_name, data=evt_data))
+            # Post-process filtering and ordering for determinism/size
+            if leaf_only:
+                leaf_ids = ctx.leaf_state_ids()
+                for key in ("configuration", "enteredStates", "exitedStates"):
+                    vals = trace.get(key)
+                    if isinstance(vals, list):
+                        trace[key] = [v for v in vals if v in leaf_ids]
+            if omit_actions and "actionLog" in trace:
+                trace["actionLog"] = []
+            if omit_delta and "datamodelDelta" in trace:
+                trace["datamodelDelta"] = {}
+            # Ensure reproducible ordering for datamodelDelta keys
+            if not omit_delta and isinstance(trace.get("datamodelDelta"), dict):
+                dm = trace["datamodelDelta"]
+                trace["datamodelDelta"] = {k: dm[k] for k in sorted(dm)}
+            if omit_transitions and "firedTransitions" in trace:
+                trace["firedTransitions"] = []
             trace["step"] = step_no
             sink.write(dumps(trace) + "\n")
             step_no += 1
@@ -449,6 +546,69 @@ def engine_trace(
             sink.close()
         if stream_handle is not None:
             stream_handle.close()
+
+@main.command(help="Run a chart to quiescence and report outcome (pass/fail/other).")
+@click.option(
+    "--input",
+    "-I",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="SCJSON/SCXML document",
+)
+@click.option("--xml", "is_xml", is_flag=True, default=False, help="Input is SCXML")
+@click.option(
+    "--advance-time",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Advance mock time by N seconds before running (for delayed sends)",
+)
+@click.option(
+    "--max-steps",
+    type=click.IntRange(min=1),
+    default=2000,
+    show_default=True,
+    help="Maximum microsteps to process before declaring 'other'",
+)
+@click.option(
+    "--lax/--strict",
+    "lax_mode",
+    default=True,
+    show_default=True,
+    help="Use lax execution mode (default true for verification)",
+)
+def engine_verify(
+    input_path: Path,
+    is_xml: bool,
+    advance_time: float,
+    max_steps: int,
+    lax_mode: bool,
+):
+    """Execute chart to quiescence and print outcome summary.
+
+    Outcome is based on presence of 'pass' or 'fail' state IDs in the final
+    configuration. Exit codes: 0=pass, 1=fail, 2=other.
+    """
+
+    execution_mode = ExecutionMode.LAX if lax_mode else ExecutionMode.STRICT
+    ctx = (
+        DocumentContext.from_xml_file(input_path, execution_mode=execution_mode)
+        if is_xml
+        else DocumentContext.from_json_file(input_path, execution_mode=execution_mode)
+    )
+    if advance_time > 0:
+        ctx.advance_time(advance_time)
+    ctx.run(steps=max_steps)
+    config = set(ctx.configuration)
+    if "pass" in config:
+        click.echo("outcome: pass")
+        raise SystemExit(0)
+    if "fail" in config:
+        click.echo("outcome: fail")
+        raise SystemExit(1)
+    click.echo("outcome: other")
+    raise SystemExit(2)
 
 if __name__ == "__main__":
     main()

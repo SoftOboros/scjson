@@ -22,6 +22,11 @@ class Event(BaseModel):
     name: str
     data: Any | None = None
     send_id: str | None = None
+    # SCXML Event I/O processor metadata
+    origin: str | None = None
+    origintype: str | None = None
+    invokeid: str | None = None
+    # Note: additional flags may be added in the future
 
 
 class EventQueue:

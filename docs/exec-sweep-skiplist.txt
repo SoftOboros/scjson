@@ -1,0 +1,10 @@
+# Paths or glob patterns to skip during exec_sweep runs.
+# Lines starting with '#' are comments. Blank lines are ignored.
+
+# Reference runner incompatibility (scion-core parse of <assign id="…">)
+test401.scxml
+
+# Reference runner URL fetch of local subchart file (undici Invalid URL)
+test216.scxml
+test239.scxml
+test242.scxml

@@ -56,6 +56,10 @@ class InvokeHandler:
 
     def cancel(self) -> None:  # noqa: D401
         """Cancel the invocation (no-op by default)."""
+        try:
+            setattr(self, 'is_canceled', True)
+        except Exception:
+            pass
 
     def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
         """Send an event to the invocation (no-op by default)."""
@@ -69,6 +73,10 @@ class InvokeHandler:
             Function that receives Event objects to enqueue at the parent.
         """
         self._emit = emitter
+
+    def advance_time(self, seconds: float) -> None:  # noqa: D401
+        """Advance mock time for the invocation (no-op by default)."""
+        return
 
 
 class ImmediateDoneHandler(InvokeHandler):
@@ -151,6 +159,9 @@ class RecordHandler(InvokeHandler):
         self.received: list[tuple[str, Any]] = []
 
     def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
+        # Ignore sends after cancellation
+        if getattr(self, 'is_canceled', False):
+            return
         self.received.append((name, data))
 
 
@@ -171,12 +182,46 @@ class SCXMLChildHandler(InvokeHandler):
         try:
             if isinstance(path, (str, Path)):
                 p = Path(str(path))
+                from .context import DocumentContext, ExecutionMode  # local to avoid import cycle
                 if p.suffix.lower() == ".scxml":
-                    from .context import DocumentContext  # local to avoid import cycle
-                    self.child = DocumentContext.from_xml_file(p)
+                    # Build child context with deferred initial entry to allow
+                    # the invoker to pump and bubble child's initial outputs.
+                    from .SCXMLDocumentHandler import SCXMLDocumentHandler
+                    from .pydantic import Scxml
+                    import json as _json
+                    xml_text = p.read_text(encoding="utf-8")
+                    handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+                    json_str = handler.xml_to_json(xml_text)
+                    data = DocumentContext._prepare_raw_data(_json.loads(json_str))
+                    doc = Scxml.model_validate(data)
+                    self.child = DocumentContext._from_model(
+                        doc,
+                        data,
+                        allow_unsafe_eval=False,
+                        evaluator=None,
+                        execution_mode=ExecutionMode.LAX,
+                        source_xml=xml_text,
+                        base_dir=p.resolve().parent,
+                        defer_initial=True,
+                    )
                 else:
-                    from .context import DocumentContext  # local to avoid import cycle
-                    self.child = DocumentContext.from_json_file(p)
+                    # JSON input path
+                    from .pydantic import Scxml
+                    import json as _json
+                    from .context import DocumentContext, ExecutionMode
+                    text = p.read_text(encoding="utf-8")
+                    data = DocumentContext._prepare_raw_data(_json.loads(text))
+                    doc = Scxml.model_validate(data)
+                    self.child = DocumentContext._from_model(
+                        doc,
+                        data,
+                        allow_unsafe_eval=False,
+                        evaluator=None,
+                        execution_mode=ExecutionMode.LAX,
+                        source_xml=None,
+                        base_dir=p.resolve().parent,
+                        defer_initial=True,
+                    )
             else:
                 # Attempt inline content if provided in payload
                 ctx = self._context_from_payload_content(self.payload)
@@ -185,14 +230,49 @@ class SCXMLChildHandler(InvokeHandler):
                 else:
                     xml_str = self._xml_from_payload_content(self.payload)
                     if xml_str:
-                        from .context import DocumentContext  # local to avoid import cycle
-                        self.child = DocumentContext.from_xml_string(xml_str)
+                        from .context import DocumentContext, ExecutionMode  # local to avoid import cycle
+                        from .SCXMLDocumentHandler import SCXMLDocumentHandler
+                        from .pydantic import Scxml
+                        import json as _json
+                        handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+                        json_str = handler.xml_to_json(xml_str)
+                        data = DocumentContext._prepare_raw_data(_json.loads(json_str))
+                        doc = Scxml.model_validate(data)
+                        self.child = DocumentContext._from_model(
+                            doc,
+                            data,
+                            allow_unsafe_eval=False,
+                            evaluator=None,
+                            execution_mode=ExecutionMode.LAX,
+                            source_xml=xml_str,
+                            base_dir=None,
+                            defer_initial=True,
+                        )
         except Exception:
             self.child = None
             return
         # Attach emitter so child can bubble '#_parent' sends
         try:
-            self.child._external_emitter = self._emit  # type: ignore[attr-defined]
+            # Wrap emitter to detect child->parent outputs during initialization and runtime
+            original_emitter = self._emit
+            # buffer for child->parent events to enable stable ordering with front insertion
+            self._emit_buffer = []  # type: ignore[attr-defined]
+            self._child_emitted_to_parent = False  # type: ignore[attr-defined]
+            def mark_emit(evt):
+                try:
+                    setattr(self, '_child_emitted_to_parent', True)
+                except Exception:
+                    pass
+                # buffer; flushing occurs after init/final phases
+                try:
+                    self._emit_buffer.append(evt)  # type: ignore[attr-defined]
+                except Exception:
+                    # fallback to immediate emit if buffer missing
+                    if callable(original_emitter):
+                        original_emitter(evt)
+            # store original for flushing
+            setattr(self, '_parent_emit', original_emitter)  # type: ignore[attr-defined]
+            self.child._external_emitter = mark_emit  # type: ignore[attr-defined]
         except Exception:
             pass
         # Inject payload params/namelist into child datamodel prior to entry
@@ -205,6 +285,8 @@ class SCXMLChildHandler(InvokeHandler):
             if self.child and len(self.child.configuration) == 1:
                 self.child._enter_initial_states(self.child.root_activation)
                 self.child.drain_internal()
+                # flush buffered events in reverse using parent's front emitter to preserve order
+                self._flush_emit_buffer()
         except Exception:
             pass
         self._pump()
@@ -218,7 +300,19 @@ class SCXMLChildHandler(InvokeHandler):
     def send(self, name: str, data: Any | None = None) -> None:  # noqa: D401
         if not self.child:
             return
-        self.child.enqueue(name, data)
+        # Send via SCXML Event I/O; mark origintype for child to observe
+        try:
+            from .events import Event
+        except Exception:
+            Event = None  # type: ignore
+        if Event is not None:
+            evt = Event(name=str(name), data=data, origintype="http://www.w3.org/TR/scxml/#SCXMLEventProcessor")
+            try:
+                self.child.events.push(evt)
+            except Exception:
+                self.child.enqueue(name, data)
+        else:
+            self.child.enqueue(name, data)
         # Run one external microstep then drain internal transitions
         self.child.microstep()
         self.child.drain_internal()
@@ -238,22 +332,57 @@ class SCXMLChildHandler(InvokeHandler):
                 # so that their sends (e.g. target="#_parent") are emitted
                 # before the parent receives done.invoke.
                 try:
-                    emitted = self._run_child_final_onexit()
+                    emitted_onexit = self._run_child_final_onexit()
                 except Exception:
-                    emitted = False
-                # Prefer front for done.invoke when no child-bubbled events exist
-                # so done.invoke outranks pending timeouts (e.g., W3C 239/240/241)
+                    emitted_onexit = False
+                # Prefer front for done.invoke when neither init/runtime emitted
+                # any child->parent events prior to completion.
+                # flush any buffered onexit events before deciding
                 try:
-                    setattr(self, '_prefer_front_done', not emitted)
+                    self._flush_emit_buffer()
+                except Exception:
+                    pass
+                prefer_front = not (bool(getattr(self, '_child_emitted_to_parent', False)) or emitted_onexit)
+                try:
+                    setattr(self, '_prefer_front_done', prefer_front)
+                except Exception:
+                    pass
+                # Reset the emitted flag for potential future invocations
+                try:
+                    setattr(self, '_child_emitted_to_parent', False)
                 except Exception:
                     pass
                 self._on_done(evt.data)
                 break
-            # Bubble the child's event to the parent
+            # Bubble all non-completion events to the parent so that a child's
+            # onentry/onexit outputs are observable by the parent interpreter.
             try:
-                self._emit(Event(name=evt.name, data=evt.data, send_id=evt.send_id))
+                setattr(self, '_child_emitted_to_parent', True)
             except Exception:
                 pass
+            try:
+                self._emit(Event(
+                    name=evt.name,
+                    data=evt.data,
+                    send_id=evt.send_id,
+                    origintype="http://www.w3.org/TR/scxml/#SCXMLEventProcessor",
+                    invokeid=getattr(self, 'invoke_id', None)
+                ))
+            except Exception:
+                pass
+
+    def advance_time(self, seconds: float) -> None:  # noqa: D401
+        if not self.child or seconds <= 0:
+            return
+        try:
+            self.child.advance_time(seconds)
+        except Exception:
+            return
+        # Pump to bubble any now-due child events to the parent
+        try:
+            self._pump()
+        except Exception:
+            pass
 
     def _run_child_final_onexit(self) -> bool:
         if not self.child:
@@ -279,21 +408,40 @@ class SCXMLChildHandler(InvokeHandler):
                 exits = getattr(node, 'onexit', []) or []
                 if exits:
                     # Wrap emitter to detect any bubbled output
-                    original_emitter = getattr(self.child, '_external_emitter', None)
+                    # reuse buffering; mark emitted flag when buffer receives
+                    original_emitter = getattr(self, '_parent_emit', None)
                     def mark_emit(evt):
                         nonlocal emitted
                         emitted = True
-                        if callable(original_emitter):
-                            original_emitter(evt)
+                        try:
+                            self._emit_buffer.append(evt)  # type: ignore[attr-defined]
+                        except Exception:
+                            if callable(original_emitter):
+                                original_emitter(evt)
                     try:
                         self.child._external_emitter = mark_emit
                         for onexit in exits:
                             self.child._run_actions(onexit, act)
                     finally:
-                        self.child._external_emitter = original_emitter
+                        self.child._external_emitter = getattr(self, '_parent_emit', None)
             except Exception:
                 continue
         return emitted
+
+    def _flush_emit_buffer(self) -> None:
+        buf = getattr(self, '_emit_buffer', None)
+        emit = getattr(self, '_parent_emit', None)
+        if not buf or not callable(emit):
+            return
+        # use parent's front insertion; flush in reverse to preserve original order
+        try:
+            for evt in reversed(buf):
+                emit(evt)
+        finally:
+            try:
+                buf.clear()
+            except Exception:
+                pass
 
     def _inject_payload_into_child(self) -> None:
         """Write invoke payload variables into the child's datamodel.
