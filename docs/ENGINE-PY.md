@@ -4,6 +4,20 @@
 
 This guide explains how to use the Python execution engine and the companion tools to trace charts, compare against a reference engine, generate test vectors, and sweep corpora. It is a user‑facing companion to the development checklist in `docs/TODO-ENGINE-PY.md`.
 
+Looking for deeper implementation details? See the architecture reference at `py/ENGINE-PY-DETAILS.md`.
+
+For cross-language parity and SCION comparison details, see `docs/COMPATIBILITY.md`.
+
+## Navigation
+
+- This page: User Guide
+  - [Overview](#overview)
+  - [Quick Start](#quick-start)
+  - [Event Streams](#event-streams-eventsjsonl)
+  - [Vector Generation](#vector-generation)
+- Architecture & in-depth reference: `py/ENGINE-PY-DETAILS.md`
+- Compatibility Matrix: `docs/COMPATIBILITY.md`
+
 ## Overview
 
 The Python engine executes SCXML/SCJSON statecharts and can emit deterministic JSONL traces of execution. A set of CLI utilities help you:
@@ -64,6 +78,12 @@ python py/exec_sweep.py tutorial \
 ```
 
 When `--workdir` is provided and vectors are generated, a `coverage-summary.json` is written with aggregated coverage across charts.
+
+---
+
+Back to
+- Architecture & reference: `py/ENGINE-PY-DETAILS.md`
+- Compatibility Matrix: `docs/COMPATIBILITY.md`
 
 ## Event Streams (.events.jsonl)
 

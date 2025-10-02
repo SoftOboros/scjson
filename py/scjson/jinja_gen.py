@@ -1,3 +1,16 @@
+"""
+Agent Name: python-jinja-gen
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+
+Jinja2-based code generation helpers for producing language bindings and
+schemas from scjson's Pydantic models. Used by CLI subcommands to emit
+TypeScript, Rust, Swift, and Ruby artifacts, as well as the
+``scjson.schema.json`` file.
+"""
+
 import sys
 import os
 from pathlib import Path
@@ -18,7 +31,18 @@ from .CaseStyle import (
 )
 
 class JinjaGenPydantic(object):
-    """A class to render pydntic models using jinja2 templates."""
+    """Render Pydantic models with Jinja2 templates.
+
+    Params
+    - template_path: Base folder for templates; defaults to bundled templates.
+    - input: Root model name to discover (e.g., ``"Scxml"``).
+    - output: Output directory for generated artifacts.
+    - module: Module name exposing Pydantic models (e.g., ``"scjson.pydantic"``).
+    - lang: Target language: ``"typescript"``, ``"rust"``, ``"swift"``, or ``"ruby"``.
+
+    Returns
+    - None
+    """
 
     def __init__(
         self,
@@ -27,8 +51,8 @@ class JinjaGenPydantic(object):
         output: str = "scjson",
         module: str = "scjson.pydantic",
         lang: str = "typescript",
-    ):
-        """Initilize with optional config."""
+    ) -> None:
+        """Initialize the generator with optional configuration."""
         my_path = os.path.join(Path(__file__).parent, "templates")
         self.template_path = template_path or my_path
         self.output = output
@@ -123,7 +147,16 @@ class JinjaGenPydantic(object):
         self.name_field = "id"
 
     def render_to_file(self, out_name: str, template_name: str, template_env: dict = {}) -> None:
-        """Render a templat to an output file adding local variables."""
+        """Render a template to an output file.
+
+        Params
+        - out_name: Destination file name, relative to ``self.output``.
+        - template_name: Template filename within ``self.template_path``.
+        - template_env: Variables exported to the template context.
+
+        Returns
+        - None
+        """
         outname = os.path.join(self.output, out_name)
         ts = self.env.get_template(template_name).render(template_env)
         with open(outname, "w") as tsfile:

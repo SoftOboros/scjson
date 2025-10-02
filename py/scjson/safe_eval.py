@@ -14,8 +14,13 @@ from __future__ import annotations
 import builtins
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
-from py_sandboxer import SandboxViolation
-from py_sandboxer.sandbox import _prepare_modules, filter_globals, guard_code
+try:
+    # Prefer the in-repo managed sandbox package name
+    from py_sandboxed import SandboxViolation  # type: ignore
+    from py_sandboxed.sandbox import _prepare_modules, filter_globals, guard_code  # type: ignore
+except Exception:  # pragma: no cover - fallback for alternate import name
+    from py_sandboxer import SandboxViolation
+    from py_sandboxer.sandbox import _prepare_modules, filter_globals, guard_code
 
 __all__ = ["SafeEvaluationError", "SafeExpressionEvaluator"]
 
