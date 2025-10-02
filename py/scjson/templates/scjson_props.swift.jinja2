@@ -1,0 +1,184 @@
+{#
+    scjson_props.swift.jinja2 : Template for generating Swift codable models.
+#}
+{% extends "base.swift.jinja2" %}
+
+{% block file_header %}
+// Agent Name: swift-props
+//
+// Part of the scjson project.
+// Developed by Softoboros Technology Inc.
+// Licensed under the BSD 1-Clause License.
+
+{% endblock %}
+
+{% block imports %}
+import Foundation
+
+{% endblock %}
+
+{% block declarations %}
+/// Canonical JSON scalar representation used by generated scjson types.
+public enum JSONValue: Codable, Equatable {
+    case string(String)
+    case integer(Int)
+    case number(Double)
+    case bool(Bool)
+    case array([JSONValue])
+    case object(JSONDictionary)
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let boolValue = try? container.decode(Bool.self) {
+            self = .bool(boolValue)
+        } else if let intValue = try? container.decode(Int.self) {
+            self = .integer(intValue)
+        } else if let doubleValue = try? container.decode(Double.self) {
+            self = .number(doubleValue)
+        } else if let stringValue = try? container.decode(String.self) {
+            self = .string(stringValue)
+        } else if let arrayValue = try? container.decode([JSONValue].self) {
+            self = .array(arrayValue)
+        } else if let objectValue = try? container.decode(JSONDictionary.self) {
+            self = .object(objectValue)
+        } else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .integer(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        case .null: try container.encodeNil()
+        }
+    }
+}
+
+/// Dictionary alias for JSON object values.
+public typealias JSONDictionary = [String: JSONValue]
+
+/// Protocol adopted by generated scjson value types to simplify encoding and decoding.
+public protocol ScjsonCodable: Codable {}
+
+public extension ScjsonCodable {
+    /// Decode a value of the receiver type from JSON data.
+    /// - Parameters:
+    ///   - data: JSON payload to decode.
+    ///   - decoder: Custom `JSONDecoder` to use. Defaults to `JSONDecoder()`.
+    /// - Returns: A fully decoded value of the receiver type.
+    static func decode(from data: Data, using decoder: JSONDecoder = JSONDecoder()) throws -> Self {
+        try decoder.decode(Self.self, from: data)
+    }
+
+    /// Encode the value into JSON data.
+    /// - Parameter encoder: Custom `JSONEncoder` to use. Defaults to `JSONEncoder()`.
+    /// - Returns: UTF-8 encoded JSON data representing the value.
+    func encode(using encoder: JSONEncoder = JSONEncoder()) throws -> Data {
+        try encoder.encode(self)
+    }
+}
+
+{% endblock %}
+
+{% block exports %}
+// MARK: - Enumerations
+
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) != dict %}
+{% set doc = Gen.objekts[if_name].__doc__ or schem.__doc__ %}
+{% if doc %}
+/// {{ doc.strip().replace('\n', ' ') }}
+{% endif %}
+public enum {{ swift_enum_name(if_name) }}: String, Codable, CaseIterable {
+{% for enum_name, enum_member in schem.__members__.items() %}
+    case {{ swift_enum_case(enum_member.value) }} = "{{ enum_member.value }}"
+{% endfor %}
+
+    /// Default enumeration value as defined by the schema.
+    public static let defaultValue: {{ swift_enum_name(if_name) }} = .{{ swift_enum_case(first_enum_value(schem)) }}
+}
+
+{% endif %}
+{% endfor %}
+
+// MARK: - Model Structures
+
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) == dict %}
+{% set description = schem.get('description') or schem.get('title') %}
+{% if description %}
+/// {{ description.replace('\n', ' ') }}
+{% endif %}
+public struct {{ if_name }}Props: ScjsonCodable, Equatable {
+{% for field_name, field in schem["properties"].items() %}
+{% set swift_name = swift_prop_name(field_name) %}
+{% set field_type = get_field_type(field, schem["$defs"]) %}
+{% set field_doc = field.get('description') or field.get('title') %}
+{% if field_doc %}
+    /// {{ field_doc.replace('\n', ' ') }}
+{% endif %}
+    public var {{ swift_name }}: {{ field_type }}
+{% endfor %}
+
+{% set params = [] %}
+{% for field_name, field in schem["properties"].items() %}
+{% set swift_name = swift_prop_name(field_name) %}
+{% set field_type = get_field_type(field, schem["$defs"]) %}
+{% set default_value = get_field_default(field, schem["$defs"]) %}
+{% do params.append(swift_name ~ ": " ~ field_type ~ " = " ~ default_value) %}
+{% endfor %}
+    /// Create a new {{ if_name }}Props value with schema defaults applied.
+    public init(
+        {{ list_join(params, sep=',\n        ') }}
+    ) {
+{% for field_name, field in schem["properties"].items() %}
+{% set swift_name = swift_prop_name(field_name) %}
+        self.{{ swift_name }} = {{ swift_name }}
+{% endfor %}
+    }
+
+    private enum CodingKeys: String, CodingKey {
+{% for field_name, field in schem["properties"].items() %}
+{% set swift_name = swift_prop_name(field_name) %}
+        case {{ swift_name }} = "{{ field_name }}"
+{% endfor %}
+    }
+
+    /// Convenience factory returning the canonical default instance.
+    public static func makeDefault() -> {{ if_name }}Props {
+        {{ if_name }}Props()
+    }
+}
+
+{% if if_name in Gen.all_arrays %}
+/// Convenience alias representing a collection of {{ if_name }}Props values.
+public typealias {{ if_name }}Array = [{{ if_name }}Props]
+
+{% endif %}
+{% endif %}
+{% endfor %}
+
+// MARK: - Kind Registry
+
+/// Exhaustive set of union kinds used throughout the scjson schema.
+public enum ScjsonKind: String {
+{% for if_name, schem in Gen.interfaces.items() %}
+    /// Canonical kind identifier for the `{{ if_name.lower() }}` element family.
+    case {{ swift_prop_name(if_name) }} = "{{ if_name.lower() }}"
+{% if if_name in Gen.all_arrays %}
+    /// Canonical kind identifier for arrays of `{{ if_name.lower() }}` entries.
+    case {{ swift_prop_name(if_name ~ 'Array') }} = "{{ if_name.lower() }}array"
+{% endif %}
+{% endfor %}
+}
+
+{% endblock %}

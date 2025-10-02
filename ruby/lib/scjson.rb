@@ -10,6 +10,7 @@ require 'json'
 require 'nokogiri'
 
 require_relative 'scjson/version'
+require_relative 'scjson/types'
 
 # Canonical SCXML <-> scjson conversion for the Ruby agent.
 module Scjson

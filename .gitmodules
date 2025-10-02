@@ -1,3 +1,6 @@
 [submodule "tutorial"]
 	path = tutorial
 	url = https://github.com/Alexzhornyak/SCXML-Tutorial.git
+[submodule "swift"]
+	path = swift
+	url = git@github.com:SoftOboros/scjson-swift.git
