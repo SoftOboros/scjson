@@ -313,10 +313,7 @@ jobs:
             echo "No npm token available; skipping publish."
             exit 0
           fi
-          CONFIG_PATH="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
-          mkdir -p "$(dirname "$CONFIG_PATH")"
-          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > js/.npmrc
-          export NODE_AUTH_TOKEN="$TOKEN"
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > ~/.npmrc
           pushd js >/dev/null
           npm publish --provenance --access public
           popd >/dev/null
