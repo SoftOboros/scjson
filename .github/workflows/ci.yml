@@ -314,9 +314,7 @@ jobs:
             exit 0
           fi
           printf '//registry.npmjs.org/:_authToken=%s\n' "$TOKEN" > ~/.npmrc
-          pushd js >/dev/null
           npm publish --provenance --access public
-          popd >/dev/null
 
       - name: Skip publish (no version change)
         if: steps.determine_npm.outputs.should_publish != 'true'
