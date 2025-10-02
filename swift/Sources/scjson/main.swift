@@ -218,6 +218,14 @@ private let STRUCTURAL_FIELDS_ARR: [String] = [
 @inline(__always)
 private func isStructural(_ tag: String) -> Bool { STRUCTURAL_FIELDS_ARR.contains(tag) }
 
+private let SCXML_KNOWN_TAGS: Set<String> = [
+    "scxml", "state", "parallel", "final", "history", "transition", "onentry",
+    "onexit", "invoke", "datamodel", "data", "initial", "script", "log", "assign",
+    "send", "cancel", "param", "raise", "foreach", "if", "elseif", "else",
+    "donedata", "finalize", "content"
+]
+
+
 private class XMLTreeBuilder: NSObject, XMLParserDelegate {
     class Node {
         var tag: String
@@ -255,9 +263,24 @@ private class XMLTreeBuilder: NSObject, XMLParserDelegate {
 
 // MARK: - Converters
 
+private func convertAnyElement(_ node: XMLTreeBuilder.Node) -> [String: Any] {
+    var obj: [String: Any] = ["qname": node.tag]
+    let text = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    obj["text"] = text
+    let attrs = node.attributes.filter { !$0.key.hasPrefix("xmlns") }
+    if !attrs.isEmpty { obj["attributes"] = attrs }
+    if !node.children.isEmpty {
+        obj["children"] = node.children.map { convertAnyElement($0) }
+    }
+    return obj
+}
+
 private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any] {
-    var obj: [String: Any] = [:]
     let tag = localTag(node.tag)
+    if !SCXML_KNOWN_TAGS.contains(tag) {
+        return convertAnyElement(node)
+    }
+    var obj: [String: Any] = [:]
     obj["tag"] = tag
     // Attributes
     for (k, v) in node.attributes {
@@ -267,8 +290,8 @@ private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any]
         } else if key == "version", let d = Double(v) {
             obj[key] = d
         } else if key == "initial_attribute" {
-            let parts = v.split{ $0 == " " || $0 == "\t" || $0 == "\n" }.map(String.init)
-            obj[key] = parts.count > 1 ? parts : v
+            let parts = v.split { $0 == " " || $0 == "\t" || $0 == "\n" }.map(String.init)
+            obj[key] = parts
         } else if key == "target" {
             let parts = v.split{ $0 == " " || $0 == "\t" || $0 == "\n" }.map(String.init)
             obj[key] = parts
@@ -278,10 +301,10 @@ private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any]
     }
     // Text content for any element
     let text = node.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !text.isEmpty { obj["content"] = [text] }
 
     // Children: lift structural fields and special shapes
-    var content: [[String: Any]] = []
+    var content: [Any] = []
+    if !text.isEmpty { content.append(text) }
     var lifted: [String: [[String: Any]]] = [:]
     for child in node.children {
         let converted = try convertElement(child)
@@ -291,16 +314,39 @@ private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any]
                 var arr = (obj["elseif"] as? [[String: Any]]) ?? []
                 arr.append(converted); obj["elseif"] = arr; continue
             }
-            if childTag == "content" && (tag == "send" || tag == "donedata" || tag == "data") {
-                if tag == "send" { obj["content"] = [converted] } else { obj["content"] = converted }
+            if childTag == "content" {
+                if tag == "send" {
+                    var arr = (obj["content"] as? [Any]) ?? []
+                    arr.append(converted)
+                    obj["content"] = arr
+                    continue
+                }
+                if tag == "donedata" {
+                    obj["content"] = converted
+                    continue
+                }
+                if tag == "data" {
+                    if let nested = converted["content"] as? [Any] {
+                        obj["content"] = nested
+                    } else if let nestedDict = converted["content"] as? [String: Any] {
+                        obj["content"] = [nestedDict]
+                    } else {
+                        obj["content"] = converted
+                    }
+                    continue
+                }
+            }
+            if childTag == "donedata" {
+                var arr = (obj["donedata"] as? [[String: Any]]) ?? []
+                arr.append(converted)
+                obj["donedata"] = arr
                 continue
             }
-            if childTag == "donedata" { obj["donedata"] = converted; continue }
             if childTag == "finalize" { obj["finalize"] = converted; continue }
             if tag == "assign" && childTag == "scxml" {
                 var minimal = converted
                 if minimal["datamodel_attribute"] == nil { minimal["datamodel_attribute"] = "null" }
-                var arr = (obj["content"] as? [[String: Any]]) ?? []
+                var arr = (obj["content"] as? [Any]) ?? []
                 arr.append(minimal); obj["content"] = arr; continue
             }
             if childTag == "if" {
@@ -318,10 +364,28 @@ private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any]
     }
     // Defaults
     if tag == "assign" && obj["type_value"] == nil { obj["type_value"] = "replacechildren" }
-    if tag == "invoke" && obj["autoforward"] == nil { obj["autoforward"] = "false" }
+    if tag == "invoke" {
+        if obj["autoforward"] == nil { obj["autoforward"] = "false" }
+        if obj["type_value"] == nil { obj["type_value"] = "scxml" }
+    }
+    if tag == "send" {
+        if obj["type_value"] == nil { obj["type_value"] = "scxml" }
+        if obj["delay"] == nil { obj["delay"] = "0s" }
+    }
     // Merge lifted and content
     for (k, v) in lifted { obj[k] = v }
-    if !content.isEmpty { obj["content"] = content }
+    if !content.isEmpty {
+        if var existing = obj["content"] as? [Any] {
+            existing.append(contentsOf: content)
+            obj["content"] = existing
+        } else if let existingDict = obj["content"] as? [String: Any] {
+            var combined: [Any] = [existingDict]
+            combined.append(contentsOf: content)
+            obj["content"] = combined
+        } else {
+            obj["content"] = content
+        }
+    }
     // Canonical single-transition dict under initial/history
     if tag == "initial", let arr = obj["transition"] as? [[String: Any]], arr.count == 1 { obj["transition"] = arr[0] }
     if tag == "history", let arr = obj["transition"] as? [[String: Any]], arr.count == 1 { obj["transition"] = arr[0] }
@@ -330,6 +394,20 @@ private func convertElement(_ node: XMLTreeBuilder.Node) throws -> [String: Any]
         if obj["version"] == nil { obj["version"] = 1.0 }
         if let dm = obj["datamodel"] as? String { obj["datamodel_attribute"] = dm; obj.removeValue(forKey: "datamodel") }
         if obj["datamodel_attribute"] == nil { obj["datamodel_attribute"] = "null" }
+    }
+    for key in ["onentry", "onexit"] {
+        if var sections = obj[key] as? [[String: Any]] {
+            sections.removeAll { entry in
+                var copy = entry
+                copy.removeValue(forKey: "tag")
+                return copy.isEmpty
+            }
+            if sections.isEmpty {
+                obj.removeValue(forKey: key)
+            } else {
+                obj[key] = sections
+            }
+        }
     }
     return obj
 }
@@ -367,24 +445,54 @@ private func xmlFromJSONObject(_ obj: [String: Any]) -> String {
         if let arr = obj[key] as? [Any] {
             for item in arr {
                 if let child = item as? [String: Any] {
-                    children.append(xmlFromJSONObject(child))
+                    if child["qname"] != nil {
+                        children.append(xmlFromAnyElement(child))
+                    } else {
+                        children.append(xmlFromJSONObject(child))
+                    }
                 }
             }
         } else if let childObj = obj[key] as? [String: Any] {
-            children.append(xmlFromJSONObject(childObj))
+            if childObj["qname"] != nil {
+                children.append(xmlFromAnyElement(childObj))
+            } else {
+                children.append(xmlFromJSONObject(childObj))
+            }
         }
     }
     // donedata (singular)
-    if let dd = obj["donedata"] as? [String: Any] {
-        children.append(xmlFromJSONObject(dd))
+    if let ddArray = obj["donedata"] as? [Any] {
+        for item in ddArray {
+            if let child = item as? [String: Any] {
+                if child["qname"] != nil {
+                    children.append(xmlFromAnyElement(child))
+                } else {
+                    children.append(xmlFromJSONObject(child))
+                }
+            }
+        }
+    } else if let dd = obj["donedata"] as? [String: Any] {
+        if dd["qname"] != nil {
+            children.append(xmlFromAnyElement(dd))
+        } else {
+            children.append(xmlFromJSONObject(dd))
+        }
     }
     // Content (object or array)
     if let contentObj = obj["content"] as? [String: Any] {
-        children.append(xmlFromJSONObject(contentObj))
+        if contentObj["qname"] != nil {
+            children.append(xmlFromAnyElement(contentObj))
+        } else {
+            children.append(xmlFromJSONObject(contentObj))
+        }
     } else if let content = obj["content"] as? [Any] {
         for item in content {
             if let child = item as? [String: Any] {
-                children.append(xmlFromJSONObject(child))
+                if child["qname"] != nil {
+                    children.append(xmlFromAnyElement(child))
+                } else {
+                    children.append(xmlFromJSONObject(child))
+                }
             } else if let s = item as? String {
                 children.append(escapeXML(s))
             }
@@ -394,22 +502,38 @@ private func xmlFromJSONObject(_ obj: [String: Any]) -> String {
     if let ifArr = obj["if_value"] as? [Any] {
         for item in ifArr {
             if let child = item as? [String: Any] {
-                children.append(xmlFromJSONObject(child))
+                if child["qname"] != nil {
+                    children.append(xmlFromAnyElement(child))
+                } else {
+                    children.append(xmlFromJSONObject(child))
+                }
             }
         }
     } else if let ifObj = obj["if_value"] as? [String: Any] {
-        children.append(xmlFromJSONObject(ifObj))
+        if ifObj["qname"] != nil {
+            children.append(xmlFromAnyElement(ifObj))
+        } else {
+            children.append(xmlFromJSONObject(ifObj))
+        }
     }
     if let elseifArr = obj["elseif"] as? [Any] {
         for item in elseifArr {
             if let child = item as? [String: Any] {
-                children.append(xmlFromJSONObject(child))
+                if child["qname"] != nil {
+                    children.append(xmlFromAnyElement(child))
+                } else {
+                    children.append(xmlFromJSONObject(child))
+                }
             }
         }
     }
     if obj.keys.contains("else_value") {
         if let elseObj = obj["else_value"] as? [String: Any] {
-            children.append(xmlFromJSONObject(elseObj))
+            if elseObj["qname"] != nil {
+                children.append(xmlFromAnyElement(elseObj))
+            } else {
+                children.append(xmlFromJSONObject(elseObj))
+            }
         } else {
             children.append("<else/>")
         }
@@ -425,6 +549,52 @@ private func xmlFromJSONObject(_ obj: [String: Any]) -> String {
         xml += "/>"
     } else {
         xml += ">" + children.joined() + "</\(tag)>"
+    }
+    return xml
+}
+
+private func xmlFromAnyElement(_ obj: [String: Any]) -> String {
+    guard let qname = obj["qname"] as? String else { return "" }
+    var attrs: [(String, String)] = []
+    if let attrDict = obj["attributes"] as? [String: Any] {
+        for (k, v) in attrDict {
+            if let s = v as? String {
+                attrs.append((k, s))
+            } else if let n = v as? NSNumber {
+                attrs.append((k, n.stringValue))
+            }
+        }
+    } else if let attrDict = obj["attributes"] as? [String: String] {
+        for (k, v) in attrDict { attrs.append((k, v)) }
+    }
+    var body: [String] = []
+    if let text = obj["text"] as? String, !text.isEmpty {
+        body.append(escapeXML(text))
+    }
+    if let children = obj["children"] as? [Any] {
+        for child in children {
+            if let childDict = child as? [String: Any] {
+                body.append(xmlFromAnyElement(childDict))
+            } else if let s = child as? String {
+                body.append(escapeXML(s))
+            }
+        }
+    }
+    var xml = "<\(qname)"
+    let hasNamespaceAttr = attrs.contains { $0.0 == "xmlns" || $0.0.hasPrefix("xmlns:") }
+    if !hasNamespaceAttr && !qname.contains(":") && !qname.contains("{") {
+        attrs.append(("xmlns", ""))
+    }
+    for (k, v) in attrs {
+        xml += " \(k)=\"\(escapeXML(v))\""
+    }
+    if body.isEmpty {
+        xml += "/>"
+    } else {
+        xml += ">" + body.joined() + "</\(qname)>"
+    }
+    if let tail = obj["tail"] as? String, !tail.isEmpty {
+        xml += escapeXML(tail)
     }
     return xml
 }
@@ -493,4 +663,3 @@ extension String {
 }
 
 SCJSON.main()
-

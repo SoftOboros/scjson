@@ -1,0 +1,152 @@
+{#
+    scjson_props.rb.jinja2 : Template for generating Ruby models and helpers.
+#}
+{% extends "base.rb.jinja2" %}
+
+{% block file_header %}
+# frozen_string_literal: true
+#
+# Agent Name: ruby-props
+#
+# Part of the scjson project.
+# Developed by Softoboros Technology Inc.
+# Licensed under the BSD 1-Clause License.
+
+{% endblock %}
+
+{% block imports %}
+require 'json'
+
+{% endblock %}
+
+{% block declarations %}
+# Canonical Ruby representations of the scjson schema.
+module Scjson
+  module Types
+{% endblock %}
+
+{% block exports %}
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) != dict %}
+{% set doc = Gen.objekts[if_name].__doc__ or schem.__doc__ %}
+    # {{ doc.strip().replace('\n', ' ') if doc else 'Enumeration helper.' }}
+    module {{ ruby_enum_name(if_name) }}
+{% set values = [] %}
+{% for enum_name, enum_member in schem.__members__.items() %}
+{% set const_name = to_scream(enum_member.value) %}
+{% do values.append(const_name) %}
+      {{ const_name }} = '{{ enum_member.value }}'.freeze
+{% endfor %}
+      DEFAULT = {{ values[0] if values else 'nil' }}
+      VALUES = [{{ values | join(', ') }}].freeze
+
+      module_function
+
+      # @return [Array<String>] All legal enumeration values.
+      def values
+        VALUES
+      end
+
+      # @return [String] Schema-defined default enumeration value.
+      def default
+        DEFAULT
+      end
+
+      # Coerce arbitrary input into a valid enumeration value.
+      # @param value [Object, nil] Raw value to coerce.
+      # @param allow_nil [Boolean] When true, allow nil to pass-through.
+      # @return [String, nil]
+      def coerce(value, allow_nil: false)
+        return nil if allow_nil && value.nil?
+        return DEFAULT if value.nil?
+
+        candidate = value.to_s
+        return candidate if VALUES.include?(candidate)
+
+        raise ArgumentError, "Unsupported value '#{value}' for {{ ruby_enum_name(if_name) }}"
+      end
+    end
+
+{% endif %}
+{% endfor %}
+
+{% for if_name, schem in Gen.interfaces.items() %}
+{% if type(schem) == dict %}
+{% set description = schem.get('description') or schem.get('title') %}
+    # {{ description.replace('\n', ' ') if description else 'Structured type for scjson elements.' }}
+    class {{ if_name }}Props
+      attr_accessor {% for field_name, field in schem["properties"].items() %}:{{ ruby_attr_name(field_name) }}{% if not loop.last %}, {% endif %}{% endfor %}
+
+      # Instantiate a new {{ if_name }}Props object.
+{% for field_name, field in schem["properties"].items() %}
+{% set default_value = get_field_default(field, schem["$defs"]) %}
+{% if loop.first %}
+      # @param kwargs [Hash] Optional keyword overrides.
+{% endif %}
+{% endfor %}
+      def initialize(**kwargs)
+{% for field_name, field in schem["properties"].items() %}
+{% set attr = ruby_attr_name(field_name) %}
+{% set default_value = get_field_default(field, schem["$defs"]) %}
+        @{{ attr }} = kwargs.fetch(:{{ attr }}, {{ default_value }})
+{% endfor %}
+      end
+
+      # Build an instance from a Hash representation.
+      # @param data [Hash] Canonical hash representation.
+      # @return [{{ if_name }}Props]
+      def self.from_hash(data)
+        raise ArgumentError, 'Expected Hash' unless data.is_a?(Hash)
+
+        normalized = data.transform_keys(&:to_s)
+        kwargs = {}
+{% for field_name, field in schem["properties"].items() %}
+{% set attr = ruby_attr_name(field_name) %}
+{% set expr = ruby_from_hash(field_name, field, schem["$defs"]) %}
+        kwargs[:{{ attr }}] = {{ expr }}
+{% endfor %}
+        new(**kwargs)
+      end
+
+      # Deserialize an instance from a JSON payload.
+      # @param json [String] JSON document to decode.
+      # @return [{{ if_name }}Props]
+      def self.from_json(json)
+        parsed = JSON.parse(json)
+        from_hash(parsed)
+      end
+
+      # Convert the object to a Hash suitable for JSON serialization.
+      # @return [Hash]
+      def to_hash
+{% set entries = [] %}
+{% for field_name, field in schem["properties"].items() %}
+{% set expr = ruby_to_hash(field_name, field, schem["$defs"]) %}
+{% set entry = "'" ~ field_name ~ "' => " ~ expr %}
+{% if not loop.last %}{% set entry = entry + "," %}{% endif %}
+{% do entries.append(entry) %}
+{% endfor %}
+        {
+          {{ list_join(entries, sep='\n          ') }}
+        }
+      end
+
+      # Serialize the object to JSON.
+      # @param opts [Array] JSON generation options.
+      # @return [String]
+      def to_json(*opts)
+        JSON.generate(to_hash, *opts)
+      end
+    end
+
+{% if if_name in Gen.all_arrays %}
+    # Collection alias for {{ if_name }}Props values.
+    {{ if_name }}Array = ::Array
+
+{% endif %}
+{% endif %}
+{% endfor %}
+  end
+end
+
+{% endblock %}

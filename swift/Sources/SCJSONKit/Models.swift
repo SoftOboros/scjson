@@ -8,33 +8,11 @@ Licensed under the BSD 1-Clause License.
 
 import Foundation
 
-/** Root scjson document model.
- - Parameters:
-   - version: Schema version.
-   - datamodelAttribute: Datamodel handling attribute.
- */
-public struct ScjsonDocument: Codable {
-    public var version: Int
-    public var datamodelAttribute: String
+/// Backwards-compatible alias for the canonical SCJSON document structure.
+/// Use ``ScjsonDocument`` when working with legacy code that expects the
+/// original name but take advantage of the generated ``ScxmlProps`` APIs.
+public typealias ScjsonDocument = ScxmlProps
 
-    enum CodingKeys: String, CodingKey {
-        case version
-        case datamodelAttribute = "datamodel_attribute"
-    }
-
-    /** Create a new document.
-     - Parameters:
-       - version: Schema version.
-       - datamodelAttribute: Datamodel handling attribute.
-     */
-    public init(version: Int = 1, datamodelAttribute: String = "null") {
-        self.version = version
-        self.datamodelAttribute = datamodelAttribute
-    }
-}
-
-/** Assign manipulation types for the datamodel location. */
-public enum AssignType: String, Codable {
-    case replacechildren
-    case firstchild
-}
+/// Backwards-compatible alias for the generated assign type enumeration.
+/// The underlying type is provided by ``AssignTypeDatatypeProps``.
+public typealias AssignType = AssignTypeDatatypeProps

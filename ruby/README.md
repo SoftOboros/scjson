@@ -24,4 +24,14 @@ scjson xml path/to/machine.scjson
 scjson validate path/to/dir -r
 ```
 
+## Library Usage
+
+```ruby
+require 'scjson'
+
+document = Scjson::Types::ScxmlProps.new
+json = document.to_json
+round_trip = Scjson::Types::ScxmlProps.from_json(json)
+```
+
 All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.

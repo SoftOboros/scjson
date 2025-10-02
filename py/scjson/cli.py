@@ -242,6 +242,32 @@ def rust(output: Path | None):
     Gen.render_to_file(file_name, "scjson_props.rs.jinja2", locals())
 
 
+@main.command(help="Create Swift type files for scjson")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
+def swift(output: Path | None):
+    """Create Swift structures and enums for scjson."""
+    print(f"Convert Scjson type for swift - Path: {output}")
+    Gen = JinjaGenPydantic(output=output, lang="swift")
+    base_dir = os.path.abspath(output)
+    os.makedirs(base_dir, exist_ok=True)
+    file_name = "ScjsonTypes.swift"
+    file_description = "Generated Swift codable models for scjson"
+    Gen.render_to_file(file_name, "scjson_props.swift.jinja2", locals())
+
+
+@main.command(help="Create Ruby type files for scjson")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
+def ruby(output: Path | None):
+    """Create Ruby classes and helpers for scjson."""
+    print(f"Convert Scjson type for ruby - Path: {output}")
+    Gen = JinjaGenPydantic(output=output, lang="ruby")
+    base_dir = os.path.abspath(output)
+    os.makedirs(base_dir, exist_ok=True)
+    file_name = "types.rb"
+    file_description = "Ruby helper types for scjson"
+    Gen.render_to_file(file_name, "scjson_props.rb.jinja2", locals())
+
+
 @main.command(help="Export scjson.schema.json")
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file base.")
 def schema(output: Path | None):
