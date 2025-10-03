@@ -50,6 +50,9 @@ module Scjson
         @configuration = initial_configuration
         @time = 0.0
         @timers = [] # array of {time: Float, name: String, data: Object}
+        @invocations = {} # id => {state: sid, node: inv_map, status: 'active'|'done'|'canceled'}
+        @invocations_by_state = Hash.new { |h, k| h[k] = [] }
+        @invoke_seq = 0
       end
 
       ##
@@ -104,6 +107,19 @@ module Scjson
         process_event = lambda do |ev_name, ev_data|
           @current_event_name = ev_name
           @current_event_data = ev_data
+          # Special internal control: invocation completion
+          if ev_name == '__invoke_complete'
+            iid = ev_data.is_a?(Hash) ? ev_data['invokeid'] : nil
+            if iid
+              a, d = finalize_invoke(iid, completed: true)
+              action_log.concat(a)
+              datamodel_delta.merge!(d)
+              # enqueue done.invoke events
+              @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+              @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+            end
+            return
+          end
           loop do
             tx_set = select_transitions_for_event(ev_name)
             break if tx_set.empty?
@@ -401,6 +417,9 @@ module Scjson
         entered_leaves.each { |leaf| new_config << leaf unless new_config.include?(leaf) }
         @configuration = new_config
 
+        # After finishing entry, schedule invocations for entered states (including leaves)
+        schedule_invocations_for_entered((entered + entered_leaves).uniq)
+
         [entered, exit_order, fired, actions, delta]
       end
 
@@ -502,6 +521,65 @@ module Scjson
         leaves
       end
 
+      # ---- Invoke / Finalize ----
+      def schedule_invocations_for_entered(state_ids)
+        state_ids.each do |sid|
+          node = @states[sid]
+          next unless node
+          wrap_list(node['invoke']).each do |inv|
+            next unless inv.is_a?(Hash)
+            iid = (inv['id'] && inv['id'].to_s)
+            unless iid && !iid.empty?
+              @invoke_seq += 1
+              iid = "i#{@invoke_seq}"
+            end
+            @invocations[iid] = { state: sid, node: inv, status: 'active' }
+            @invocations_by_state[sid] << iid unless @invocations_by_state[sid].include?(iid)
+            # For now, treat all invocations as immediate-complete
+            @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => iid } })
+          end
+        end
+      end
+
+      def finalize_invoke(invoke_id, completed:)
+        rec = @invocations[invoke_id]
+        return [[], {}] unless rec
+        # run finalize actions
+        actions = []
+        delta = {}
+        inv_node = rec[:node]
+        wrap_list(inv_node['finalize']).each do |fin|
+          a, d = run_actions_from_map(fin) if fin.is_a?(Hash)
+          if a
+            actions.concat(a)
+          end
+          if d
+            delta.merge!(d)
+          end
+        end
+        rec[:status] = completed ? 'done' : 'canceled'
+        # remove mapping from state
+        sid = rec[:state]
+        if sid && @invocations_by_state[sid]
+          @invocations_by_state[sid].delete(invoke_id)
+        end
+        [actions, delta]
+      end
+
+      def cancel_invocations_for_state(state_id)
+        actions = []
+        delta = {}
+        ids = (@invocations_by_state[state_id] || []).dup
+        ids.each do |iid|
+          rec = @invocations[iid]
+          next unless rec && rec[:status] == 'active'
+          a, d = finalize_invoke(iid, completed: false)
+          actions.concat(a)
+          delta.merge!(d)
+        end
+        [actions, delta]
+      end
+
       # Record history for parents of exiting states using the previous configuration
       def record_history_for_exits(exit_order, prev_config)
         parents = exit_order.map { |sid| @parent[sid] }.compact.uniq
@@ -583,6 +661,10 @@ module Scjson
           actions.concat(a)
           delta.merge!(d)
         end
+        # Cancel active invocations for this state and run their finalize
+        a2, d2 = cancel_invocations_for_state(state_id)
+        actions.concat(a2)
+        delta.merge!(d2)
         [actions, delta]
       end
 
