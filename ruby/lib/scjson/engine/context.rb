@@ -246,6 +246,7 @@ module Scjson
       # Select a non-conflicting set of transitions for the given event name (or nil for eventless).
       def select_transitions_for_event(name)
         candidates = []
+        seq = 0
         # For each active leaf, walk up ancestry and pick the first enabled transition
         @configuration.each do |sid|
           chain = ancestors(sid)
@@ -263,30 +264,36 @@ module Scjson
               end
             end
             if t
-              candidates << [nid, t]
+              targets = wrap_list(t['target']).map(&:to_s)
+              lcas = targets.map { |tid| lca(nid, tid) }
+              dom = choose_shallowest_ancestor(lcas)
+              exit_chain = path_up_exclusive(nid, dom)
+              candidates << { src: nid, t: t, dom: dom, exit: exit_chain, depth: ancestors(dom).length, order: seq }
+              seq += 1
               break
             end
           end
         end
-        # Resolve conflicts: prefer deeper (descendant) sources; drop ancestors
+        # Resolve conflicts by exit set overlap. Prefer deeper domain; tie-breaker by earlier discovery (document order)
         selected = []
-        candidates.each do |src, t|
-          drop = false
-          selected.reject! do |(s2, _)|
-            if is_ancestor?(src, s2)
-              false # keep deeper s2, keep existing
-            elsif is_ancestor?(s2, src)
-              # remove ancestor already selected
-              true
-            else
-              false
-            end
+        candidates.each do |cand|
+          conflicts = selected.select { |s| !(s[:exit] & cand[:exit]).empty? }
+          if conflicts.empty?
+            selected << cand
+            next
           end
-          # If any selected is ancestor of src, then skip adding src (deeper already present?)
-          drop = selected.any? { |(s2, _)| is_ancestor?(s2, src) }
-          selected << [src, t] unless drop
+          # If conflicts exist, decide winner by domain depth then order
+          winner = conflicts.all? { |s| cand[:depth] > s[:depth] || (cand[:depth] == s[:depth] && cand[:order] < s[:order]) }
+          if winner
+            # remove all conflicting and add candidate
+            selected.reject! { |s| !(s[:exit] & cand[:exit]).empty? }
+            selected << cand
+          else
+            # keep existing, drop candidate
+            next
+          end
         end
-        selected
+        selected.map { |e| [e[:src], e[:t]] }
       end
 
       # Apply a transition: update configuration and compute deltas.
