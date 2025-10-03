@@ -2,7 +2,16 @@
 
 # scjson
 
-> A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education. Includes execution engines (Python, Ruby) for SCXML/SCML traces.
+> A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.
+
+**Execution Engines**
+- Python engine: Deterministic trace emitter, vector generation, and compare tools. See `docs/ENGINE-PY.md` and `py/ENGINE-PY-DETAILS.md`.
+- Ruby engine: Trace interface under active development with growing feature parity. See `docs/ENGINE-RB.md`.
+
+**JS/TS Harness (via SCION)**
+- The JS package ships a small harness entry `scjson-scion-trace` that proxies to the SCION reference runner for execution traces. This justifies JS-side execution by delegating to the canonical reference.
+- Usage (in repo): `node tools/scion-runner/scion-trace.cjs -I chart.scxml -e events.jsonl --xml`
+- Usage (package): `npx scjson-scion-trace -I chart.scxml -e events.jsonl --xml` (requires Node; runner not bundled and may prompt to install a SCION runner in your environment).
 
 ---
 
@@ -63,7 +72,7 @@ Each directory is designed to be independently usable as a library or CLI tool.
 | Language  | Status | Path | Notes |
 |-----------|--------|------|-------|
 | Python    | ✅ Canonical | [py](./py/README.md) | Reference implementation and compatibility baseline |
-| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus |
+| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus; harness available via SCION |
 | Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Converter parity; engine trace interface under active development |
 | Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
 | Java      | ✅ Parity | [java](./java/README.md) | Uses [SCION](https://www.npmjs.com/package/scion)-backed runner; matches Python output |
@@ -138,10 +147,21 @@ npm: [https://www.npmjs.com/package/scjson]
 npm install scjson
 ```
 
+Harness (Node):
+```bash
+# In the repo (dev):
+node tools/scion-runner/scion-trace.cjs -I path/to/chart.scxml -e events.jsonl --xml
+
+# From the package (proxy to SCION; requires Node):
+npx scjson-scion-trace -I path/to/chart.scxml -e events.jsonl --xml
+```
+
 rubygems: [https://rubygems.org/gems/scjson]
 ```bash
 gem install scjson
 ```
+RubyGems notes:
+- Ruby CLI includes converters and a trace interface. See `docs/ENGINE-RB.md` for engine usage and maturity. The gem is published at the link above.
 
 cargo: [https://crates.io/crates/scjson]
 ```bash

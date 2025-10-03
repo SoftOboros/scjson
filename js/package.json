@@ -41,7 +41,8 @@
     "LICENSE"
   ],
   "bin": {
-    "scjson": "bin/scjson.js"
+    "scjson": "bin/scjson.js",
+    "scjson-scion-trace": "dist/harness.js"
   },
   "keywords": [
     "scxml",
