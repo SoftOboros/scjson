@@ -26,8 +26,13 @@ function loadScxmlBundle() {
     // Fallback: extract from vendored tarball on the fly
     const zlib = require("zlib");
     const vendorTgz = path.resolve(__dirname, "vendor", "scxml-5.0.4.tgz");
+    // Prefer pre-extracted vendor path if present
+    const preExtracted = path.resolve(__dirname, "vendor", "package", "dist", "scxml.js");
     const outJs = path.resolve(__dirname, "vendor", "scxml.dist.js");
     try {
+      if (fs.existsSync(preExtracted)) {
+        return require(preExtracted);
+      }
       if (!fs.existsSync(outJs)) {
         const gzData = fs.readFileSync(vendorTgz);
         const tarData = zlib.gunzipSync(gzData);
