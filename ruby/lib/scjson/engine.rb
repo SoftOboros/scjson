@@ -48,12 +48,18 @@ module Scjson
               max_steps: nil,
               strip_step0_noise: false,
               strip_step0_states: false,
-              keep_cond: false)
+              keep_cond: false,
+              defer_done: true)
       sink = out_path ? File.open(out_path, 'w', encoding: 'utf-8') : $stdout
       begin
         ctx = DocumentContext.from_file(input_path, xml: xml)
         begin
           ctx.ordering_mode = (ordering || 'tolerant')
+        rescue StandardError
+          # ignore if not supported
+        end
+        begin
+          ctx.defer_done = !!defer_done
         rescue StandardError
           # ignore if not supported
         end

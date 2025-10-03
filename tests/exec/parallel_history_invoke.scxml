@@ -3,17 +3,33 @@
   <state id="Sroot" initial="P">
     <parallel id="P">
       <state id="L" initial="LS">
-        <history id="LH" type="deep"/>
+        <history id="LH" type="deep">
+          <transition target="LS"/>
+        </history>
         <state id="LS">
-          <invoke id="childL"/>
+          <invoke id="childL">
+            <content>
+              <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="cL">
+                <final id="cL"/>
+              </scxml>
+            </content>
+          </invoke>
           <transition event="done.invoke" target="LFinal"/>
         </state>
         <final id="LFinal"/>
       </state>
       <state id="R" initial="RS">
-        <history id="RH" type="deep"/>
+        <history id="RH" type="deep">
+          <transition target="RS"/>
+        </history>
         <state id="RS">
-          <invoke id="childR"/>
+          <invoke id="childR">
+            <content>
+              <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="cR">
+                <final id="cR"/>
+              </scxml>
+            </content>
+          </invoke>
           <transition event="done.invoke" target="RFinal"/>
         </state>
         <final id="RFinal"/>
@@ -23,4 +39,3 @@
   </state>
   <final id="Done"/>
 </scxml>
-

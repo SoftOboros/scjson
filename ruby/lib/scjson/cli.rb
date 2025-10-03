@@ -243,6 +243,7 @@ module Scjson
     strip_step0_noise = false
     strip_step0_states = false
     keep_cond = false
+    defer_done = true
 
     parser = OptionParser.new do |opts|
       opts.banner = 'scjson engine-trace [options]'
@@ -256,6 +257,8 @@ module Scjson
       opts.on('--omit-transitions', 'Omit firedTransitions entries from the trace') { omit_transitions = true }
       opts.on('--advance-time N', Float, 'Advance time by N seconds before processing events') { |v| advance_time = v }
       opts.on('--ordering MODE', ['tolerant', 'strict', 'scion'], 'Ordering policy (tolerant|strict|scion)') { |v| ordering = v }
+      opts.on('--defer-done', 'Defer done.invoke processing to next step (default)') { defer_done = true }
+      opts.on('--no-defer-done', 'Process done.invoke within the same step') { defer_done = false }
       opts.on('--max-steps N', Integer, 'Maximum steps to process') { |v| max_steps = v }
       opts.on('--strip-step0-noise', 'Clear datamodelDelta and firedTransitions at step 0') { strip_step0_noise = true }
       opts.on('--strip-step0-states', 'Clear enteredStates and exitedStates at step 0') { strip_step0_states = true }
@@ -293,7 +296,8 @@ module Scjson
       max_steps: max_steps,
       strip_step0_noise: strip_step0_noise,
       strip_step0_states: strip_step0_states,
-      keep_cond: keep_cond
+      keep_cond: keep_cond,
+      defer_done: defer_done
     )
   end
 end

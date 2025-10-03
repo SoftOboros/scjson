@@ -44,7 +44,7 @@ module Scjson
       # Construct a context from a canonical scjson object.
       #
       # @param root [Hash] Canonical scjson root map
-      def initialize(root, parent_link: nil, child_invoke_id: nil, base_dir: nil)
+  def initialize(root, parent_link: nil, child_invoke_id: nil, base_dir: nil)
         @root = root
         @states = {}
         @parent = {}
@@ -57,11 +57,14 @@ module Scjson
         index_states(@root)
         @configuration = initial_configuration
         @time = 0.0
-        @timers = [] # array of {time: Float, name: String, data: Object}
+        @timers = [] # array of {time: Float, name: String, data: Object, id?: String}
+        @send_seq = 0
         @invocations = {} # id => {state: sid, node: inv_map, status: 'active'|'done'|'canceled'}
         @invocations_by_state = Hash.new { |h, k| h[k] = [] }
         @invoke_seq = 0
         @internal_queue = []
+        @deferred_internal = []
+        @defer_done = true
         # Schedule invocations for initial configuration
         schedule_invocations_for_entered(@configuration)
       end
@@ -111,6 +114,17 @@ module Scjson
 
         @data ||= {}
         @internal_queue ||= []
+        # Inject any deferred internal events from previous step
+        unless @deferred_internal.nil? || @deferred_internal.empty?
+          @internal_queue = (@deferred_internal + @internal_queue)
+          @deferred_internal.clear
+        end
+        # When deferring done.invoke, run any pending finalizers at the start of the next step
+        if @defer_done
+          a0, d0 = run_pending_finalizers
+          action_log.concat(a0)
+          datamodel_delta.merge!(d0)
+        end
         @current_event_name = name
         @current_event_data = data
 
@@ -276,6 +290,11 @@ module Scjson
         @ordering_mode = (mode || 'tolerant').to_s.downcase
       end
 
+      # Control whether done.invoke is processed in the same step or deferred
+      def defer_done=(flag)
+        @defer_done = !!flag
+      end
+
       # Seed or update datamodel entries in this context
       def set_initial_data(pairs)
         return unless pairs.is_a?(Hash)
@@ -295,14 +314,40 @@ module Scjson
         if mode == 'scion'
           items.reverse_each do |h|
             iid = h[:iid]
-            @internal_queue.unshift({ 'name' => "done.invoke.#{iid}", 'data' => nil })
-            @internal_queue.unshift({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+            payload = begin
+              rec = @invocations[iid]
+              rec && rec[:done_payload]
+            rescue StandardError
+              nil
+            end
+            evs = [
+              { 'name' => 'done.invoke', 'data' => payload },
+              { 'name' => "done.invoke.#{iid}", 'data' => payload }
+            ]
+            if @defer_done
+              @deferred_internal.unshift(*evs.reverse) # preserve order when later unshifting
+            else
+              @internal_queue.unshift(*evs.reverse)
+            end
           end
         else
           items.each do |h|
             iid = h[:iid]
-            @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
-            @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+            payload = begin
+              rec = @invocations[iid]
+              rec && rec[:done_payload]
+            rescue StandardError
+              nil
+            end
+            evs = [
+              { 'name' => 'done.invoke', 'data' => payload },
+              { 'name' => "done.invoke.#{iid}", 'data' => payload }
+            ]
+            if @defer_done
+              @deferred_internal.concat(evs)
+            else
+              @internal_queue.concat(evs)
+            end
           end
         end
         @pending_done_invoke.clear
@@ -365,16 +410,23 @@ module Scjson
               lcas = targets.map { |tid| lca(nid, tid) }
               dom = choose_shallowest_ancestor(lcas)
               exit_chain = path_up_exclusive(nid, dom)
-              candidates << { src: nid, t: t, dom: dom, exit: exit_chain, depth: ancestors(dom).length, order: seq }
+              depth = dom ? ancestors(dom).length : 0
+              candidates << { src: nid, t: t, dom: dom, exit: exit_chain, depth: depth, order: seq }
               seq += 1
               break
             end
           end
         end
-        # Resolve conflicts by exit set overlap. Prefer deeper domain; tie-breaker by earlier discovery (document order)
+        # Resolve conflicts by exit set overlap, nested domains, or ancestor/descendant sources.
+        # Prefer deeper domain; tie-break by earlier discovery (document order).
         selected = []
         candidates.each do |cand|
-          conflicts = selected.select { |s| !(s[:exit] & cand[:exit]).empty? }
+          conflicts = selected.select do |s|
+            exit_overlap = !(s[:exit] & cand[:exit]).empty?
+            dom_conflict = (s[:dom] && cand[:dom]) && (is_ancestor?(s[:dom], cand[:dom]) || is_ancestor?(cand[:dom], s[:dom]))
+            src_conflict = is_ancestor?(s[:src], cand[:src]) || is_ancestor?(cand[:src], s[:src])
+            exit_overlap || dom_conflict || src_conflict
+          end
           if conflicts.empty?
             selected << cand
             next
@@ -383,7 +435,12 @@ module Scjson
           winner = conflicts.all? { |s| cand[:depth] > s[:depth] || (cand[:depth] == s[:depth] && cand[:order] < s[:order]) }
           if winner
             # remove all conflicting and add candidate
-            selected.reject! { |s| !(s[:exit] & cand[:exit]).empty? }
+            selected.reject! do |s|
+              exit_overlap = !(s[:exit] & cand[:exit]).empty?
+              dom_conflict = (s[:dom] && cand[:dom]) && (is_ancestor?(s[:dom], cand[:dom]) || is_ancestor?(cand[:dom], s[:dom]))
+              src_conflict = is_ancestor?(s[:src], cand[:src]) || is_ancestor?(cand[:src], s[:src])
+              exit_overlap || dom_conflict || src_conflict
+            end
             selected << cand
           else
             # keep existing, drop candidate
@@ -702,14 +759,28 @@ module Scjson
         actions = []
         delta = {}
         inv_node = rec[:node]
-        wrap_list(inv_node['finalize']).each do |fin|
-          a, d = run_actions_from_map(fin) if fin.is_a?(Hash)
-          if a
-            actions.concat(a)
+        # attempt to capture child donedata for done.invoke payload
+        if completed && rec[:ctx]
+          begin
+            rec[:done_payload] = extract_donedata_from_ctx(rec[:ctx])
+          rescue StandardError
+            rec[:done_payload] = nil
           end
-          if d
-            delta.merge!(d)
+        else
+          rec[:done_payload] = nil
+        end
+        fins = wrap_list(inv_node['finalize'])
+        if @defer_done
+          # Defer finalize actions to the next step
+          rec[:finalize_blocks] = fins
+          rec[:finalize_done] = false
+        else
+          fins.each do |fin|
+            a, d = run_actions_from_map(fin) if fin.is_a?(Hash)
+            actions.concat(a) if a
+            delta.merge!(d) if d
           end
+          rec[:finalize_done] = true
         end
         rec[:status] = completed ? 'done' : 'canceled'
         # remove mapping from state
@@ -718,6 +789,53 @@ module Scjson
           @invocations_by_state[sid].delete(invoke_id)
         end
         [actions, delta]
+      end
+
+      # Determine if a state is active or has an active descendant
+      def in_state?(state_id)
+        return false if state_id.nil? || state_id.to_s.strip.empty?
+        sid = state_id.to_s
+        @configuration.any? { |leaf| leaf == sid || is_ancestor?(sid, leaf) }
+      end
+
+      # Extract donedata payload from a completed child context if available
+      def extract_donedata_from_ctx(ctx)
+        return nil unless ctx && ctx.respond_to?(:instance_variable_get)
+        conf = ctx.instance_variable_get(:@configuration) || []
+        states = ctx.instance_variable_get(:@states) || {}
+        tag_type = ctx.instance_variable_get(:@tag_type) || {}
+        parent = ctx.instance_variable_get(:@parent) || {}
+        finals = conf.select { |sid| tag_type[sid] == :final && parent[sid].nil? }
+        return nil if finals.empty?
+        fnode = states[finals.first]
+        return nil unless fnode
+        dd = (fnode['donedata'].is_a?(Array) ? fnode['donedata'].first : fnode['donedata'])
+        return nil unless dd.is_a?(Hash)
+        payload = {}
+        # params
+        wrap_list(dd['param']).each do |pm|
+          next unless pm.is_a?(Hash)
+          nm = pm['name']
+          next unless nm
+          if pm['expr']
+            begin
+              payload[nm.to_s] = ctx.eval_expr(pm['expr'])
+            rescue StandardError
+              payload[nm.to_s] = nil
+            end
+          elsif pm['location']
+            begin
+              payload[nm.to_s] = ctx.resolve_path(pm['location'].to_s)
+            rescue StandardError
+              payload[nm.to_s] = nil
+            end
+          end
+        end
+        # content
+        if dd['content']
+          payload['content'] = dd['content']
+        end
+        payload.empty? ? nil : payload
       end
 
       def cancel_invocations_for_state(state_id)
@@ -939,8 +1057,14 @@ module Scjson
         wrap_list(map['assign']).each do |as|
           loc = as.is_a?(Hash) ? as['location'] : nil
           expr = as.is_a?(Hash) ? as['expr'] : nil
-          next unless loc
+          unless loc && loc.is_a?(String) && !loc.to_s.strip.empty? && loc.to_s !~ /\./
+            schedule_internal_event('error.execution', { 'detail' => 'invalid assign target', 'location' => loc }, 0.0)
+            next
+          end
           val = eval_assign_expr(loc, expr)
+          if val.nil? && !expr.nil?
+            schedule_internal_event('error.execution', { 'detail' => 'assign expression error', 'location' => loc, 'expr' => expr }, 0.0)
+          end
           @data[loc] = val
           delta[loc] = val
         end
@@ -957,15 +1081,43 @@ module Scjson
         wrap_list(map['send']).each do |sd|
           next unless sd.is_a?(Hash)
           ev_name = sd['event'] || sd['name']
+          ev_name = eval_expr(sd['eventexpr']) if (ev_name.nil? && sd['eventexpr'])
           delay = parse_delay(sd['delay'] || '0s')
+          delay = parse_delay(eval_expr(sd['delayexpr'])) if sd['delayexpr']
           target = sd['target']
-          data_payload = nil
+          target = eval_expr(sd['targetexpr']) if (target.nil? && sd['targetexpr'])
+          # Build payload: params, namelist, content
+          payload = {}
+          wrap_list(sd['param']).each do |pm|
+            next unless pm.is_a?(Hash)
+            nm = pm['name']
+            next unless nm
+            if pm['expr']
+              payload[nm.to_s] = eval_expr(pm['expr'])
+            elsif pm['location']
+              payload[nm.to_s] = resolve_path(pm['location'].to_s)
+            end
+          end
+          if sd['namelist'] && sd['namelist'].is_a?(String)
+            sd['namelist'].split(/\s+/).each do |nm|
+              payload[nm] = (@data || {})[nm]
+            end
+          end
           if sd['content']
-            data_payload = sd['content']
+            payload['content'] = sd['content']
+          end
+          data_payload = payload.empty? ? nil : payload
+          # send id / idlocation
+          send_id = sd['id']
+          if !send_id && sd['idlocation'] && sd['idlocation'].is_a?(String)
+            @send_seq += 1
+            send_id = "s#{@send_seq}"
+            @data[sd['idlocation']] = send_id
+            delta[sd['idlocation']] = send_id
           end
           if ev_name
             if target.nil? || target == '#_internal' || target == 'internal'
-              schedule_internal_event(ev_name.to_s, data_payload, delay)
+              schedule_internal_event(ev_name.to_s, data_payload, delay, id: send_id)
             elsif target == '#_child' || target == '#_invokedChild'
               # route to all active children of the context state (or error if none)
               routed = false
@@ -992,6 +1144,20 @@ module Scjson
               # unsupported external targets -> error.communication
               schedule_internal_event('error.communication', { 'detail' => 'unsupported target', 'target' => target, 'event' => ev_name.to_s }, 0.0)
             end
+          end
+        end
+        # cancel
+        wrap_list(map['cancel']).each do |cz|
+          next unless cz.is_a?(Hash)
+          sid = cz['sendid']
+          sid = eval_expr(cz['sendidexpr']) if sid.nil? && cz['sendidexpr']
+          if sid.nil? || sid.to_s.strip.empty?
+            schedule_internal_event('error.execution', { 'detail' => 'cancel missing id' }, 0.0)
+            next
+          end
+          removed = cancel_send(sid.to_s)
+          unless removed
+            schedule_internal_event('error.execution', { 'detail' => 'cancel id not found', 'sendid' => sid.to_s }, 0.0)
           end
         end
         # foreach
@@ -1082,6 +1248,15 @@ module Scjson
         # boolean literals
         return true if s.downcase == 'true'
         return false if s.downcase == 'false'
+        # in(stateId) predicate
+        if (m = s.match(/^\s*in\((.+)\)\s*$/i))
+          sid_raw = m[1].strip
+          sid = sid_raw
+          if (mm = sid_raw.match(/^['\"](.*)['\"]$/))
+            sid = mm[1]
+          end
+          return in_state?(sid.to_s)
+        end
         # JSON object/array literals
         if (s.start_with?('[') && s.end_with?(']')) || (s.start_with?('{') && s.end_with?('}'))
           begin
@@ -1152,24 +1327,31 @@ module Scjson
           rhs = eval_expr(m[2])
           return member?(lhs, rhs)
         end
-        # equality/inequality
-        if (m = s.match(/^([a-zA-Z_][\w]*)\s*(==|!=)\s*(['\"]?)(.+?)\3$/))
-          lhs = (@data || {})[m[1]]
-          rhs_raw = m[4]
-          rhs = (rhs_raw =~ /^[-+]?\d+(?:\.\d+)?$/) ? (rhs_raw.include?('.') ? rhs_raw.to_f : rhs_raw.to_i) : rhs_raw
-          return (lhs == rhs) if m[2] == '=='
-          return (lhs != rhs)
-        end
-        # numeric comparison
-        if (m = s.match(/^([a-zA-Z_][\w]*)\s*(>=|<=|>|<)\s*([-+]?\d+(?:\.\d+)?)$/))
-          lhs = (@data || {})[m[1]]
-          rhs = m[3].include?('.') ? m[3].to_f : m[3].to_i
-          return false unless lhs.is_a?(Numeric)
-          case m[2]
-          when '>' then return lhs > rhs
-          when '<' then return lhs < rhs
-          when '>=' then return lhs >= rhs
-          when '<=' then return lhs <= rhs
+        # general binary operators
+        if (m = s.match(/^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$/))
+          lhs = eval_expr(m[1])
+          rhs = eval_expr(m[3])
+          op = m[2]
+          if %w[== !=].include?(op)
+            lnum = lhs.is_a?(Numeric) || (lhs.is_a?(String) && lhs.match?(/^[-+]?\d+(?:\.\d+)?$/))
+            rnum = rhs.is_a?(Numeric) || (rhs.is_a?(String) && rhs.match?(/^[-+]?\d+(?:\.\d+)?$/))
+            if lnum && rnum
+              lv = lhs.is_a?(Numeric) ? lhs.to_f : lhs.to_s.to_f
+              rv = rhs.is_a?(Numeric) ? rhs.to_f : rhs.to_s.to_f
+              return (lv == rv) if op == '=='
+              return (lv != rv)
+            else
+              return (lhs == rhs) if op == '=='
+              return (lhs != rhs)
+            end
+          else
+            return false unless lhs.is_a?(Numeric) && rhs.is_a?(Numeric)
+            case op
+            when '>' then return lhs > rhs
+            when '<' then return lhs < rhs
+            when '>=' then return lhs >= rhs
+            when '<=' then return lhs <= rhs
+            end
           end
         end
         # direct variable truthiness
@@ -1227,13 +1409,22 @@ module Scjson
       end
 
       # Timers and scheduling
-      def schedule_internal_event(name, data, delay)
+      def schedule_internal_event(name, data, delay, id: nil)
         if delay.nil? || delay <= 0
-          @internal_queue << ({ 'name' => name, 'data' => data })
+          @internal_queue << ({ 'name' => name, 'data' => data, 'sendid' => id })
         else
-          @timers << { time: (@time + delay.to_f), name: name, data: data }
+          rec = { time: (@time + delay.to_f), name: name, data: data }
+          rec[:id] = id if id
+          @timers << rec
           @timers.sort_by! { |t| t[:time] }
         end
+      end
+
+      def cancel_send(sendid)
+        before = @timers.length
+        @timers.delete_if { |t| t[:id] && t[:id].to_s == sendid.to_s }
+        after = @timers.length
+        before != after
       end
 
       def advance_time(seconds)
@@ -1265,7 +1456,7 @@ module Scjson
       def flush_timers
         while !@timers.empty? && @timers.first[:time] <= @time
           t = @timers.shift
-          @internal_queue << ({ 'name' => t[:name], 'data' => t[:data] })
+          @internal_queue << ({ 'name' => t[:name], 'data' => t[:data], 'sendid' => t[:id] })
         end
       end
 
@@ -1386,3 +1577,21 @@ module Scjson
     end
   end
 end
+      # Execute any pending finalize blocks for completed invocations (only used when @defer_done)
+      def run_pending_finalizers
+        actions = []
+        delta = {}
+        @invocations.each do |iid, rec|
+          next unless rec && rec[:status] == 'done'
+          blocks = rec[:finalize_blocks]
+          next unless blocks && !rec[:finalize_done]
+          blocks.each do |fin|
+            next unless fin.is_a?(Hash)
+            a, d = run_actions_from_map(fin, context_state: rec[:state])
+            actions.concat(a)
+            delta.merge!(d)
+          end
+          rec[:finalize_done] = true
+        end
+        [actions, delta]
+      end

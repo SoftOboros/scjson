@@ -35,7 +35,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Transition condition evaluation (basic: literals, variables, ==/!=, numeric comparisons).
 - [ ] Implement full macrostep loop and complete conflict resolution to match Python.
 - [x] Executable content Phase 1 (subset): log, assign (literals and +N increments), raise, if/elseif/else, foreach.
-- [ ] Event I/O: internal queue, error events; timers via mock clock (advance_time control token accepted in event streams to match Python’s deterministic traces).
+- [x] Event I/O: internal queue, error events; timers via mock clock (advance_time control token accepted in event streams to match Python’s deterministic traces).
 - [x] CLI: `scjson engine-trace` in Ruby, emitting deterministic JSONL traces (same schema as Python).
 - [x] Integrate with `py/exec_compare.py` as a “secondary” engine under test (use `--secondary "ruby/bin/scjson engine-trace"`).
 
@@ -45,6 +45,11 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Support child machines (inline and `src` files); `#_parent`, `#_child`/`#_invokedChild`, and `#_<id>` targets; `autoforward`.
 - [x] Parallel completion (basic), history (shallow/deep) targets, and final states semantics; enqueue `done.state.<id>` events.
 - [ ] Error handling and ordering consistent with SCION; adopt Python’s normalization knobs where helpful.
+  - [x] `<cancel>` implemented with id-based timer management; emits `error.execution` when id missing/not found.
+  - [x] Evaluator: `in(stateId)`, null-safe `_event.data` traversal, and mixed-type equality (numeric-like string vs number).
+  - [x] Invoke: propagate child `<donedata>` to `done.invoke` payload; buffered ordering honored (`--ordering scion`).
+  - [x] Add `--defer-done` option (default ON) to defer `done.invoke*` processing to the next step to match SCION step boundaries.
+  - [ ] Tighten transition conflict resolution further for nested/parallel edge-cases; add focused tests.
 
 3) Validation Harness Integration
 - [ ] Wire Ruby CLI into `py/exec_compare.py` and `py/exec_sweep.py` (command string + cwd assumptions documented).

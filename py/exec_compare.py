@@ -445,11 +445,22 @@ def main() -> None:
         type=Path,
         help="Directory for trace artifacts (defaults to temporary directory)",
     )
+    # Step-0 state normalization: allow explicit keep/strip and auto mode
     parser.add_argument(
         "--keep-step0-states",
+        dest="keep_step0_states",
         action="store_true",
-        default=True,
-        help="Do not strip step-0 entered/exited state lists during normalization",
+        default=None,
+        help=(
+            "Keep step-0 entered/exited state lists. By default, the tool auto-"
+            "detects reference engine and strips when using SCION to reduce noise."
+        ),
+    )
+    parser.add_argument(
+        "--strip-step0-states",
+        dest="keep_step0_states",
+        action="store_false",
+        help="Strip step-0 entered/exited state lists during normalization",
     )
     parser.add_argument(
         "--leaf-only",
@@ -509,6 +520,15 @@ def main() -> None:
         choices=["tolerant", "strict", "scion"],
         default="tolerant",
         help="Ordering policy for child→parent emissions (finalize, etc.)",
+    )
+    parser.add_argument(
+        "--norm",
+        type=str,
+        choices=["scion"],
+        help=(
+            "Apply a normalization profile. 'scion' sets leaf-only, omit-delta, "
+            "omit-transitions, strip-step0-states, and ordering=scion."
+        ),
     )
     args = parser.parse_args()
 
@@ -572,7 +592,23 @@ def main() -> None:
         raise SystemExit(f"Event stream not found: {events}")
 
     # treat_as_xml already computed above
+    # Apply normalization profile defaults before resolving commands
+    if args.norm == "scion":
+        args.leaf_only = True
+        args.omit_delta = True
+        args.omit_transitions = True
+        args.keep_step0_states = False
+        args.ordering = "scion"
+
     ref_cmd = _resolve_reference_cmd(args)
+
+    # If not explicitly specified, auto-set step-0 state normalization when using SCION as reference
+    if args.keep_step0_states is None:
+        try:
+            ref_joined = " ".join(ref_cmd).lower()
+            args.keep_step0_states = not ("scion" in ref_joined or "scion-runner" in ref_joined)
+        except Exception:
+            args.keep_step0_states = True
 
     temp_dir: TemporaryDirectory[str] | None = None
     workdir = args.workdir
@@ -604,10 +640,19 @@ def main() -> None:
         py_flags.extend(["--ordering", args.ordering])
 
     try:
+        # Honor optional WORKDIR_OVERRIDE from environment
+        if os.environ.get("WORKDIR_OVERRIDE"):
+            workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
+            workdir.mkdir(parents=True, exist_ok=True)
+            py_trace = workdir / "python.trace.jsonl"
         _run(_build_trace_cmd(py_cmd, chart, events, py_trace, treat_as_xml, py_flags))
     except SystemExit:
         # Fallback to inline generation when package CLI is unavailable
         _write_python_trace_inline(chart, events, py_trace, treat_as_xml, ordering=args.ordering)
+    if os.environ.get("WORKDIR_OVERRIDE"):
+        workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
+        workdir.mkdir(parents=True, exist_ok=True)
+        ref_trace = workdir / "reference.trace.jsonl"
     _run(_build_trace_cmd(ref_cmd, chart, events, ref_trace, treat_as_xml))
 
     py_steps = _load_trace(py_trace)
@@ -664,8 +709,27 @@ def main() -> None:
 
     if secondary_cmd:
         secondary_trace = workdir / "secondary.trace.jsonl"
+        # Honor optional WORKDIR_OVERRIDE from environment (for CI harness retention)
+        if os.environ.get("WORKDIR_OVERRIDE"):
+            workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
+            workdir.mkdir(parents=True, exist_ok=True)
+            secondary_trace = workdir / "secondary.trace.jsonl"
         _run(_build_trace_cmd(secondary_cmd, chart, events, secondary_trace, treat_as_xml))
         secondary_steps = _load_trace(secondary_trace)
+        # Apply normalization to secondary to align with ref_steps
+        if args.leaf_only:
+            leaf_ids = _leaf_ids_from_chart(chart, treat_as_xml)
+            secondary_steps = _normalize_steps_leaf_only(secondary_steps, leaf_ids)
+        secondary_steps = _strip_step0_noise(secondary_steps)
+        if not args.keep_step0_states:
+            secondary_steps = _strip_step0_states(secondary_steps)
+        secondary_steps = _omit_fields(
+            secondary_steps,
+            omit_actions=args.omit_actions,
+            omit_delta=args.omit_delta,
+            omit_transitions=args.omit_transitions,
+        )
+        secondary_steps = _normalize_transition_conditions(secondary_steps)
         mismatch_sec, notes_sec, stats_sec = _diff_steps(ref_steps, secondary_steps)
         if mismatch_sec:
             print("Mismatch detected (reference vs secondary):")

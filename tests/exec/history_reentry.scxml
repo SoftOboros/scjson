@@ -2,7 +2,9 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="S" name="history_reentry">
   <state id="S" initial="L">
     <state id="L" initial="LA">
-      <history id="LH" type="shallow"/>
+      <history id="LH" type="shallow">
+        <transition target="LA"/>
+      </history>
       <state id="LA">
         <transition event="flip" target="LB"/>
         <transition event="toR" target="R"/>
@@ -17,4 +19,3 @@
     </state>
   </state>
 </scxml>
-

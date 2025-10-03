@@ -9,9 +9,11 @@
 - Ruby engine: Trace interface under active development with growing feature parity. See `docs/ENGINE-RB.md`.
 
 **JS/TS Harness (via SCION)**
-- The JS package ships a small harness entry `scjson-scion-trace` that proxies to the SCION reference runner for execution traces. This justifies JS-side execution by delegating to the canonical reference.
-- Usage (in repo): `node tools/scion-runner/scion-trace.cjs -I chart.scxml -e events.jsonl --xml`
-- Usage (package): `npx scjson-scion-trace -I chart.scxml -e events.jsonl --xml` (requires Node; runner not bundled and may prompt to install a SCION runner in your environment).
+- The JS package ships a harness CLI `scjson-scion-trace` that directly requires `scion-core` to execute SCXML and emit JSONL traces. Install `scion-core` in your project to enable it.
+- Supports both `.scxml` and `.scjson` input (the latter is converted to SCXML internally).
+- Normalization flags: `--leaf-only`, `--omit-delta`, `--omit-transitions`, `--strip-step0-noise`, `--strip-step0-states`.
+- Usage (package): `npx scjson-scion-trace -I chart.(scxml|scjson) -e events.jsonl [--xml] [--leaf-only] [--omit-delta] [...]`
+- Dev alternative (in this repo): `node tools/scion-runner/scion-trace.cjs -I chart.scxml -e events.jsonl --xml`
 
 ---
 
@@ -145,14 +147,12 @@ pip install scjson
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
+# harness requires scion-core
+npm install scion-core
 ```
 
 Harness (Node):
 ```bash
-# In the repo (dev):
-node tools/scion-runner/scion-trace.cjs -I path/to/chart.scxml -e events.jsonl --xml
-
-# From the package (proxy to SCION; requires Node):
 npx scjson-scion-trace -I path/to/chart.scxml -e events.jsonl --xml
 ```
 

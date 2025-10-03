@@ -440,8 +440,11 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     "--emit-time-steps/--no-emit-time-steps",
     "emit_time_steps",
     is_flag=True,
-    default=True,
-    help="When an advance_time control token is seen, emit a synthetic step to flush timers",
+    default=False,
+    help=(
+        "When an advance_time control token is seen, emit a synthetic step to flush timers."
+        " Disabled by default to keep control tokens from affecting step counts."
+    ),
 )
 def engine_trace(
     input_path: Path,
