@@ -123,8 +123,13 @@ module Scjson
               action_log.concat(a)
               datamodel_delta.merge!(d)
               # enqueue done.invoke events
-              @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
-              @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+              if (@ordering_mode || 'tolerant').to_s.downcase == 'scion'
+                @internal_queue.unshift({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+                @internal_queue.unshift({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+              else
+                @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+                @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+              end
             end
             return
           end
@@ -199,6 +204,11 @@ module Scjson
       def wrap_list(value)
         return [] if value.nil?
         value.is_a?(Array) ? value : [value]
+      end
+
+      # Set event ordering mode: 'tolerant' (default), 'strict', or 'scion'
+      def ordering_mode=(mode)
+        @ordering_mode = (mode || 'tolerant').to_s.downcase
       end
 
       # Seed or update datamodel entries in this context

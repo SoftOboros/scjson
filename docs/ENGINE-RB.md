@@ -36,6 +36,7 @@ Key components (paths relative to repo root):
 - `ruby/lib/scjson/cli.rb` – Ruby CLI, including `engine-trace`
 - `ruby/lib/scjson/engine.rb` – engine trace interface (stub; expands over time)
   - Normalization flags: `--leaf-only`, `--omit-actions`, `--omit-delta`, `--omit-transitions`, `--strip-step0-noise`, `--strip-step0-states`, `--keep-cond`
+  - Ordering: `--ordering tolerant|strict|scion` (affects done.invoke event ordering)
 - `py/exec_compare.py` – compare traces vs reference and optional secondary (use for Ruby)
 
 Traces are line‑delimited JSON objects with fields: `event`, `firedTransitions`, `enteredStates`, `exitedStates`, `configuration`, `actionLog`, `datamodelDelta`, `step`.

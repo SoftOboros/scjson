@@ -52,6 +52,11 @@ module Scjson
       sink = out_path ? File.open(out_path, 'w', encoding: 'utf-8') : $stdout
       begin
         ctx = DocumentContext.from_file(input_path, xml: xml)
+        begin
+          ctx.ordering_mode = (ordering || 'tolerant')
+        rescue StandardError
+          # ignore if not supported
+        end
         leaves = leaf_only ? ctx.leaf_state_ids : nil
         # Step 0 snapshot
         init = ctx.trace_init
