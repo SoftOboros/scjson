@@ -10,6 +10,7 @@ require 'pathname'
 require 'optparse'
 require 'fileutils'
 require_relative '../scjson'
+require_relative 'engine'
 
 module Scjson
   ##
@@ -17,7 +18,7 @@ module Scjson
   #
   # @return [void]
   def self.splash
-    puts "scjson #{VERSION} - SCXML <-> scjson converter"
+    puts "scjson #{VERSION} - SCXML/SCML execution, SCXML <-> scjson converter & validator"
   end
 
   ##
@@ -31,6 +32,9 @@ module Scjson
     if cmd.nil? || %w[-h --help].include?(cmd)
       puts(help_text)
       return
+    end
+    if cmd == 'engine-trace'
+      return engine_trace(argv)
     end
     parser = OptionParser.new do |opts|
       opts.banner = ''
@@ -63,7 +67,7 @@ module Scjson
   #
   # @return [String] A one-line summary of the CLI purpose.
   def self.help_text
-    'scjson - SCXML <-> scjson converter and validator'
+    'scjson - SCXML <-> scjson converter, validator, and engine trace'
   end
 
   ##
@@ -215,5 +219,72 @@ module Scjson
       warn "Validation failed for #{src}: #{e}"
       false
     end
+  end
+
+  ##
+  # Emit a standardized JSONL execution trace for a document.
+  #
+  # Mirrors the Python CLI flags where appropriate, using Ruby idioms.
+  #
+  # @param [Array<String>] argv Command line arguments following 'engine-trace'.
+  # @return [void]
+  def self.engine_trace(argv)
+    input = nil
+    events = nil
+    out = nil
+    is_xml = false
+    leaf_only = false
+    omit_actions = false
+    omit_delta = false
+    omit_transitions = false
+    advance_time = 0.0
+    ordering = 'tolerant'
+    max_steps = nil
+
+    parser = OptionParser.new do |opts|
+      opts.banner = 'scjson engine-trace [options]'
+      opts.on('-I', '--input PATH', 'SCJSON/SCXML document') { |v| input = v }
+      opts.on('-e', '--events PATH', 'JSONL stream of events') { |v| events = v }
+      opts.on('-o', '--out PATH', 'Destination trace file (stdout by default)') { |v| out = v }
+      opts.on('--xml', 'Treat input as SCXML') { is_xml = true }
+      opts.on('--leaf-only', 'Restrict configuration/entered/exited to leaf states') { leaf_only = true }
+      opts.on('--omit-actions', 'Omit actionLog entries from the trace') { omit_actions = true }
+      opts.on('--omit-delta', 'Omit datamodelDelta entries from the trace') { omit_delta = true }
+      opts.on('--omit-transitions', 'Omit firedTransitions entries from the trace') { omit_transitions = true }
+      opts.on('--advance-time N', Float, 'Advance time by N seconds before processing events') { |v| advance_time = v }
+      opts.on('--ordering MODE', ['tolerant', 'strict', 'scion'], 'Ordering policy (tolerant|strict|scion)') { |v| ordering = v }
+      opts.on('--max-steps N', Integer, 'Maximum steps to process') { |v| max_steps = v }
+      opts.on('-h', '--help', 'Show help') do
+        puts opts
+        return
+      end
+    end
+
+    begin
+      parser.parse!(argv)
+    rescue OptionParser::ParseError => e
+      warn e.message
+      puts parser
+      return
+    end
+    unless input
+      warn 'Missing required --input'
+      puts parser
+      return
+    end
+
+    Scjson::Engine.trace(
+      input_path: input,
+      events_path: events,
+      out_path: out,
+      xml: is_xml,
+      leaf_only: leaf_only,
+      omit_actions: omit_actions,
+      omit_delta: omit_delta,
+      omit_transitions: omit_transitions,
+      advance_time: advance_time,
+      ordering: ordering,
+      max_steps: max_steps
+    )
   end
 end

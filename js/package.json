@@ -1,7 +1,7 @@
 {
   "name": "scjson",
-  "version": "0.3.3",
-  "description": "A JSON-based serialization of SCXML (State Chart XML).",
+  "version": "0.3.4",
+  "description": "A JSON-based serialization of SCXML (State Chart XML) with SCXML/SCML execution tooling and converters.",
   "author": "Softoboros Technology Inc. <ira@softoboros.com>",
   "repository": {
     "type": "git",
@@ -43,6 +43,14 @@
   "bin": {
     "scjson": "bin/scjson.js"
   },
+  "keywords": [
+    "scxml",
+    "statecharts",
+    "state-machine",
+    "scjson",
+    "scml",
+    "execution"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "jest",

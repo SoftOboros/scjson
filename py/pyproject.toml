@@ -1,7 +1,7 @@
 [project]
 name = "scjson"
 version = "0.3.4"
-description = "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education."
+description = "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education, with execution engine and trace tools for SCXML/SCML."
 readme = "README.md"
 requires-python = ">=3.8"
 license = "BSD-1-Clause"

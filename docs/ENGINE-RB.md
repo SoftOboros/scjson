@@ -1,0 +1,100 @@
+<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+
+Agent Name: ruby-engine-guide
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+
+# Ruby Engine — User Guide
+
+This guide explains how to use the Ruby execution engine interface to emit deterministic JSONL traces and how to compare behavior against the reference engine ([SCION](https://www.npmjs.com/package/scion)) and the Python engine. It mirrors the Python guide where appropriate, while following Ruby conventions.
+
+Looking for deeper implementation details? See the architecture reference at `ruby/ENGINE-RB-DETAILS.md`.
+
+For cross-language parity and SCION comparison details, see `docs/COMPATIBILITY.md`.
+
+## Navigation
+
+- This page: User Guide
+  - Overview
+  - Quick Start
+  - Event Streams (.events.jsonl)
+- Architecture & in‑depth reference: `ruby/ENGINE-RB-DETAILS.md`
+- Compatibility Matrix: `docs/COMPATIBILITY.md`
+
+## Overview
+
+The Ruby engine interface is being developed to execute SCXML/SCJSON statecharts and emit deterministic JSONL traces of execution. A set of CLI utilities and the existing Python harness help you:
+
+- Run the Ruby engine and collect traces
+- Compare Ruby traces against a reference engine (SCION/Node) and Python
+- Reuse existing event vectors and control tokens for deterministic runs
+
+Key components (paths relative to repo root):
+
+- `ruby/lib/scjson/cli.rb` – Ruby CLI, including `engine-trace`
+- `ruby/lib/scjson/engine.rb` – engine trace interface (stub; expands over time)
+- `py/exec_compare.py` – compare traces vs reference and optional secondary (use for Ruby)
+
+Traces are line‑delimited JSON objects with fields: `event`, `firedTransitions`, `enteredStates`, `exitedStates`, `configuration`, `actionLog`, `datamodelDelta`, `step`.
+
+## Quick Start
+
+1) Engine trace (Ruby; SCXML input)
+
+```bash
+ruby/bin/scjson engine-trace -I tests/exec/toggle.scxml \
+  -e tests/exec/toggle.events.jsonl -o toggle.ruby.trace.jsonl --xml \
+  --leaf-only --omit-delta
+```
+
+Notes:
+- `-I` points at the input chart; add `--xml` for SCXML input, omit for SCJSON.
+- `-e` supplies a JSONL events file (see “Event Streams”).
+- Normalization flags reduce noise and keep traces deterministic.
+
+2) Compare against reference engine with Ruby as secondary
+
+```bash
+python py/exec_compare.py tests/exec/toggle.scxml \
+  --events tests/exec/toggle.events.jsonl \
+  --reference "node tools/scion-runner/scion-trace.cjs" \
+  --secondary "ruby/bin/scjson engine-trace" \
+  --leaf-only --omit-delta
+```
+
+3) Sweep a directory of charts (Ruby as secondary)
+
+```bash
+python py/exec_sweep.py tutorial \
+  --glob "**/*.scxml" \
+  --reference "node tools/scion-runner/scion-trace.cjs" \
+  --workdir uber_out/sweep \
+  --secondary "ruby/bin/scjson engine-trace"
+```
+
+When using generated vectors, the Python harness writes a `coverage-summary.json` with aggregated coverage across charts.
+
+## Event Streams (.events.jsonl)
+
+Event streams are newline‑delimited JSON objects, one per event:
+
+```json
+{"event": "start"}
+{"event": "go", "data": {"flag": true}}
+```
+
+Accepted keys:
+- `event` (or `name`) – string event name
+- `data` – optional payload (object, number, string, etc.)
+
+Control tokens:
+- `advance_time` – number of seconds to advance the engine’s clock before the next external event is processed. No trace step is emitted for this control token. This mirrors Python’s behavior to keep traces comparable.
+
+---
+
+Back to
+- Architecture & reference: `ruby/ENGINE-RB-DETAILS.md`
+- Compatibility Matrix: `docs/COMPATIBILITY.md`
+- Project overview: `README.md`

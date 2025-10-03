@@ -2,7 +2,7 @@
 
 # scjson
 
-> A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.
+> A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education. Includes execution engines (Python, Ruby) for SCXML/SCML traces.
 
 ---
 
@@ -58,13 +58,13 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 ---
 
-## Converters
+## Converters & Engines
 
 | Language  | Status | Path | Notes |
 |-----------|--------|------|-------|
 | Python    | ✅ Canonical | [py](./py/README.md) | Reference implementation and compatibility baseline |
 | JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus |
-| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Matches Python output on the tutorial corpus |
+| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Converter parity; engine trace interface under active development |
 | Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
 | Java      | ✅ Parity | [java](./java/README.md) | Uses [SCION](https://www.npmjs.com/package/scion)-backed runner; matches Python output |
 | Go        | ✅ Parity | [go](./go/README.md) | Matches Python output on the tutorial corpus |
@@ -136,6 +136,11 @@ pip install scjson
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
+```
+
+rubygems: [https://rubygems.org/gems/scjson]
+```bash
+gem install scjson
 ```
 
 cargo: [https://crates.io/crates/scjson]
