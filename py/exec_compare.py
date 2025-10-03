@@ -127,7 +127,9 @@ def _leaf_ids_from_chart(chart: Path, treat_as_xml: bool) -> Set[str]:
             for act in ctx.activations.values():
                 node = getattr(act, 'node', None)
                 # finals are leaves; states with no state/parallel children are leaves
-                has_state_children = bool(getattr(node, 'state', [])) or bool(getattr(node, 'parallel', []))
+                has_state_children = bool(getattr(node, 'state', [])) or bool(
+                    getattr(node, 'parallel', [])
+                ) or bool(getattr(node, 'final', []))
                 is_final = getattr(node.__class__, '__name__', '').lower().endswith('finaltype')
                 if getattr(act, 'id', None) and (is_final or not has_state_children):
                     leaves.add(act.id)
@@ -164,7 +166,7 @@ def _leaf_ids_from_chart(chart: Path, treat_as_xml: bool) -> Set[str]:
                 node.get("name") == "state"
                 or ("state" in node or "parallel" in node)
             ):
-                if tag_id and not children_states and not children_parallel:
+                if tag_id and not children_states and not children_parallel and not children_final:
                     leaves.add(tag_id)
             for item in children_states:
                 walk(item)
@@ -232,6 +234,27 @@ def _strip_step0_states(steps: List[dict]) -> List[dict]:
             t["exitedStates"] = []
         out.append(t)
     return out
+
+
+def _normalize_transition_conditions(steps: List[dict]) -> List[dict]:
+    """Clear transition conditions for comparison parity with SCION output."""
+
+    normalized: List[dict] = []
+    for step in steps:
+        t = dict(step)
+        transitions = t.get("firedTransitions")
+        if isinstance(transitions, list):
+            cleaned: List[dict] = []
+            for item in transitions:
+                if isinstance(item, dict):
+                    entry = dict(item)
+                    entry["cond"] = None
+                    cleaned.append(entry)
+                else:
+                    cleaned.append(item)
+            t["firedTransitions"] = cleaned
+        normalized.append(t)
+    return normalized
 
 
 def _diff_steps(py_steps: List[dict], ref_steps: List[dict]) -> Tuple[bool, List[str], Tuple[int, int, int, int]]:
@@ -615,6 +638,8 @@ def main() -> None:
         omit_delta=args.omit_delta,
         omit_transitions=args.omit_transitions,
     )
+    py_steps = _normalize_transition_conditions(py_steps)
+    ref_steps = _normalize_transition_conditions(ref_steps)
     mismatch, notes, stats = _diff_steps(py_steps, ref_steps)
 
     if mismatch:

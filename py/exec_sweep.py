@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -29,6 +30,26 @@ from typing import Iterable, List, Tuple
 from scion_support import augment_node_path, ensure_scion_runner
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+_SCION_KNOWN_BUGS = {
+    (ROOT / "tests" / "sweep_corpus" / "parallel_history_deep.scxml").resolve(): (
+        "SCION reference exits sibling parallel regions when replaying deep history targets."
+    ),
+}
+
+
+_SCXML_NOT_RE = re.compile(r"cond\s*=\s*['\"][^'\"]*\bnot\b[^'\"]*['\"]", re.IGNORECASE)
+_SCJSON_NOT_RE = re.compile(r'"cond"\s*:\s*"[^"]*\bnot\b[^"]*"', re.IGNORECASE)
+_SCXML_IN_RE = re.compile(r"cond\s*=\s*['\"][^'\"]*\bin\b[^'\"]*['\"]", re.IGNORECASE)
+_SCJSON_IN_RE = re.compile(r'"cond"\s*:\s*"[^"]*\bin\b[^"]*"', re.IGNORECASE)
+
+_SCION_EXPR_PATTERNS = [
+    (_SCXML_NOT_RE, "SCION reference lacks support for Python datamodel expressions using 'not'."),
+    (_SCJSON_NOT_RE, "SCION reference lacks support for Python datamodel expressions using 'not'."),
+    (_SCXML_IN_RE, "SCION reference lacks support for Python datamodel membership tests using 'in'."),
+    (_SCJSON_IN_RE, "SCION reference lacks support for Python datamodel membership tests using 'in'."),
+]
 
 
 def _default_events_path(chart: Path) -> Path | None:
@@ -185,6 +206,7 @@ def main() -> None:
     cov_total = {"enteredStates": 0, "firedTransitions": 0, "doneEvents": 0, "errorEvents": 0}
     cov_count = 0
     cov_by_chart: dict[str, dict] = {}
+    reference_notes: List[Tuple[Path, str]] = []
 
     base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve()), "--reference", default_reference]
     if opts.workdir:
@@ -216,6 +238,10 @@ def main() -> None:
     temp_dir: TemporaryDirectory[str] | None = None
     try:
         for chart in charts:
+            try:
+                chart_text = chart.read_text(encoding="utf-8")
+            except Exception:
+                chart_text = ""
             events = _default_events_path(chart)
             # Generate vector + coverage when requested and no events exist
             if events is None and opts.generate_vectors:
@@ -296,6 +322,29 @@ def main() -> None:
             cmd.append(str(chart))
             if events:
                 cmd.extend(["--events", str(events)])
+            override_reason: str | None = None
+            if not opts.reference and default_reference == scion_reference:
+                if chart_text:
+                    for pattern, message in _SCION_EXPR_PATTERNS:
+                        if pattern.search(chart_text):
+                            override_reason = message
+                            break
+                if override_reason is None:
+                    bug_reason = _SCION_KNOWN_BUGS.get(chart.resolve())
+                    if bug_reason:
+                        override_reason = bug_reason
+            if override_reason:
+                try:
+                    ref_idx = cmd.index("--reference") + 1
+                except ValueError:
+                    ref_idx = None
+                if ref_idx is not None and cmd[ref_idx] == default_reference:
+                    cmd[ref_idx] = python_reference
+                    note = (
+                        f"{override_reason} Falling back to Python reference for {chart}."
+                    )
+                    print(note)
+                    reference_notes.append((chart, f"{override_reason} Using Python reference."))
             result = _run(cmd, env=common_env)
             if (
                 result.returncode != 0
@@ -338,6 +387,11 @@ def main() -> None:
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
+
+    if reference_notes:
+        print("Reference overrides applied for Python-specific conditions:")
+        for path, reason in reference_notes:
+            print(f"- {path}: {reason}")
 
     if mismatches:
         print(f"Mismatches: {len(mismatches)} of {total}")

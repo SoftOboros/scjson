@@ -42,6 +42,24 @@ from . import dataclasses as dataclasses_module
 logger = logging.getLogger(__name__)
 
 
+class _EventDataProxy(dict):
+    """Mapping wrapper that exposes dictionary entries as attributes."""
+
+    def __getattr__(self, name: str) -> Any:
+        if name in self:
+            return self[name]
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        if name in self:
+            del self[name]
+            return
+        raise AttributeError(name)
+
+
 SCXMLNode = State | ScxmlParallelType | ScxmlFinalType | History | Scxml
 
 
@@ -93,6 +111,7 @@ class DocumentContext(BaseModel):
     _external_emitter: Optional[Any] = PrivateAttr(default=None)
     # Ordering policy for parent queue emission from child invokes
     ordering_mode: str = "tolerant"  # tolerant | strict | scion
+    _leaf_ids: Set[str] = PrivateAttr(default_factory=set)
 
     # ------------------------------------------------------------------ #
     # Interpreter API – the real engine would call these
@@ -185,6 +204,15 @@ class DocumentContext(BaseModel):
 
     def _activation_order_key(self, state_id: str) -> int:
         return self.activation_order.get(state_id, len(self.activation_order) + 1)
+
+    def _wrap_event_payload(self, value: Any) -> Any:
+        """Return event payloads with attribute access for mapping entries."""
+
+        if isinstance(value, Mapping):
+            return _EventDataProxy({k: self._wrap_event_payload(v) for k, v in value.items()})
+        if isinstance(value, list):
+            return [self._wrap_event_payload(v) for v in value]
+        return value
 
     def _select_transition(self, evt: Event | None) -> tuple[ActivationRecord, TransitionSpec] | None:
         """Return the first enabled transition for ``evt`` respecting document order."""
@@ -352,7 +380,16 @@ class DocumentContext(BaseModel):
         return bool(state_id) and state_id != self.root_activation.id and not state_id.startswith("$generated-")
 
     def _filter_states(self, ids: Iterable[str]) -> List[str]:
-        return [sid for sid in ids if self._is_user_state(sid)]
+        if not self._leaf_ids:
+            try:
+                self._leaf_ids = self.leaf_state_ids()
+            except Exception:
+                self._leaf_ids = set()
+        return [
+            sid
+            for sid in ids
+            if self._is_user_state(sid) and (not self._leaf_ids or sid in self._leaf_ids)
+        ]
 
     # ------------------------------------------------------------------ #
     # Construction helpers
@@ -1511,7 +1548,8 @@ class DocumentContext(BaseModel):
         # Provide _event mapping for expressions
         cur_evt = getattr(self, "_current_event", None)
         if cur_evt is not None:
-            ev_map: Dict[str, Any] = {"name": cur_evt.name, "data": cur_evt.data}
+            payload = self._wrap_event_payload(cur_evt.data) if cur_evt.data is not None else None
+            ev_map: Dict[str, Any] = {"name": cur_evt.name, "data": payload}
             invokeid: str | None = None
             if getattr(cur_evt, "invokeid", None):
                 try:
@@ -1683,7 +1721,13 @@ class DocumentContext(BaseModel):
 
         return result or None
 
-    def _exit_state(self, act: ActivationRecord) -> None:
+    def _exit_state(self, act: ActivationRecord) -> Set[str]:
+        """Exit ``act`` and return the set of activation IDs that became inactive."""
+
+        if act.id not in self.configuration:
+            return set()
+
+        exited: Set[str] = set()
         active_children = [c.id for c in act.children if c.id in self.configuration]
         if getattr(act.node, "history", []):
             self.history[act.id] = active_children
@@ -1695,10 +1739,27 @@ class DocumentContext(BaseModel):
         # Cancel invocations for this state prior to onexit
         self._cancel_invocations_for_state(act)
         for cid in active_children:
-            self._exit_state(self.activations[cid])
+            child = self.activations[cid]
+            exited.update(self._exit_state(child))
         for onexit in getattr(act.node, "onexit", []):
             self._run_actions(onexit, act)
         self.configuration.discard(act.id)
+        exited.add(act.id)
+        return exited
+
+    def _snapshot_active_histories(self) -> None:
+        """Refresh shallow and deep history caches for active states."""
+
+        for state_id in list(self.configuration):
+            act = self.activations.get(state_id)
+            if not act or not getattr(act.node, "history", []):
+                continue
+            active_children = [c.id for c in act.children if c.id in self.configuration]
+            self.history[act.id] = list(active_children)
+            try:
+                self.history_deep[act.id] = self._active_leaves_under(act)
+            except Exception:
+                self.history_deep[act.id] = list(active_children)
 
     def _enter_history(self, act: ActivationRecord) -> None:
         parent = act.parent
@@ -1759,12 +1820,12 @@ class DocumentContext(BaseModel):
     def _fire_transition(
         self, source: ActivationRecord, trans: TransitionSpec
     ) -> tuple[Set[str], Set[str]]:
-        before = set(self.configuration)
-
+        self._snapshot_active_histories()
         exit_list = self._compute_exit_set(source, trans.target)
+        exited_ids: Set[str] = set()
         for act in exit_list:
             if act.id in self.configuration:
-                self._exit_state(act)
+                exited_ids.update(self._exit_state(act))
 
         # Execute transition body (executable content) in document order
         container = getattr(trans, "container", None)
@@ -1773,14 +1834,14 @@ class DocumentContext(BaseModel):
                 self._dispatch_action(kind, payload, source)
 
         enter_list = self._compute_entry_list(source, trans.target)
+        entered_ids: Set[str] = set()
         for act in enter_list:
-            if act.id not in self.configuration:
-                self._enter_target(act)
+            before_enter = set(self.configuration)
+            self._enter_target(act)
+            after_enter = set(self.configuration)
+            entered_ids.update(after_enter - before_enter)
 
-        after = set(self.configuration)
-        entered = after - before
-        exited = before - after
-        return entered, exited
+        return entered_ids, exited_ids
 
     def _depth(self, act: ActivationRecord) -> int:
         depth = 0
@@ -1823,6 +1884,14 @@ class DocumentContext(BaseModel):
                     if isinstance(target_act.node, History)
                     else target_act
                 )
+                if (
+                    isinstance(target_act.node, History)
+                    and target_act.parent is not None
+                    and source.id == target_act.parent.id
+                ):
+                    for child in target_act.parent.children:
+                        if child.id in self.configuration:
+                            exit_set[child.id] = child
                 lca = self._least_common_ancestor(source, normalized_target or self.root_activation)
                 cur = source
                 while cur and cur is not lca:
@@ -2003,6 +2072,10 @@ class DocumentContext(BaseModel):
         ctx.json_order = cls._build_order_map(raw_data, path_map, source_xml)
         ctx.data_model = root_state.local_data
         ctx._index_activations(root_state)
+        try:
+            ctx._leaf_ids = ctx.leaf_state_ids()
+        except Exception:
+            ctx._leaf_ids = set()
         ctx.configuration.add(root_state.id)
         if not defer_initial:
             ctx._enter_initial_states(root_state)
@@ -2239,7 +2312,7 @@ class DocumentContext(BaseModel):
             # states/parallels without state/parallel children are leaves
             has_child_states = bool(getattr(node, "state", [])) or bool(
                 getattr(node, "parallel", [])
-            )
+            ) or bool(getattr(node, "final", []))
             if getattr(act, "id", None) and not has_child_states:
                 leaves.append(act.id)
         return set(sorted(set(leaves), key=self._activation_order_key))
