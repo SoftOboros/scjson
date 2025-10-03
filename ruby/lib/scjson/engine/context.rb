@@ -43,6 +43,9 @@ module Scjson
         @root = root
         @states = {}
         @parent = {}
+        @tag_type = {}
+        @history_shallow = {}
+        @history_deep = {}
         index_states(@root)
         @configuration = initial_configuration
         @time = 0.0
@@ -309,7 +312,26 @@ module Scjson
           exit_set.concat(exit_chain)
           seq = []
           targets.each do |tid|
-            seq.concat(path_down_from_lca(chosen_lca, tid))
+            if @tag_type[tid] == :history
+              parent_id = @parent[tid]
+              node = @states[tid]
+              deep = (node && node['type_value'].to_s.downcase == 'deep')
+              remembered = deep ? (@history_deep[parent_id] || []) : (@history_shallow[parent_id] || [])
+              if remembered.empty?
+                # Fallback to parent's defaults
+                if deep
+                  remembered = initial_leaves_for_id(parent_id)
+                else
+                  parent = @states[parent_id]
+                  remembered = initial_child_ids_for(parent)
+                end
+              end
+              remembered.each do |rid|
+                seq.concat(path_down_from_lca(chosen_lca, rid))
+              end
+            else
+              seq.concat(path_down_from_lca(chosen_lca, tid))
+            end
           end
           entry_sequences << seq
           fired << { 'source' => source_id, 'targets' => targets, 'event' => cause, 'cond' => nil }
@@ -328,6 +350,9 @@ module Scjson
         new_config = @configuration.dup
         exit_order.each { |sid| new_config.delete(sid) }
 
+        # Record history for parents being exited based on previous configuration
+        record_history_for_exits(exit_order, @configuration)
+
         # Transition bodies
         tx_set.each do |_, tmap|
           a, d = run_actions_from_map(tmap)
@@ -345,12 +370,28 @@ module Scjson
             delta.merge!(d)
             entered << sid
           end
+          # Expand descendants when last target is a non-history composite
           target_id = seq.last
-          leaves, bundle = enter_descendants(target_id)
-          entered.concat(bundle[:entered])
-          actions.concat(bundle[:actions])
-          delta.merge!(bundle[:delta])
-          entered_leaves.concat(leaves)
+          if target_id && @tag_type[target_id] != :history
+            leaves, bundle = enter_descendants(target_id)
+            entered.concat(bundle[:entered])
+            actions.concat(bundle[:actions])
+            delta.merge!(bundle[:delta])
+            entered_leaves.concat(leaves)
+          else
+            # If history (deep): remembered leaves were appended as part of seq; if shallow: enter_descendants handled per remembered child in seq
+            # For shallow we should expand each remembered child; this happens implicitly since seq contains those child ids
+            # and we will expand below by calling enter_descendants on each non-history id in the sequence
+          end
+          # Expand descendants for any non-history ids in the sequence (covers shallow history children)
+          seq.each do |sid|
+            next if @tag_type[sid] == :history
+            leaves, bundle = enter_descendants(sid)
+            entered.concat(bundle[:entered])
+            actions.concat(bundle[:actions])
+            delta.merge!(bundle[:delta])
+            entered_leaves.concat(leaves)
+          end
         end
 
         # Merge entered leaves into configuration
@@ -456,6 +497,27 @@ module Scjson
           leaves.concat(initial_leaves_for_id(cid))
         end
         leaves
+      end
+
+      # Record history for parents of exiting states using the previous configuration
+      def record_history_for_exits(exit_order, prev_config)
+        parents = exit_order.map { |sid| @parent[sid] }.compact.uniq
+        parents.each do |pid|
+          # Deep history: all leaves under pid in prev_config
+          deep = prev_config.select { |leaf| is_ancestor?(pid, leaf) }
+          @history_deep[pid] = deep.dup
+          # Shallow history: nearest child under pid for each leaf
+          shallow = []
+          prev_config.each do |leaf|
+            next unless is_ancestor?(pid, leaf)
+            chain = ancestors(leaf)
+            idx = chain.index(pid)
+            next unless idx && idx > 0
+            near = chain[idx - 1]
+            shallow << near if near
+          end
+          @history_shallow[pid] = shallow.uniq
+        end
       end
 
       # Lowest common ancestor (by id), returns nil if only the root matches
@@ -820,26 +882,55 @@ module Scjson
         str.split(/\s+/)
       end
 
-      def index_states(node, parent_id = nil)
+      def index_states(node, parent_id = nil, tag = nil)
         return unless node.is_a?(Hash)
         # Record this node if it looks like a state (has an id)
         sid = node['id']
         if sid
           @states[sid] = node
           @parent[sid] = parent_id if parent_id
+          @tag_type[sid] = tag || :state
         end
         # Recurse into known containers
-        wrap_list(node['state']).each { |child| index_states(child, sid) }
-        wrap_list(node['parallel']).each { |child| index_states(child, sid) }
+        wrap_list(node['state']).each { |child| index_states(child, sid, :state) }
+        wrap_list(node['parallel']).each { |child| index_states(child, sid, :parallel) }
+        wrap_list(node['history']).each { |child| index_states(child, sid, :history) }
+        wrap_list(node['final']).each { |child| index_states(child, sid, :final) }
       end
 
       def initial_configuration
         # Prefer explicit initial on root
         tokens = wrap_list(@root['initial']).map(&:to_s)
-        return tokens unless tokens.empty?
-        # Else first child state id
+        leaves = []
+        unless tokens.empty?
+          tokens.each do |tid|
+            leaves.concat(initial_leaves_for_token(tid))
+          end
+          return leaves.uniq
+        end
+        # Else first child state id -> expand to leaves
         first_state = wrap_list(@root['state']).find { |s| s.is_a?(Hash) && s['id'] }
-        first_state ? [first_state['id'].to_s] : []
+        if first_state && first_state['id']
+          return initial_leaves_for_token(first_state['id'].to_s)
+        end
+        []
+      end
+
+      def initial_leaves_for_token(token)
+        # History tokens fallback to parent's defaults
+        if @tag_type[token] == :history
+          parent_id = @parent[token]
+          return [] unless parent_id
+          node = @states[token]
+          deep = (node && node['type_value'].to_s.downcase == 'deep')
+          if deep
+            return initial_leaves_for_id(parent_id)
+          else
+            parent = @states[parent_id]
+            return initial_child_ids_for(parent).flat_map { |cid| initial_leaves_for_id(cid) }
+          end
+        end
+        initial_leaves_for_id(token)
       end
     end
   end
