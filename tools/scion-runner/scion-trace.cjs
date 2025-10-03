@@ -18,7 +18,51 @@ try {
 }
 
 const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
-const scxmlBundle = require("scxml/dist/scxml.js");
+function loadScxmlBundle() {
+  // Attempt normal resolution first
+  try {
+    return require("scxml/dist/scxml.js");
+  } catch (e) {
+    // Fallback: extract from vendored tarball on the fly
+    const zlib = require("zlib");
+    const vendorTgz = path.resolve(__dirname, "vendor", "scxml-5.0.4.tgz");
+    const outJs = path.resolve(__dirname, "vendor", "scxml.dist.js");
+    try {
+      if (!fs.existsSync(outJs)) {
+        const gzData = fs.readFileSync(vendorTgz);
+        const tarData = zlib.gunzipSync(gzData);
+        // Tar format: 512-byte headers; filename at 0..99, size at 124..135 (octal)
+        let offset = 0;
+        const BLOCK = 512;
+        const target = "package/dist/scxml.js";
+        while (offset + BLOCK <= tarData.length) {
+          const header = tarData.subarray(offset, offset + BLOCK);
+          const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
+          if (!name) break; // two consecutive zero blocks indicate end of archive
+          const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
+          const size = parseInt(sizeOct || "0", 8);
+          offset += BLOCK;
+          if (name === target) {
+            const fileBuf = tarData.subarray(offset, offset + size);
+            fs.writeFileSync(outJs, fileBuf);
+            break;
+          }
+          // Skip file content (rounded up to 512)
+          const pad = ((size + BLOCK - 1) & ~(BLOCK - 1));
+          offset += pad;
+        }
+      }
+      if (fs.existsSync(outJs)) {
+        return require(outJs);
+      }
+    } catch (ex) {
+      // fall through
+    }
+    throw e;
+  }
+}
+
+const scxmlBundle = loadScxmlBundle();
 const { documentStringToModel, core } = scxmlBundle;
 const DEFAULT_INVOKERS = Object.assign({}, core.InterpreterScriptingContext.invokers || {});
 
