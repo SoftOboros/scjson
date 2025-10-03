@@ -547,15 +547,19 @@ module Scjson
             rec[:ctx] = child_ctx if child_ctx
             @invocations[iid] = rec
             @invocations_by_state[sid] << iid unless @invocations_by_state[sid].include?(iid)
-            # For now, treat as immediate completion after child init/quiescence
+            # For now, only complete immediately when child is absent or already completed
             if child_ctx
               0.upto(100) do
                 tx0 = child_ctx.select_transitions_for_event(nil)
                 break if tx0.empty?
                 child_ctx.apply_transition_set(tx0, cause: nil)
               end
+              if child_ctx.machine_completed?
+                @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => iid } })
+              end
+            else
+              @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => iid } })
             end
-            @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => iid } })
           end
         end
       end
@@ -609,6 +613,15 @@ module Scjson
           ctx.schedule_internal_event(name, data, delay)
         else
           ctx.trace_step(name: name, data: data)
+        end
+        # Drive child to quiescence and check completion
+        0.upto(100) do
+          tx0 = ctx.select_transitions_for_event(nil)
+          break if tx0.empty?
+          ctx.apply_transition_set(tx0, cause: nil)
+        end
+        if ctx.machine_completed?
+          @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => invoke_id } })
         end
         true
       end
@@ -1027,6 +1040,26 @@ module Scjson
         return if seconds.nil? || seconds.to_f <= 0
         @time += seconds.to_f
         flush_timers
+        # Propagate time to child contexts
+        @invocations.each_value do |rec|
+          ctx = rec[:ctx]
+          next unless ctx
+          begin
+            ctx.advance_time(seconds.to_f)
+            # Drain child internal events and eventless to quiescence
+            ctx.trace_step(name: '__time__', data: nil)
+            0.upto(100) do
+              tx0 = ctx.select_transitions_for_event(nil)
+              break if tx0.empty?
+              ctx.apply_transition_set(tx0, cause: nil)
+            end
+            if ctx.machine_completed?
+              @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => rec[:node]['id'] || rec[:state] } })
+            end
+          rescue StandardError
+            next
+          end
+        end
       end
 
       def flush_timers
@@ -1053,6 +1086,13 @@ module Scjson
         return [] if str.nil?
         return [] unless str.is_a?(String)
         str.split(/\s+/)
+      end
+
+      # Completed when a root-level <final> is active
+      def machine_completed?
+        @configuration.any? do |sid|
+          @tag_type[sid] == :final && (@parent[sid].nil?)
+        end
       end
 
       # ---- Completion (done.state.*) ----
