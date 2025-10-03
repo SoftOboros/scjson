@@ -5,8 +5,17 @@
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
-const { JSDOM } = require("jsdom");
-require("regenerator-runtime/runtime");
+let JSDOM = null;
+try {
+  ({ JSDOM } = require("jsdom"));
+} catch (e) {
+  // Optional: jsdom not installed; we'll use a minimal stub DOM
+}
+try {
+  require("regenerator-runtime/runtime");
+} catch (e) {
+  // Optional: when not present, Node's native async should suffice
+}
 
 const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
 const scxmlBundle = require("scxml/dist/scxml.js");
@@ -207,11 +216,25 @@ function readEvents(filePath) {
 }
 
 function makeDom(url) {
-  const dom = new JSDOM("", { url });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.location = dom.window.location;
-  return dom;
+  if (JSDOM) {
+    const dom = new JSDOM("", { url });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.location = dom.window.location;
+    return dom;
+  }
+  // Fallback stub when jsdom is unavailable
+  const stub = {
+    window: {
+      close() {},
+      document: undefined,
+      location: { href: url },
+    },
+  };
+  global.window = stub.window;
+  global.document = stub.window.document;
+  global.location = stub.window.location;
+  return stub;
 }
 
 function createContext(event) {
