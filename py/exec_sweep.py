@@ -165,7 +165,7 @@ def main() -> None:
     if opts.reference:
         base_cmd.extend(["--reference", opts.reference])
     else:
-        # Default to SCION Node reference when available; otherwise fall back to Python engine
+        # Default to SCION (https://www.npmjs.com/package/scion) Node reference when available; otherwise fall back to Python engine
         scion = (ROOT / "tools" / "scion-runner" / "scion-trace.cjs").resolve()
         if scion.exists():
             base_cmd.extend(["--reference", f"node {scion}"])

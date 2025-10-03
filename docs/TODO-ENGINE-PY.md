@@ -25,7 +25,7 @@ This checklist tracks work to take the current Python runtime (DocumentContext +
 - [ ] Provide comparison against Apache Commons SCXML 0.x as historical reference when needed (optional, for historical parity).
 
 Decision notes (invoke/finalize ordering)
-- Finalize ordering across multiple invocations completing in the same step is treated as implementation-defined in our engine by default. We defer to SCION’s behavior where observable and stable, but tests are tolerant (presence of both finalize-emitted events) to avoid over-constraining ordering across parallel regions. Once SCION’s behavior is confirmed stable for these charts, we can lock a deterministic order (e.g., document/creation order) and tighten tests accordingly.
+- Finalize ordering across multiple invocations completing in the same step is treated as implementation-defined in our engine by default. We defer to [SCION](https://www.npmjs.com/package/scion)’s behavior where observable and stable, but tests are tolerant (presence of both finalize-emitted events) to avoid over-constraining ordering across parallel regions. Once [SCION](https://www.npmjs.com/package/scion)’s behavior is confirmed stable for these charts, we can lock a deterministic order (e.g., document/creation order) and tighten tests accordingly.
 
 ## Roadmap (Iterations)
 
@@ -156,8 +156,8 @@ Comparison Tooling
 
 New work items (updated plan)
 - [ ] Invoke/finalize
-  - [ ] Investigate SCION finalize ordering across multiple simultaneous completes; if stable, adopt the same deterministic policy (e.g., document order) and tighten ordering tests; otherwise keep tolerant presence checks.
-  - [ ] Add CI knob to run SCION-backed comparisons on a subset of invoke/finalize charts when Node is available.
+  - [ ] Investigate [SCION](https://www.npmjs.com/package/scion) finalize ordering across multiple simultaneous completes; if stable, adopt the same deterministic policy (e.g., document order) and tighten ordering tests; otherwise keep tolerant presence checks.
+  - [ ] Add CI knob to run [SCION](https://www.npmjs.com/package/scion)-backed comparisons on a subset of invoke/finalize charts when Node is available.
 - [ ] Vector generation (Phase 3)
   - [ ] Delta-preserving minimization focused on unique firedTransitions and enteredStates.
   - [ ] Heuristics for disjunctions and nested structures; expand negative payload construction.

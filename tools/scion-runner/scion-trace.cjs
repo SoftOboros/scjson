@@ -8,6 +8,7 @@ const { pathToFileURL } = require("url");
 const { JSDOM } = require("jsdom");
 require("regenerator-runtime/runtime");
 
+const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
 const scxmlBundle = require("scxml/dist/scxml.js");
 const { documentStringToModel, core } = scxmlBundle;
 
@@ -199,14 +200,14 @@ function emitTrace(ctx, step, sink) {
 
   documentStringToModel(url, xml, (err, modelFactory) => {
     if (err) {
-      console.error("SCION compile error", err);
+      console.error(`SCION (${SCION_NPM_URL}) compile error`, err);
       process.exit(1);
     }
 
     modelFactory.prepare(
       (prepErr, prepared) => {
         if (prepErr) {
-          console.error("SCION prepare error", prepErr);
+          console.error(`SCION (${SCION_NPM_URL}) prepare error`, prepErr);
           process.exit(1);
         }
 

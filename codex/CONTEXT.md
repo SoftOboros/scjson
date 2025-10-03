@@ -113,7 +113,7 @@ Invoke
 - Wrapper: added `py/py/exec_compare.py` for tests invoking that path.
 - uber_test: parameterized per-chart tests for faster feedback; `python py/uber_test.py --python-smoke` prints per-chart progress and status.
 - Docs: `docs/ENGINE-PY.md` updated with control tokens, vector time-advance injection, and invoke/finalize semantics.
- - Engine ordering: added explicit `ordering` policy with `scion` mode. In `scion` mode child→parent emissions enqueue normally while `done.invoke` is pushed to the front (generic before id‑specific) to align with SCION microstep behavior.
+- Engine ordering: added explicit `ordering` policy with `scion` mode. In `scion` mode child→parent emissions enqueue normally while `done.invoke` is pushed to the front (generic before id‑specific) to align with [SCION](https://www.npmjs.com/package/scion) microstep behavior.
 
 ## Next Steps (Suggested)
 - Optional: mark parameterized uber tests `@pytest.mark.slow` to exclude from default runs; prefer targeted `-k` filters for iteration.

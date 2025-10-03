@@ -5,7 +5,7 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-CI-friendly sweep test over a small corpus, defaulting to SCION if present or the Python engine otherwise.
+CI-friendly sweep test over a small corpus, defaulting to [SCION](https://www.npmjs.com/package/scion) if present or the Python engine otherwise.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def test_exec_sweep_small_corpus(tmp_path: Path) -> None:
         "--generate-vectors",
         "--workdir",
         str(workdir),
-        # Reference omitted on purpose: uses SCION if present or Python fallback
+        # Reference omitted on purpose: uses SCION (https://www.npmjs.com/package/scion) if present or Python fallback
     ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     assert result.returncode in (0, 1), f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"

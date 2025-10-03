@@ -66,7 +66,7 @@ Each directory is designed to be independently usable as a library or CLI tool.
 | JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus |
 | Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Matches Python output on the tutorial corpus |
 | Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
-| Java      | ✅ Parity | [java](./java/README.md) | Uses SCION-backed runner; matches Python output |
+| Java      | ✅ Parity | [java](./java/README.md) | Uses [SCION](https://www.npmjs.com/package/scion)-backed runner; matches Python output |
 | Go        | ✅ Parity | [go](./go/README.md) | Matches Python output on the tutorial corpus |
 | Swift     | ✅ Parity | [swift](./swift/README.md) | Matches Python output on the tutorial corpus |
 | C#        | ⚠️ Beta | [csharp](./csharp/README.md) | Functional CLI; parity work in progress |

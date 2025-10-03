@@ -13,13 +13,13 @@ This document provides a practical, in-depth reference for the Python `scjson` p
 Quick Start Summary
 - CLI overview: scjson CLI supports SCXML↔SCJSON conversion, schema export, engine tracing and verification. See: [CLI](#cli)
 - Execution engine: single-file runtime with safe expression evaluation, history/parallel semantics, timers, and invocation. See: [Execution Engine](#execution-engine)
-- Tracing and comparison: deterministic JSONL traces, normalization, and SCION reference comparison. See: [Trace Compare](#trace-compare)
+- Tracing and comparison: deterministic JSONL traces, normalization, and [SCION](https://www.npmjs.com/package/scion) reference comparison. See: [Trace Compare](#trace-compare)
 - Vector generation and sweep: generate event vectors, measure coverage, and sweep corpora. See: [Vectors & Sweep](#vectors--sweep)
 - Packaging: console scripts and modules installed by the Python package. See: [Packaging & Scripts](#packaging--scripts)
 
 Related docs
 - docs/ENGINE-PY.md — user‑facing engine guide and CLI usage
-- docs/COMPATIBILITY.md — cross-language compatibility and SCION parity notes
+- docs/COMPATIBILITY.md — cross-language compatibility and [SCION](https://www.npmjs.com/package/scion) parity notes
 - codex/CONTEXT.md — current session context and repro commands
 - codex/CONTEXT-EXPANDED.md — expanded context snapshot
 
@@ -56,7 +56,7 @@ Core package modules (directory: `py/scjson`):
 - `jinja_gen.py` + templates — code/schema generation helpers for CLI.
 
 Top-level tools (directory: `py/`):
-- `exec_compare.py` — run a chart with Python engine and compare vs a reference (SCION by default); JSONL diff with normalization.
+- `exec_compare.py` — run a chart with Python engine and compare vs a reference ([SCION](https://www.npmjs.com/package/scion) by default); JSONL diff with normalization.
 - `exec_sweep.py` — sweep a directory of charts; optional vector generation; aggregate results.
 - `vector_gen.py` — generate event vectors and coverage sidecars.
 - `vector_lib/` — analyzer/search/coverage helpers for vector generation.
@@ -79,7 +79,7 @@ Key concepts
 - Ordering modes: `ctx.ordering_mode` controls child→parent emission priority and `done.invoke` enqueuing.
   - tolerant (default): child emissions push-front; `done.invoke` pushes front only when no child outputs precede it.
   - strict: child emissions and `done.invoke` enqueue at tail.
-  - scion: child emissions enqueue at tail; `done.invoke` is push-front with generic before id-specific, matching SCION’s observable microstep ordering.
+  - scion: child emissions enqueue at tail; `done.invoke` is push-front with generic before id-specific, matching [SCION](https://www.npmjs.com/package/scion)’s observable microstep ordering.
 
 Notable helpers
 - Safe expressions: `_evaluate_expr()` delegates to `safe_eval` unless `allow_unsafe_eval=True`.
@@ -104,7 +104,7 @@ File: `py/scjson/SCXMLDocumentHandler.py`
 
 - Parsing/serialization: Uses xsdata’s `XmlParser`/`XmlSerializer` and optional `xmlschema` validation.
 - Strict vs lax: `fail_on_unknown_properties=True` enforces strict XML parsing; set `False` to tolerate unknown elements in non-canonical charts.
-- JSON normalization: decimals/enums normalized; empty containers stripped by default; text/nested markup in `<content>` preserved into a SCION-compatible JSON structure.
+- JSON normalization: decimals/enums normalized; empty containers stripped by default; text/nested markup in `<content>` preserved into a [SCION](https://www.npmjs.com/package/scion)-compatible JSON structure.
 
 ---
 
@@ -152,7 +152,7 @@ File: `py/scjson/invoke.py`
 
 File: `py/exec_compare.py`
 
-- Purpose: run Python engine vs reference (SCION Node by default) and diff JSONL traces.
+- Purpose: run Python engine vs reference ([SCION](https://www.npmjs.com/package/scion) Node by default) and diff JSONL traces.
 - Normalization: leaf-only filtering; step-0 noise stripping (`datamodelDelta`, `firedTransitions`), optional stripping of step-0 entered/exited; sorted `datamodelDelta` keys.
 - Reference: auto-resolves to `tools/scion-runner/scion-trace.cjs` when available (or override `SCJSON_REF_ENGINE_CMD`).
 - Vectors: can generate vectors on the fly (`--generate-vectors`) and adopt recommended `advanceTime` from vector meta.
@@ -201,7 +201,7 @@ File: `py/pyproject.toml`
 
 - External processors: External `<send>` targets (other than `#_parent`, `_internal`) are not executed; engine emits `error.communication` and skips delivery.
 - Step-0 visibility: Engines differ on initial transitions; normalization mitigates diffs.
-- Invoke ordering: `scion` mode aligns `done.invoke` enqueuing with SCION; `tolerant/strict` modes provide flexible alternatives.
+- Invoke ordering: `scion` mode aligns `done.invoke` enqueuing with [SCION](https://www.npmjs.com/package/scion); `tolerant/strict` modes provide flexible alternatives.
 
 ---
 
@@ -222,7 +222,7 @@ Each step produced by `trace_step` or `engine-trace` includes:
 - Activation: A runtime record of an entered SCXML node (state/parallel/final/history).
 - Configuration: The set of currently active activation IDs.
 - Macrostep: One `microstep()` plus draining of eventless transitions to quiescence.
-- SCION: Reference SCXML engine used for behavior comparison.
+- [SCION](https://www.npmjs.com/package/scion): Reference SCXML engine used for behavior comparison.
 
 ---
 

@@ -6,7 +6,7 @@ This guide explains how to use the Python execution engine and the companion too
 
 Looking for deeper implementation details? See the architecture reference at `py/ENGINE-PY-DETAILS.md`.
 
-For cross-language parity and SCION comparison details, see `docs/COMPATIBILITY.md`.
+For cross-language parity and [SCION](https://www.npmjs.com/package/scion) comparison details, see `docs/COMPATIBILITY.md`.
 
 ## Navigation
 
@@ -23,7 +23,7 @@ For cross-language parity and SCION comparison details, see `docs/COMPATIBILITY.
 The Python engine executes SCXML/SCJSON statecharts and can emit deterministic JSONL traces of execution. A set of CLI utilities help you:
 
 - Run the Python engine and collect traces
-- Compare Python traces against a reference engine (SCION/Node)
+- Compare Python traces against a reference engine ([SCION](https://www.npmjs.com/package/scion)/Node)
 - Generate input event vectors to improve coverage
 - Sweep folders of charts, auto‑generate vectors, and aggregate coverage
 
@@ -144,7 +144,7 @@ Mid-sequence time advance injection
   generator now injects control tokens (`{"advance_time": N}`) between external
   stimuli in `<name>.events.jsonl` so those timers are released before the next
   event. The `engine-trace` CLI understands these tokens and advances the
-  interpreter’s mock clock without emitting a trace step; the SCION reference
+  interpreter’s mock clock without emitting a trace step; the [SCION](https://www.npmjs.com/package/scion) reference
   runner ignores them (it only looks at `event`/`name`).
 
 This behavior improves cross-engine parity when the reference does not model
@@ -153,7 +153,7 @@ time, while keeping the event stream format backward compatible.
 ## Invoke & Finalize Semantics
 
 The engine supports a practical subset of `<invoke>` to unblock testing and
-preserves key SCION-compatible behaviors:
+preserves key [SCION](https://www.npmjs.com/package/scion)-compatible behaviors:
 
 - Start timing: Invocations declared on states are started at the end of the
   macrostep in which the state is entered and remains active (entered-not-exited).
@@ -185,9 +185,9 @@ These flags appear on `engine-trace`, `exec_compare`, and `exec_sweep` to keep o
 
 Step‑0 normalization: both Python and reference traces get `datamodelDelta` and `firedTransitions` cleared at step 0. Leaf‑only state filtering further reduces step‑0 variance.
 
-## Reference Engine (SCION)
+## Reference Engine ([SCION](https://www.npmjs.com/package/scion))
 
-The default reference is the SCION Node implementation; a helper script is included. `exec_compare` and `exec_sweep` automatically use it when present.
+The default reference is the [SCION](https://www.npmjs.com/package/scion) Node implementation; a helper script is included. `exec_compare` and `exec_sweep` automatically use it when present.
 
 Setup once:
 
@@ -202,7 +202,7 @@ Point `exec_compare`/`exec_sweep` at it explicitly with:
 --reference "node tools/scion-runner/scion-trace.cjs"
 ```
 
-Alternatively set `SCJSON_REF_ENGINE_CMD` in your environment. When other engines are added, they should default to comparing back to SCION as the reference.
+Alternatively set `SCJSON_REF_ENGINE_CMD` in your environment. When other engines are added, they should default to comparing back to [SCION](https://www.npmjs.com/package/scion) as the reference.
 
 ## Examples
 

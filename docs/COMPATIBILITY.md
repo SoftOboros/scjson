@@ -27,7 +27,7 @@ Status tiers:
 | JavaScript | Parity | Passes tutorial corpus after normalisation. |
 | Ruby | Parity | Passes tutorial corpus after normalisation. |
 | Rust | Parity | Passes tutorial corpus after normalisation. |
-| Java | Parity | Uses the SCION reference runner; passes tutorial corpus after normalisation. |
+| Java | Parity | Uses the [SCION](https://www.npmjs.com/package/scion) reference runner; passes tutorial corpus after normalisation. |
 | Go | Beta | CLI stabilised; parity audit in progress. |
 | Swift | Beta | CLI stabilised; parity audit in progress. |
 | C# | Beta | CLI stabilised; parity audit in progress. |
@@ -48,8 +48,8 @@ harness prints a summary of mismatching files and writes detailed output under
 
 ## Behavioural Reference
 
-Operational behaviour (event execution traces) is validated against SCION. The
-Python documentation engine and the Java runner proxy to SCION’s CLI, ensuring
+Operational behaviour (event execution traces) is validated against [SCION](https://www.npmjs.com/package/scion). The
+Python documentation engine and the Java runner proxy to [SCION](https://www.npmjs.com/package/scion)’s CLI, ensuring
 consistent semantics for the canonical examples. See `docs/TODO-ENGINE-PY.md`
 for outstanding integration work.
 
@@ -57,16 +57,16 @@ See also
 - User guide (Python engine): `docs/ENGINE-PY.md`
 - Architecture & in-depth reference (Python): `py/ENGINE-PY-DETAILS.md`
 
-## Python Engine vs SCION — Feature Support
+## Python Engine vs [SCION](https://www.npmjs.com/package/scion) — Feature Support
 
-The table below summarizes the current Python engine feature coverage relative to the SCION (Node) reference and highlights any nuanced differences that matter for compatibility.
+The table below summarizes the current Python engine feature coverage relative to the [SCION](https://www.npmjs.com/package/scion) (Node) reference and highlights any nuanced differences that matter for compatibility.
 
-| Area | Python Engine | SCION (Node) | Notes / Compatibility |
+| Area | Python Engine | [SCION](https://www.npmjs.com/package/scion) (Node) | Notes / Compatibility |
 |------|---------------|--------------|-----------------------|
 | Execution algorithm | Macro/microstep with quiescence | Same | Equivalent semantics |
 | Transition selection | Document order; multi-token, `*`, `error.*` | Same | Equivalent |
 | Condition evaluation | Sandboxed Python datamodel (`safe_eval`) | JS datamodel | Equivalent for tests; non-boolean cond → `error.execution` in Python |
-| Executable content | assign, log, raise, if/elseif/else, foreach, send, cancel | Same | Equivalent; `script` is a warning/no-op in Python (SCION executes JS) |
+| Executable content | assign, log, raise, if/elseif/else, foreach, send, cancel | Same | Equivalent; `script` is a warning/no-op in Python ([SCION](https://www.npmjs.com/package/scion) executes JS) |
 | `script` blocks | No-op (warn) | Executes JS | Expected difference; tests avoid requiring `script` side effects |
 | History | Shallow + deep | Same | Equivalent; deep restores exact descendant leaves |
 | Parallel completion | Region done → parent done | Same | Equivalent ordering |
@@ -78,7 +78,7 @@ The table below summarizes the current Python engine feature coverage relative t
 | Invoke types | `mock:immediate`, `mock:record`, `mock:deferred`, `scxml`/`scjson` child | SCXML child, external processors | Equivalent for child machines; external processors out of scope |
 | Parent↔child I/O | `#_parent`, `#_child`/`#_invokedChild`, `#_<id>` | Same | Equivalent |
 | Finalize semantics | Runs in invoking state; `_event` = `{name,data,invokeid}` | Same | Equivalent |
-| Invoke ordering | Modes: `tolerant` (default), `strict`, `scion` | N/A | `scion` mode aligns `done.invoke` ordering with SCION (generic before id-specific, push-front) |
+| Invoke ordering | Modes: `tolerant` (default), `strict`, `scion` | N/A | `scion` mode aligns `done.invoke` ordering with [SCION](https://www.npmjs.com/package/scion) (generic before id-specific, push-front) |
 | Step-0 normalization | Compare tooling strips step-0 noise | N/A | Reduces diffs due to initial transitions visibility |
 
 ---
@@ -93,7 +93,7 @@ Back to
   - [Status Tiers](#status-tiers)
   - [Test Harness](#test-harness)
   - [Behavioural Reference](#behavioural-reference)
-  - [Python Engine vs SCION — Feature Support](#python-engine-vs-scion--feature-support)
+  - [Python Engine vs SCION — Feature Support](#python-engine-vs-scion--feature-support) ([SCION](https://www.npmjs.com/package/scion))
 - Python Engine User Guide: `docs/ENGINE-PY.md`
 - Python Architecture & Reference: `py/ENGINE-PY-DETAILS.md`
 - Project Overview: `README.md`

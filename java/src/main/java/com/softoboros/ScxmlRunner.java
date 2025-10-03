@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Runner that proxies execution to the SCION Node.js CLI.
+ * Runner that proxies execution to the <a href="https://www.npmjs.com/package/scion">SCION</a> Node.js CLI.
  */
 public final class ScxmlRunner {
 
@@ -100,7 +100,7 @@ public final class ScxmlRunner {
     public static ExecutionTrace run(File scxmlFile, List<Event> inputs) throws Exception {
         Path script = locateScionScript();
         if (!Files.exists(script)) {
-            throw new IllegalStateException("SCION runner script not found: " + script);
+            throw new IllegalStateException("SCION (https://www.npmjs.com/package/scion) runner script not found: " + script);
         }
 
         Path traceFile = Files.createTempFile("scjson-trace", ".jsonl");
@@ -127,10 +127,10 @@ public final class ScxmlRunner {
             boolean finished = process.waitFor(PROCESS_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                throw new IOException("SCION runner timed out");
+                throw new IOException("SCION (https://www.npmjs.com/package/scion) runner timed out");
             }
             if (process.exitValue() != 0) {
-                throw new IOException("SCION runner exited with code " + process.exitValue());
+                throw new IOException("SCION (https://www.npmjs.com/package/scion) runner exited with code " + process.exitValue());
             }
             return parseTrace(traceFile);
         } finally {
