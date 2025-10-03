@@ -40,8 +40,9 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Integrate with `py/exec_compare.py` as a “secondary” engine under test (use `--secondary "ruby/bin/scjson engine-trace"`).
 
 2) Multi-document & Invoke/Finalize
-- [ ] Implement `<invoke>` lifecycle, `<finalize>`, `done.invoke`/`done.invoke.<id>` events.
+- [x] Implement `<invoke>` lifecycle, `<finalize>`, `done.invoke`/`done.invoke.<id>` events (basic immediate and child-complete detection).
 - [ ] Support child machines (`scxml`/`scjson` inline and file: URIs); `#_parent` and `#_child`/`#_<id>` targets.
+- [x] Support child machines (inline and `src` files); `#_parent`, `#_child`/`#_invokedChild`, and `#_<id>` targets; `autoforward`.
 - [x] Parallel completion (basic), history (shallow/deep) targets, and final states semantics; enqueue `done.state.<id>` events.
 - [ ] Error handling and ordering consistent with SCION; adopt Python’s normalization knobs where helpful.
 

@@ -201,6 +201,16 @@ module Scjson
         value.is_a?(Array) ? value : [value]
       end
 
+      # Seed or update datamodel entries in this context
+      def set_initial_data(pairs)
+        return unless pairs.is_a?(Hash)
+        @data ||= {}
+        pairs.each do |k, v|
+          next if k.nil?
+          @data[k.to_s] = v
+        end
+      end
+
       # Find the first enabled transition in document order matching the event name.
       def find_enabled_transition_for_event(name)
         @configuration.each do |sid|
@@ -661,7 +671,17 @@ module Scjson
                  end
           if root
             begin
-              return DocumentContext.new(root, parent_link: self, child_invoke_id: iid, base_dir: @base_dir)
+              child = DocumentContext.new(root, parent_link: self, child_invoke_id: iid, base_dir: @base_dir)
+              # Map <param> into child's datamodel
+              initial = {}
+              wrap_list(inv['param']).each do |pm|
+                next unless pm.is_a?(Hash)
+                nm = pm['name']
+                next unless nm
+                initial[nm.to_s] = eval_expr(pm['expr'])
+              end
+              child.set_initial_data(initial) unless initial.empty?
+              return child
             rescue StandardError
               return nil
             end
@@ -677,7 +697,17 @@ module Scjson
           begin
             if File.file?(path)
               is_xml = File.extname(path).downcase == '.scxml'
-              return DocumentContext.from_file(path, xml: is_xml, parent_link: self, child_invoke_id: iid)
+              child = DocumentContext.from_file(path, xml: is_xml, parent_link: self, child_invoke_id: iid)
+              # Map <param> into child's datamodel
+              initial = {}
+              wrap_list(inv['param']).each do |pm|
+                next unless pm.is_a?(Hash)
+                nm = pm['name']
+                next unless nm
+                initial[nm.to_s] = eval_expr(pm['expr'])
+              end
+              child.set_initial_data(initial) unless initial.empty?
+              return child
             end
           rescue StandardError
             return nil
