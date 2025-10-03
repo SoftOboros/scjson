@@ -550,16 +550,17 @@ module Scjson
       end
 
       def initial_child_ids_for(node)
-        # parallel: initial for each region
-        if node.key?('parallel')
-          ids = []
-          wrap_list(node['parallel']).each do |p|
-            wrap_list(p['state']).each do |s|
+        # parallel node: enter initial leaf for each region (its immediate states)
+        if node.is_a?(Hash)
+          node_id = node['id']
+          if node.key?('parallel') || (node_id && @tag_type[node_id] == :parallel)
+            ids = []
+            wrap_list(node['state']).each do |s|
               sid = s['id']
               ids.concat(initial_leaves_for_id(sid.to_s)) if sid
             end
+            return ids.uniq
           end
-          return ids.uniq
         end
         # state: choose initial children or first
         if node.key?('state')
