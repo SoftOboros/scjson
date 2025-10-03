@@ -29,20 +29,28 @@ module Scjson
       # @param input_path [String] Path to SCXML or SCJSON document
       # @param xml [Boolean] Treat the input as SCXML when true
       # @return [DocumentContext]
-      def self.from_file(input_path, xml: false)
+      def self.from_file(input_path, xml: false, parent_link: nil, child_invoke_id: nil)
         data = File.read(input_path)
         json = xml ? Scjson.xml_to_json(data) : data
-        new(JSON.parse(json))
+        new(
+          JSON.parse(json),
+          parent_link: parent_link,
+          child_invoke_id: child_invoke_id,
+          base_dir: File.dirname(File.expand_path(input_path))
+        )
       end
 
       ##
       # Construct a context from a canonical scjson object.
       #
       # @param root [Hash] Canonical scjson root map
-      def initialize(root)
+      def initialize(root, parent_link: nil, child_invoke_id: nil, base_dir: nil)
         @root = root
         @states = {}
         @parent = {}
+        @parent_link = parent_link
+        @child_invoke_id = child_invoke_id
+        @base_dir = base_dir
         @tag_type = {}
         @history_shallow = {}
         @history_deep = {}
@@ -533,9 +541,20 @@ module Scjson
               @invoke_seq += 1
               iid = "i#{@invoke_seq}"
             end
-            @invocations[iid] = { state: sid, node: inv, status: 'active' }
+            rec = { state: sid, node: inv, status: 'active' }
+            # Try to build a child context for inline content or src
+            child_ctx = build_child_context(inv, iid)
+            rec[:ctx] = child_ctx if child_ctx
+            @invocations[iid] = rec
             @invocations_by_state[sid] << iid unless @invocations_by_state[sid].include?(iid)
-            # For now, treat all invocations as immediate-complete
+            # For now, treat as immediate completion after child init/quiescence
+            if child_ctx
+              0.upto(100) do
+                tx0 = child_ctx.select_transitions_for_event(nil)
+                break if tx0.empty?
+                child_ctx.apply_transition_set(tx0, cause: nil)
+              end
+            end
             @internal_queue << ({ 'name' => '__invoke_complete', 'data' => { 'invokeid' => iid } })
           end
         end
@@ -578,6 +597,64 @@ module Scjson
           delta.merge!(d)
         end
         [actions, delta]
+      end
+
+      # Route a send to a specific child invocation by id
+      def route_to_child(invoke_id, name, data, delay)
+        rec = @invocations[invoke_id]
+        return false unless rec
+        ctx = rec[:ctx]
+        return false unless ctx
+        if delay && delay > 0
+          ctx.schedule_internal_event(name, data, delay)
+        else
+          ctx.trace_step(name: name, data: data)
+        end
+        true
+      end
+
+      # Parent accepts events from a child context
+      def enqueue_from_child(name, data, invoke_id)
+        @internal_queue << ({ 'name' => name.to_s, 'data' => data, 'invokeid' => invoke_id })
+      end
+
+      # Build a child context from an <invoke> map if inline content or src is present
+      def build_child_context(inv, iid)
+        # Inline content: looks like scjson root
+        content = inv['content']
+        if content
+          root = if content.is_a?(Hash)
+                   content
+                 elsif content.is_a?(Array)
+                   content.find { |x| x.is_a?(Hash) && (x.key?('state') || x.key?('parallel') || x.key?('final')) }
+                 else
+                   nil
+                 end
+          if root
+            begin
+              return DocumentContext.new(root, parent_link: self, child_invoke_id: iid, base_dir: @base_dir)
+            rescue StandardError
+              return nil
+            end
+          end
+        end
+        # External src file reference
+        src = inv['src']
+        if src && src.is_a?(String)
+          path = src
+          if @base_dir && !(path.start_with?('/') || path =~ /^[A-Za-z]:\\/)
+            path = File.expand_path(File.join(@base_dir, path))
+          end
+          begin
+            if File.file?(path)
+              is_xml = File.extname(path).downcase == '.scxml'
+              return DocumentContext.from_file(path, xml: is_xml, parent_link: self, child_invoke_id: iid)
+            end
+          rescue StandardError
+            return nil
+          end
+        end
+        nil
       end
 
       # Record history for parents of exiting states using the previous configuration
@@ -725,6 +802,17 @@ module Scjson
           if ev_name
             if target.nil? || target == '#_internal' || target == 'internal'
               schedule_internal_event(ev_name.to_s, data_payload, delay)
+            elsif target == '#_parent'
+              if @parent_link
+                @parent_link.enqueue_from_child(ev_name.to_s, data_payload, @child_invoke_id)
+              else
+                schedule_internal_event('error.communication', { 'detail' => 'no parent for #_parent', 'event' => ev_name.to_s }, 0.0)
+              end
+            elsif target.to_s.start_with?('#_')
+              iid = target.to_s.sub(/^#_/, '')
+              unless route_to_child(iid, ev_name.to_s, data_payload, delay)
+                schedule_internal_event('error.communication', { 'detail' => 'unknown child', 'target' => target, 'event' => ev_name.to_s }, 0.0)
+              end
             else
               # unsupported external targets -> error.communication
               schedule_internal_event('error.communication', { 'detail' => 'unsupported target', 'target' => target, 'event' => ev_name.to_s }, 0.0)
