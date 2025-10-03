@@ -27,7 +27,9 @@ function loadScxmlBundle() {
     const zlib = require("zlib");
     const vendorTgz = path.resolve(__dirname, "vendor", "scxml-5.0.4.tgz");
     // Prefer pre-extracted vendor path if present
-    const preExtracted = path.resolve(__dirname, "vendor", "package", "dist", "scxml.js");
+    const vendorDir = path.resolve(__dirname, "vendor");
+    const preExtracted = path.resolve(vendorDir, "package", "dist", "scxml.js");
+    const preExtractedCore = path.resolve(vendorDir, "package", "dist", "core.js");
     const outJs = path.resolve(__dirname, "vendor", "scxml.dist.js");
     try {
       if (fs.existsSync(preExtracted)) {
@@ -37,9 +39,11 @@ function loadScxmlBundle() {
       try {
         const { execSync } = require("child_process");
         if (fs.existsSync(vendorTgz)) {
-          const vendorDir = path.resolve(__dirname, "vendor");
-          execSync(`tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js`, { stdio: "ignore" });
-          if (fs.existsSync(preExtracted)) {
+          execSync(
+            `tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js package/dist/core.js`,
+            { stdio: "ignore" }
+          );
+          if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
             return require(preExtracted);
           }
         }
@@ -51,38 +55,33 @@ function loadScxmlBundle() {
       // Tar format: 512-byte headers; filename at 0..99, size at 124..135 (octal)
       let offset = 0;
       const BLOCK = 512;
-      const target = "package/dist/scxml.js";
-      while (offset + BLOCK <= tarData.length) {
+      const targets = new Set(["package/dist/scxml.js", "package/dist/core.js"]);
+      const writes = {};
+      while (offset + BLOCK <= tarData.length && targets.size > 0) {
         const header = tarData.subarray(offset, offset + BLOCK);
         const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
         if (!name) break; // end of archive
         const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
         const size = parseInt(sizeOct || "0", 8);
         offset += BLOCK;
-        if (name === target) {
+        if (targets.has(name)) {
           const fileBuf = tarData.subarray(offset, offset + size);
-          // Load module from memory buffer to avoid filesystem writes
-          try {
-            const Module = module.constructor;
-            const m = new Module(target, module.parent);
-            m.filename = target;
-            m.paths = module.paths.slice();
-            m._compile(fileBuf.toString("utf8"), target);
-            return m.exports;
-          } catch (memErr) {
-            // As a fallback, write to disk and require
-            try {
-              fs.writeFileSync(outJs, fileBuf);
-              return require(outJs);
-            } catch (diskErr) {
-              // fall through to throw original error
-            }
-          }
-          break;
+          writes[name] = fileBuf;
+          targets.delete(name);
         }
         // Skip file content (rounded up to 512)
         const pad = Math.ceil(size / BLOCK) * BLOCK;
         offset += pad;
+      }
+      // If we found both, write to vendor/package/dist and require
+      if (writes["package/dist/scxml.js"]) {
+        const pkgDir = path.resolve(vendorDir, "package", "dist");
+        try { fs.mkdirSync(pkgDir, { recursive: true }); } catch (e2) {}
+        if (writes["package/dist/core.js"]) {
+          fs.writeFileSync(preExtractedCore, writes["package/dist/core.js"]);
+        }
+        fs.writeFileSync(preExtracted, writes["package/dist/scxml.js"]);
+        return require(preExtracted);
       }
     } catch (ex) {
       // fall through
