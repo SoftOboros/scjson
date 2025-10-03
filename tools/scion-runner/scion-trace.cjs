@@ -33,6 +33,19 @@ function loadScxmlBundle() {
       if (fs.existsSync(preExtracted)) {
         return require(preExtracted);
       }
+      // Try extracting via system tar if available
+      try {
+        const { execSync } = require("child_process");
+        if (fs.existsSync(vendorTgz)) {
+          const vendorDir = path.resolve(__dirname, "vendor");
+          execSync(`tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js`, { stdio: "ignore" });
+          if (fs.existsSync(preExtracted)) {
+            return require(preExtracted);
+          }
+        }
+      } catch (tarErr) {
+        // fall through to manual extraction
+      }
       if (!fs.existsSync(outJs)) {
         const gzData = fs.readFileSync(vendorTgz);
         const tarData = zlib.gunzipSync(gzData);
