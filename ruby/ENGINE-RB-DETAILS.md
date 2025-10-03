@@ -38,8 +38,8 @@ Each trace line is a JSON object with fields:
 ## Execution Algorithm (preview)
 
 1. Initialization (step 0): compute initial configuration
-2. Process events: macrostep loop to quiescence, microsteps per transition set
-3. Timers: support `advance_time` tokens in event streams for determinism
+2. Process events: macrostep loop to quiescence, microsteps per transition set (basic single-transition selection implemented; conflict resolution pending)
+3. Timers: supports `<send delay>` scheduling and `advance_time` control tokens in event streams to flush timers deterministically
 
 ## Parity With Python
 
@@ -49,7 +49,14 @@ Each trace line is a JSON object with fields:
 
 ## Status
 
-The initial implementation provides a contract‑level CLI (`engine-trace`) that prints a well‑formed trace with step 0 and one line per input event. The core runtime will replace the stub to achieve SCION‑compatible behavior.
+The initial implementation provides a functioning CLI (`engine-trace`) with:
+- Step 0 trace, entered configuration
+- External + internal events, eventless quiescence
+- LCA-based exit/entry ordering (single-transition microsteps)
+- Executable content: log, assign, raise, if/elseif/else, foreach
+- Timers: `<send delay>` with `advance_time` flushing
+
+Pending work includes conflict resolution and full parallel/history semantics to reach SCION-compatible behavior.
 
 See also
 - User guide: `docs/ENGINE-RB.md`

@@ -64,6 +64,14 @@ module Scjson
 
         # Stream of events: from file or STDIN
         stream = events_path ? File.open(events_path, 'r', encoding: 'utf-8') : $stdin
+        # Apply global advance_time before first event if provided
+        if advance_time && advance_time.to_f > 0
+          begin
+            ctx.advance_time(advance_time.to_f)
+          rescue StandardError
+            # ignore
+          end
+        end
         step_no = 1
         stream.each_line do |line|
           line = line.strip
@@ -73,9 +81,14 @@ module Scjson
           rescue StandardError
             next
           end
-          # Control token: advance_time -> skip trace emission
+          # Control token: advance_time -> skip trace emission, but flush timers
           if msg.is_a?(Hash) && msg.key?('advance_time')
-            # no-op in stub; runtime will adjust timers/queue
+            begin
+              adv = msg['advance_time']
+              ctx.advance_time(adv.to_f)
+            rescue StandardError
+              # ignore malformed
+            end
             next
           end
           break if max_steps && step_no > max_steps

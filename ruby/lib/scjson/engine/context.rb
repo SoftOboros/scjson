@@ -17,7 +17,7 @@ module Scjson
     # deterministic trace emission for simple charts. This is an
     # iterative scaffold toward full SCXML semantics.
     #
-    class DocumentContext
+  class DocumentContext
       # @return [Hash{String=>Object}] Canonical scjson root map
       attr_reader :root
       # @return [Array<String>] Active state configuration
@@ -45,6 +45,8 @@ module Scjson
         @parent = {}
         index_states(@root)
         @configuration = initial_configuration
+        @time = 0.0
+        @timers = [] # array of {time: Float, name: String, data: Object}
       end
 
       ##
@@ -100,21 +102,19 @@ module Scjson
           @current_event_name = ev_name
           @current_event_data = ev_data
           loop do
-            tx = find_enabled_transition_for_event(ev_name)
-            break unless tx
-            src, t = tx
-            tr_entered, tr_exited, tr_fired, tr_actions, tr_delta = apply_transition(src, t, cause: ev_name)
-            entered.concat(tr_entered)
-            exited.concat(tr_exited)
-            fired.concat(tr_fired)
-            action_log.concat(tr_actions)
-            datamodel_delta.merge!(tr_delta)
-            # After a transition, process eventless transitions to quiescence
+            tx_set = select_transitions_for_event(ev_name)
+            break if tx_set.empty?
+            e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: ev_name)
+            entered.concat(e1)
+            exited.concat(x1)
+            fired.concat(f1)
+            action_log.concat(a1)
+            datamodel_delta.merge!(d1)
+            # After a set, process eventless transitions to quiescence
             0.upto(100) do
-              tx2 = find_enabled_eventless_transition
-              break unless tx2
-              src2, t2 = tx2
-              e2, x2, f2, a2, d2 = apply_transition(src2, t2, cause: nil)
+              tx0 = select_transitions_for_event(nil)
+              break if tx0.empty?
+              e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
               entered.concat(e2)
               exited.concat(x2)
               fired.concat(f2)
@@ -187,6 +187,52 @@ module Scjson
         nil
       end
 
+      # Select a non-conflicting set of transitions for the given event name (or nil for eventless).
+      def select_transitions_for_event(name)
+        candidates = []
+        # For each active leaf, walk up ancestry and pick the first enabled transition
+        @configuration.each do |sid|
+          chain = ancestors(sid)
+          chain.each do |nid|
+            node = @states[nid]
+            next unless node
+            t = wrap_list(node['transition']).find do |tm|
+              next false unless tm.is_a?(Hash)
+              if name.nil?
+                ev = tm['event']
+                (ev.nil? || (ev.is_a?(String) && ev.strip.empty?)) && cond_true?(tm['cond'])
+              else
+                tokens = parse_event_tokens(tm['event'])
+                (tokens.include?(name) || tokens.include?('*')) && cond_true?(tm['cond'])
+              end
+            end
+            if t
+              candidates << [nid, t]
+              break
+            end
+          end
+        end
+        # Resolve conflicts: prefer deeper (descendant) sources; drop ancestors
+        selected = []
+        candidates.each do |src, t|
+          drop = false
+          selected.reject! do |(s2, _)|
+            if is_ancestor?(src, s2)
+              false # keep deeper s2, keep existing
+            elsif is_ancestor?(s2, src)
+              # remove ancestor already selected
+              true
+            else
+              false
+            end
+          end
+          # If any selected is ancestor of src, then skip adding src (deeper already present?)
+          drop = selected.any? { |(s2, _)| is_ancestor?(s2, src) }
+          selected << [src, t] unless drop
+        end
+        selected
+      end
+
       # Apply a transition: update configuration and compute deltas.
       def apply_transition(source_id, transition_map, cause:)
         targets = wrap_list(transition_map['target']).map(&:to_s)
@@ -246,6 +292,74 @@ module Scjson
         [entry_order, exit_order, fired, actions, delta]
       end
 
+      # Apply a set of non-conflicting transitions in one microstep.
+      def apply_transition_set(tx_set, cause:)
+        actions = []
+        delta = {}
+        fired = []
+        exit_set = []
+        entry_sequences = []
+
+        # Compute exit and entry sequences per transition
+        tx_set.each do |source_id, transition_map|
+          targets = wrap_list(transition_map['target']).map(&:to_s)
+          lcas = targets.map { |tid| lca(source_id, tid) }
+          chosen_lca = choose_shallowest_ancestor(lcas)
+          exit_chain = path_up_exclusive(source_id, chosen_lca)
+          exit_set.concat(exit_chain)
+          seq = []
+          targets.each do |tid|
+            seq.concat(path_down_from_lca(chosen_lca, tid))
+          end
+          entry_sequences << seq
+          fired << { 'source' => source_id, 'targets' => targets, 'event' => cause, 'cond' => nil }
+        end
+
+        # Deduplicate exit set, deep->shallow
+        exit_order = exit_set.uniq
+        # Execute onexit
+        exit_order.each do |sid|
+          a, d = run_onexit(sid)
+          actions.concat(a)
+          delta.merge!(d)
+        end
+
+        # Update configuration: remove exit leaves; we'll add entered leaves after expansion
+        new_config = @configuration.dup
+        exit_order.each { |sid| new_config.delete(sid) }
+
+        # Transition bodies
+        tx_set.each do |_, tmap|
+          a, d = run_actions_from_map(tmap)
+          actions.concat(a)
+          delta.merge!(d)
+        end
+
+        # Entry: shallow->deep for each sequence in given order; then expand to initial leaves
+        entered = []
+        entered_leaves = []
+        entry_sequences.each do |seq|
+          seq.each do |sid|
+            a, d = run_onentry(sid)
+            actions.concat(a)
+            delta.merge!(d)
+            entered << sid
+          end
+          target_id = seq.last
+          leaves, bundle = enter_descendants(target_id)
+          entered.concat(bundle[:entered])
+          actions.concat(bundle[:actions])
+          delta.merge!(bundle[:delta])
+          entered_leaves.concat(leaves)
+        end
+
+        # Merge entered leaves into configuration
+        entered_leaves.each { |leaf| new_config << leaf unless new_config.include?(leaf) }
+        @configuration = new_config
+
+        [entered, exit_order, fired, actions, delta]
+      end
+
       # Ancestor chain from a state up to root (inclusive), leaf->root
       def ancestors(id)
         chain = []
@@ -255,6 +369,93 @@ module Scjson
           cur = @parent[cur]
         end
         chain
+      end
+
+      def is_ancestor?(a, b)
+        return false if a.nil? || b.nil?
+        cur = b
+        while cur
+          return true if cur == a
+          cur = @parent[cur]
+        end
+        false
+      end
+
+      # ---- Entry helpers for composite states ----
+      def enter_descendants(state_id)
+        entered = []
+        actions = []
+        delta = {}
+        leaves = []
+        node = @states[state_id]
+        return [[], { entered: [], actions: [], delta: {} }] unless node
+        if composite?(node)
+          initial_child_ids_for(node).each do |cid|
+            a, d = run_onentry(cid)
+            actions.concat(a)
+            delta.merge!(d)
+            entered << cid
+            sub_leaves, sub = enter_descendants(cid)
+            actions.concat(sub[:actions])
+            delta.merge!(sub[:delta])
+            entered.concat(sub[:entered])
+            leaves.concat(sub_leaves)
+          end
+        else
+          leaves << state_id
+        end
+        [leaves, { entered: entered, actions: actions, delta: delta }]
+      end
+
+      def composite?(node)
+        node.is_a?(Hash) && (node.key?('state') || node.key?('parallel'))
+      end
+
+      def initial_child_ids_for(node)
+        # parallel: initial for each region
+        if node.key?('parallel')
+          ids = []
+          wrap_list(node['parallel']).each do |p|
+            wrap_list(p['state']).each do |s|
+              sid = s['id']
+              ids.concat(initial_leaves_for_id(sid.to_s)) if sid
+            end
+          end
+          return ids.uniq
+        end
+        # state: choose initial children or first
+        if node.key?('state')
+          initial_tokens = wrap_list(node['initial_attribute']).map(&:to_s)
+          if !initial_tokens.empty?
+            return initial_tokens
+          end
+          if node.key?('initial') && node['initial'].is_a?(Hash)
+            return wrap_list(node['initial']['transition']).flat_map { |t| wrap_list(t['target']).map(&:to_s) }
+          end
+          first = wrap_list(node['state']).map { |s| s['id'] }.compact.map(&:to_s).first
+          return first ? [first] : []
+        end
+        []
+      end
+
+      def initial_leaves_for_id(state_id)
+        node = @states[state_id]
+        return [] unless node
+        return [state_id] unless composite?(node)
+        leaves = []
+        if node.key?('parallel')
+          wrap_list(node['parallel']).each do |p|
+            wrap_list(p['state']).each do |s|
+              sid = s['id']
+              leaves.concat(initial_leaves_for_id(sid.to_s)) if sid
+            end
+          end
+          return leaves
+        end
+        initial_child_ids_for(node).each do |cid|
+          leaves.concat(initial_leaves_for_id(cid))
+        end
+        leaves
       end
 
       # Lowest common ancestor (by id), returns nil if only the root matches
@@ -363,6 +564,25 @@ module Scjson
         wrap_list(map['raise_value']).each do |rz|
           ev = rz.is_a?(Hash) ? (rz['event'] || rz['name']) : rz
           @internal_queue << ev.to_s if ev
+        end
+        # send
+        wrap_list(map['send']).each do |sd|
+          next unless sd.is_a?(Hash)
+          ev_name = sd['event'] || sd['name']
+          delay = parse_delay(sd['delay'] || '0s')
+          target = sd['target']
+          data_payload = nil
+          if sd['content']
+            data_payload = sd['content']
+          end
+          if ev_name
+            if target.nil? || target == '#_internal' || target == 'internal'
+              schedule_internal_event(ev_name.to_s, data_payload, delay)
+            else
+              # unsupported external targets -> error.communication
+              schedule_internal_event('error.communication', { 'detail' => 'unsupported target', 'target' => target, 'event' => ev_name.to_s }, 0.0)
+            end
+          end
         end
         # foreach
         wrap_list(map['foreach']).each do |fe|
@@ -556,6 +776,42 @@ module Scjson
           break if cur.nil?
         end
         cur
+      end
+
+      # Timers and scheduling
+      def schedule_internal_event(name, data, delay)
+        if delay.nil? || delay <= 0
+          @internal_queue << ({ 'name' => name, 'data' => data })
+        else
+          @timers << { time: (@time + delay.to_f), name: name, data: data }
+          @timers.sort_by! { |t| t[:time] }
+        end
+      end
+
+      def advance_time(seconds)
+        return if seconds.nil? || seconds.to_f <= 0
+        @time += seconds.to_f
+        flush_timers
+      end
+
+      def flush_timers
+        while !@timers.empty? && @timers.first[:time] <= @time
+          t = @timers.shift
+          @internal_queue << ({ 'name' => t[:name], 'data' => t[:data] })
+        end
+      end
+
+      def parse_delay(str)
+        return 0.0 if str.nil?
+        return str if str.is_a?(Numeric)
+        s = str.to_s.strip
+        return 0.0 if s.empty?
+        if (m = s.match(/^([-+]?\d+(?:\.\d+)?)\s*(ms|s)?$/i))
+          val = m[1].to_f
+          unit = (m[2] || 's').downcase
+          return unit == 'ms' ? (val / 1000.0) : val
+        end
+        0.0
       end
 
       def parse_event_tokens(str)

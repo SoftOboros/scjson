@@ -79,6 +79,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Add a Ruby CLI stub command `engine-trace` that prints a static trace line to validate harness wiring, then iterate.
 - [x] Add harness integration to `py/exec_compare.py` to invoke the Ruby CLI and parse trace output (via `--secondary`).
 - [ ] Prepare initial Ruby examples and corresponding `.events.jsonl` streams (with `advance_time` if timers are used).
+ - [x] Implement timers: `<send delay>` with `advance_time` control token to flush scheduled events deterministically.
 
 ## Risks & Mitigations
 - [ ] Expression evaluation differences across languages: constrain to cross-engine subset; provide optional Ruby-only mode flagged in docs.
@@ -89,6 +90,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - Converter CLI and schema types exist in `ruby/lib/scjson`.
 - Engine trace CLI stub added (`scjson engine-trace`); harness can call Ruby via `--secondary`.
 - Documentation skeletons added (`docs/ENGINE-RB.md`, `ruby/ENGINE-RB-DETAILS.md`).
+ - Timers supported (delayed send + `advance_time`), internal events, and basic conditions.
 
 ---
 
