@@ -19,40 +19,33 @@ try {
 
 const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
 function loadScxmlBundle() {
-  // Attempt normal resolution first
-  try {
-    return require("scxml/dist/scxml.js");
-  } catch (e) {
-    // Fallback: extract from vendored tarball on the fly
-    const zlib = require("zlib");
-    const vendorTgz = path.resolve(__dirname, "vendor", "scxml-5.0.4.tgz");
-    // Prefer pre-extracted vendor path if present
-    const vendorDir = path.resolve(__dirname, "vendor");
-    const preExtracted = path.resolve(vendorDir, "package", "dist", "scxml.js");
-    const preExtractedCore = path.resolve(vendorDir, "package", "dist", "core.js");
-    const outJs = path.resolve(__dirname, "vendor", "scxml.dist.js");
+  const zlib = require("zlib");
+  const vendorDir = path.resolve(__dirname, "vendor");
+  const vendorTgz = path.resolve(vendorDir, "scxml-5.0.4.tgz");
+  const preExtracted = path.resolve(vendorDir, "package", "dist", "scxml.js");
+  const preExtractedCore = path.resolve(vendorDir, "package", "dist", "core.js");
+  // 1) Prefer vendored files if present
+  if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
+    return require(preExtracted);
+  }
+  // 2) If tgz exists, try system tar first
+  if (fs.existsSync(vendorTgz)) {
     try {
-      if (fs.existsSync(preExtracted)) {
+      const { execSync } = require("child_process");
+      execSync(
+        `tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js package/dist/core.js`,
+        { stdio: "ignore" }
+      );
+      if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
         return require(preExtracted);
       }
-      // Try extracting via system tar if available
-      try {
-        const { execSync } = require("child_process");
-        if (fs.existsSync(vendorTgz)) {
-          execSync(
-            `tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js package/dist/core.js`,
-            { stdio: "ignore" }
-          );
-          if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
-            return require(preExtracted);
-          }
-        }
-      } catch (tarErr) {
-        // fall through to manual extraction
-      }
+    } catch (_) {
+      // ignore and fall back to manual extraction
+    }
+    // Manual extractor: minimal TAR reader
+    try {
       const gzData = fs.readFileSync(vendorTgz);
       const tarData = zlib.gunzipSync(gzData);
-      // Tar format: 512-byte headers; filename at 0..99, size at 124..135 (octal)
       let offset = 0;
       const BLOCK = 512;
       const targets = new Set(["package/dist/scxml.js", "package/dist/core.js"]);
@@ -60,34 +53,30 @@ function loadScxmlBundle() {
       while (offset + BLOCK <= tarData.length && targets.size > 0) {
         const header = tarData.subarray(offset, offset + BLOCK);
         const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
-        if (!name) break; // end of archive
+        if (!name) break;
         const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
         const size = parseInt(sizeOct || "0", 8);
         offset += BLOCK;
         if (targets.has(name)) {
-          const fileBuf = tarData.subarray(offset, offset + size);
-          writes[name] = fileBuf;
+          writes[name] = tarData.subarray(offset, offset + size);
           targets.delete(name);
         }
-        // Skip file content (rounded up to 512)
         const pad = Math.ceil(size / BLOCK) * BLOCK;
         offset += pad;
       }
-      // If we found both, write to vendor/package/dist and require
-      if (writes["package/dist/scxml.js"]) {
-        const pkgDir = path.resolve(vendorDir, "package", "dist");
-        try { fs.mkdirSync(pkgDir, { recursive: true }); } catch (e2) {}
-        if (writes["package/dist/core.js"]) {
-          fs.writeFileSync(preExtractedCore, writes["package/dist/core.js"]);
-        }
-        fs.writeFileSync(preExtracted, writes["package/dist/scxml.js"]);
+      const pkgDir = path.resolve(vendorDir, "package", "dist");
+      try { fs.mkdirSync(pkgDir, { recursive: true }); } catch (_) {}
+      if (writes["package/dist/core.js"]) fs.writeFileSync(preExtractedCore, writes["package/dist/core.js"]);
+      if (writes["package/dist/scxml.js"]) fs.writeFileSync(preExtracted, writes["package/dist/scxml.js"]);
+      if (fs.existsSync(preExtracted)) {
         return require(preExtracted);
       }
-    } catch (ex) {
-      // fall through
+    } catch (_) {
+      // ignore
     }
-    throw e;
   }
+  // 3) As a final attempt, use installed module if present
+  return require("scxml/dist/scxml.js");
 }
 
 const scxmlBundle = loadScxmlBundle();
