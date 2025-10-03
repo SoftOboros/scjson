@@ -47,14 +47,14 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 
 3) Validation Harness Integration
 - [ ] Wire Ruby CLI into `py/exec_compare.py` and `py/exec_sweep.py` (command string + cwd assumptions documented).
-- [ ] Normalize traces with leaf-only/omit-delta/step-0 controls mirroring Python flags.
+- [x] Normalize traces with leaf-only/omit-delta/step-0 controls mirroring Python flags (`--strip-step0-noise`, `--strip-step0-states`, `--keep-cond`).
 - [ ] CI target to run a subset of charts on every PR against SCION and Python.
 
 4) Documentation & Examples
 - [x] Create `docs/ENGINE-RB.md` (user guide) mirroring `docs/ENGINE-PY.md` structure.
 - [x] Add `ruby/ENGINE-RB-DETAILS.md` (architecture & in-depth reference) analogous to `py/ENGINE-PY-DETAILS.md`.
 - [ ] Port JS/Python example event streams into Ruby-focused examples (without changing `tutorial/`).
-- [ ] Add troubleshooting and normalization guidance (step-0, timers, expression limitations).
+- [x] Add troubleshooting and normalization guidance (step-0, timers, expression limitations) in `docs/ENGINE-RB.md`.
 
 5) Packaging & Release
 - [x] Enhance RubyGems doc support: README sections, YARD/RDoc hooks, homepage and source links, extended summary/description.

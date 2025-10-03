@@ -240,6 +240,9 @@ module Scjson
     advance_time = 0.0
     ordering = 'tolerant'
     max_steps = nil
+    strip_step0_noise = false
+    strip_step0_states = false
+    keep_cond = false
 
     parser = OptionParser.new do |opts|
       opts.banner = 'scjson engine-trace [options]'
@@ -254,6 +257,9 @@ module Scjson
       opts.on('--advance-time N', Float, 'Advance time by N seconds before processing events') { |v| advance_time = v }
       opts.on('--ordering MODE', ['tolerant', 'strict', 'scion'], 'Ordering policy (tolerant|strict|scion)') { |v| ordering = v }
       opts.on('--max-steps N', Integer, 'Maximum steps to process') { |v| max_steps = v }
+      opts.on('--strip-step0-noise', 'Clear datamodelDelta and firedTransitions at step 0') { strip_step0_noise = true }
+      opts.on('--strip-step0-states', 'Clear enteredStates and exitedStates at step 0') { strip_step0_states = true }
+      opts.on('--keep-cond', 'Keep transition cond fields (default scrubs cond)') { keep_cond = true }
       opts.on('-h', '--help', 'Show help') do
         puts opts
         return
@@ -284,7 +290,10 @@ module Scjson
       omit_transitions: omit_transitions,
       advance_time: advance_time,
       ordering: ordering,
-      max_steps: max_steps
+      max_steps: max_steps,
+      strip_step0_noise: strip_step0_noise,
+      strip_step0_states: strip_step0_states,
+      keep_cond: keep_cond
     )
   end
 end

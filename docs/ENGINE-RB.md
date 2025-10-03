@@ -35,6 +35,7 @@ Key components (paths relative to repo root):
 
 - `ruby/lib/scjson/cli.rb` – Ruby CLI, including `engine-trace`
 - `ruby/lib/scjson/engine.rb` – engine trace interface (stub; expands over time)
+  - Normalization flags: `--leaf-only`, `--omit-actions`, `--omit-delta`, `--omit-transitions`, `--strip-step0-noise`, `--strip-step0-states`, `--keep-cond`
 - `py/exec_compare.py` – compare traces vs reference and optional secondary (use for Ruby)
 
 Traces are line‑delimited JSON objects with fields: `event`, `firedTransitions`, `enteredStates`, `exitedStates`, `configuration`, `actionLog`, `datamodelDelta`, `step`.
@@ -46,7 +47,7 @@ Traces are line‑delimited JSON objects with fields: `event`, `firedTransitions
 ```bash
 ruby/bin/scjson engine-trace -I tests/exec/toggle.scxml \
   -e tests/exec/toggle.events.jsonl -o toggle.ruby.trace.jsonl --xml \
-  --leaf-only --omit-delta
+  --leaf-only --omit-delta --strip-step0-noise --strip-step0-states
 ```
 
 Notes:
@@ -91,6 +92,7 @@ Accepted keys:
 
 Control tokens:
 - `advance_time` – number of seconds to advance the engine’s clock before the next external event is processed. No trace step is emitted for this control token. This mirrors Python’s behavior to keep traces comparable.
+  - Ruby CLI also supports `--advance-time N` to apply an initial time advance before the first event.
 
 ---
 

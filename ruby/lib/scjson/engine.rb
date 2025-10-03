@@ -45,7 +45,10 @@ module Scjson
               omit_transitions: false,
               advance_time: 0.0,
               ordering: 'tolerant',
-              max_steps: nil)
+              max_steps: nil,
+              strip_step0_noise: false,
+              strip_step0_states: false,
+              keep_cond: false)
       sink = out_path ? File.open(out_path, 'w', encoding: 'utf-8') : $stdout
       begin
         ctx = DocumentContext.from_file(input_path, xml: xml)
@@ -60,6 +63,14 @@ module Scjson
         init['actionLog'] = [] if omit_actions
         init['datamodelDelta'] = {} if omit_delta
         init['firedTransitions'] = [] if omit_transitions
+        if strip_step0_noise
+          init['datamodelDelta'] = {}
+          init['firedTransitions'] = []
+        end
+        if strip_step0_states
+          init['enteredStates'] = []
+          init['exitedStates'] = []
+        end
         sink.write(JSON.generate({ step: 0 }.merge(init)) + "\n")
 
         # Stream of events: from file or STDIN
@@ -102,7 +113,26 @@ module Scjson
             end
           end
           rec['actionLog'] = [] if omit_actions
-          rec['datamodelDelta'] = {} if omit_delta
+          # sort datamodelDelta keys for deterministic output
+          unless omit_delta
+            if rec['datamodelDelta'].is_a?(Hash)
+              dm = rec['datamodelDelta']
+              rec['datamodelDelta'] = dm.keys.sort.each_with_object({}) { |k, h| h[k] = dm[k] }
+            end
+          else
+            rec['datamodelDelta'] = {}
+          end
+          # scrub cond in firedTransitions unless requested
+          unless keep_cond
+            if rec['firedTransitions'].is_a?(Array)
+              rec['firedTransitions'] = rec['firedTransitions'].map do |ft|
+                if ft.is_a?(Hash)
+                  ft['cond'] = nil
+                end
+                ft
+              end
+            end
+          end
           rec['firedTransitions'] = [] if omit_transitions
           sink.write(JSON.generate({ step: step_no }.merge(rec)) + "\n")
           step_no += 1
