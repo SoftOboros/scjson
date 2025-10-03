@@ -42,7 +42,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 2) Multi-document & Invoke/Finalize
 - [ ] Implement `<invoke>` lifecycle, `<finalize>`, `done.invoke`/`done.invoke.<id>` events.
 - [ ] Support child machines (`scxml`/`scjson` inline and file: URIs); `#_parent` and `#_child`/`#_<id>` targets.
-- [ ] Parallel completion, history (shallow/deep), and final states semantics.
+- [x] Parallel completion (basic), history (shallow/deep) targets, and final states semantics; enqueue `done.state.<id>` events.
 - [ ] Error handling and ordering consistent with SCION; adopt Python’s normalization knobs where helpful.
 
 3) Validation Harness Integration

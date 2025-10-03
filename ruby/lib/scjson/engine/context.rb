@@ -113,6 +113,8 @@ module Scjson
             fired.concat(f1)
             action_log.concat(a1)
             datamodel_delta.merge!(d1)
+            # After a set, enqueue done.state events if any states completed
+            enqueue_done_events
             # After a set, process eventless transitions to quiescence
             0.upto(100) do
               tx0 = select_transitions_for_event(nil)
@@ -123,6 +125,7 @@ module Scjson
               fired.concat(f2)
               action_log.concat(a2)
               datamodel_delta.merge!(d2)
+              enqueue_done_events
             end
           end
         end
@@ -880,6 +883,44 @@ module Scjson
         return [] if str.nil?
         return [] unless str.is_a?(String)
         str.split(/\s+/)
+      end
+
+      # ---- Completion (done.state.*) ----
+      def enqueue_done_events
+        done_ids = compute_done_states
+        done_ids.each do |sid|
+          @internal_queue << ({ 'name' => "done.state.#{sid}", 'data' => nil })
+        end
+      end
+
+      def compute_done_states
+        # Identify composite state completion and parallel completion
+        finals = @configuration.select { |sid| @tag_type[sid] == :final }
+        done = []
+        # State is done if one of its direct 'final' children is active
+        @states.each do |sid, node|
+          next unless node.is_a?(Hash)
+          # only consider composite states
+          if node.key?('state') || node.key?('parallel')
+            # direct final children ids
+            direct_finals = wrap_list(node['final']).map { |f| f.is_a?(Hash) ? f['id'] : nil }.compact.map(&:to_s)
+            if !direct_finals.empty? && (finals & direct_finals).any?
+              done << sid
+              next
+            end
+            # parallel: all regions have a final descendant
+            if node.key?('parallel')
+              region_ids = wrap_list(node['parallel']).flat_map { |p| wrap_list(p['state']).map { |s| s['id'] }.compact.map(&:to_s) }
+              if !region_ids.empty?
+                all_done = region_ids.all? do |rid|
+                  finals.any? { |fid| is_ancestor?(rid, fid) }
+                end
+                done << sid if all_done
+              end
+            end
+          end
+        end
+        done.uniq
       end
 
       def index_states(node, parent_id = nil, tag = nil)
