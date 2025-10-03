@@ -1,0 +1,18 @@
+<scxml initial="parent" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="parent" initial="S">
+    <state id="S" initial="A">
+      <state id="A" initial="AA">
+        <state id="AA">
+          <transition event="go" target="AB"/>
+        </state>
+        <state id="AB"/>
+      </state>
+      <transition event="leave" target="X"/>
+    </state>
+    <state id="X"/>
+    <history type="deep" id="H">
+      <transition target="S"/>
+    </history>
+    <transition event="reset" target="H"/>
+  </state>
+</scxml>

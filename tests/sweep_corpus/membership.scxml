@@ -1,0 +1,6 @@
+<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="s0">
+    <transition event="go" cond="_event.data.kind in ['A','B']" target="ok"/>
+  </state>
+  <state id="ok"/>
+</scxml>

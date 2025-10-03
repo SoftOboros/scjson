@@ -1,0 +1,34 @@
+<scxml initial="P" xmlns="http://www.w3.org/2005/07/scxml">
+  <parallel id="P">
+    <state id="left">
+      <invoke id="invL" type="scxml" autoforward="true">
+        <content>
+          <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="wait">
+            <state id="wait">
+              <transition event="complete" target="done"/>
+            </state>
+            <final id="done"/>
+          </scxml>
+        </content>
+        <finalize>
+          <send event="seen.left"/>
+        </finalize>
+      </invoke>
+    </state>
+    <state id="right">
+      <invoke id="invR" type="scxml" autoforward="true">
+        <content>
+          <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="wait">
+            <state id="wait">
+              <transition event="complete" target="done"/>
+            </state>
+            <final id="done"/>
+          </scxml>
+        </content>
+        <finalize>
+          <send event="seen.right"/>
+        </finalize>
+      </invoke>
+    </state>
+  </parallel>
+</scxml>

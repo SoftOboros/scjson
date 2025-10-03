@@ -1,0 +1,15 @@
+<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+  <state id="s0">
+    <invoke id="child" type="mock:deferred">
+      <finalize>
+        <send event="seen"/>
+      </finalize>
+    </invoke>
+    <transition event="seen" target="seen_first"/>
+    <transition event="done.invoke.child" target="id_specific"/>
+    <transition event="done.invoke" target="generic"/>
+  </state>
+  <state id="seen_first"/>
+  <state id="id_specific"/>
+  <state id="generic"/>
+</scxml>

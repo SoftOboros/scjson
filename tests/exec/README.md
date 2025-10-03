@@ -18,10 +18,10 @@ providing one JSON object per line with the event name and optional data.
 
 Feel free to add additional fixtures as the comparison harness grows.
 
-## Reference Runner (Scion)
+## Reference Runner ([Scion](https://www.npmjs.com/package/scion))
 
 The default reference engine used by `py/exec_compare.py` is a thin wrapper
-around the [SCION](https://www.npmjs.com/package/scxml) Node implementation.
+around the [SCION](https://www.npmjs.com/package/scion) Node implementation.
 
 1. Install dependencies once:
 
@@ -38,7 +38,7 @@ around the [SCION](https://www.npmjs.com/package/scxml) Node implementation.
        -o toggle.scion.trace.jsonl
    ```
 
-3. Compare Python vs Scion (and optionally a secondary engine) using:
+3. Compare Python vs [Scion](https://www.npmjs.com/package/scion) (and optionally a secondary engine) using:
 
    ```bash
    cd ../../py

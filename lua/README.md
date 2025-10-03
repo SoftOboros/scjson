@@ -1,4 +1,4 @@
-<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
 
 # Lua SCJSON
 

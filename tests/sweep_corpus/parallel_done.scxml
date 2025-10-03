@@ -1,0 +1,10 @@
+<scxml initial="p" xmlns="http://www.w3.org/2005/07/scxml">
+  <parallel id="p">
+    <state id="r1" initial="f1">
+      <final id="f1"/>
+    </state>
+    <state id="r2" initial="f2">
+      <final id="f2"/>
+    </state>
+  </parallel>
+</scxml>

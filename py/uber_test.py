@@ -29,12 +29,24 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Iterable
+
+import pytest
 
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+from scjson.context import DocumentContext, ExecutionMode
 
 ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = ROOT / "tutorial"
+
+# Optional features known unsupported by the Python engine for now
+ENGINE_KNOWN_UNSUPPORTED = {
+    Path("Tests/python/W3C/Optional/Auto/test457.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test520.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test532.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test562.scxml"),
+    Path("Tests/python/W3C/Optional/Auto/test578.scxml"),
+}
 
 # CLI entrypoints for each language implementation
 LANG_CMDS: dict[str, list[str]] = {
@@ -42,13 +54,13 @@ LANG_CMDS: dict[str, list[str]] = {
     "javascript": ["node", str(ROOT / "js")],
     "ruby": ["ruby", str(ROOT / "ruby" / "bin" / "scjson")],
     "lua": ["lua", str(ROOT / "lua" / "bin" / "scjson")],
-    "go": [str(ROOT / "go" / "go")],
+    "go": [str(ROOT / "go" / "scjson")],
     "rust": [str(ROOT / "rust" / "target" / "debug" / "scjson_rust")],
     "swift": [str(ROOT / "swift" / ".build" / "x86_64-unknown-linux-gnu" / "debug" / "scjson-swift")],
     "java": [
         "java",
         "-cp",
-        str(ROOT / "java" / "target" / "scjson-0.3.1-SNAPSHOT.jar"),
+        str(ROOT / "java" / "target" / "scjson-0.3.3-SNAPSHOT.jar"),
         "com.softobros.ScjsonCli",
     ],
     "csharp": [
@@ -69,6 +81,7 @@ LANG_ALIASES = {
     "rs": "rust",
     "cs": "csharp",
     "dotnet": "csharp",
+    "swfit": "swift",
 }
 
 # Structural fields lifted from content
@@ -98,11 +111,21 @@ STRUCTURAL_FIELDS = {
 SCXML_NAMESPACE_KEYS = {"xmlns", "xmlns:scxml", "xmlns:xsi", "xsi:schemaLocation"}
 SCXML_FORCE_STR_KEYS = {"content", "expr", "event", "cond"}
 SCXML_FORCE_NUMERIC_KEYS = {"version"}
+SCXML_BOOLEAN_STR_KEYS = {"autoforward"}
+SCXML_DROP_KEYS = {"tag", "tail"}
 KEY_SYNONYMS = {
     "type": "type_value",
     "raise": "raise_value",
+    "if": "if_value",
+    "else": "else_value",
     "initial": "initial_attribute",
     "datamodelAttribute": "datamodel_attribute",
+    # Common camelCase variants emitted by some implementations
+    "eventExpr": "eventexpr",
+    "targetExpr": "targetexpr",
+    "typeExpr": "typeexpr",
+    "srcExpr": "srcexpr",
+    "idLocation": "idlocation",
 }
 
 
@@ -116,6 +139,57 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
         return True
     except Exception:
         return False
+
+
+def _python_engine_available() -> bool:
+    try:
+        from scjson.context import DocumentContext  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def _iter_python_datamodel_charts(root: Path) -> Iterable[Path]:
+    import xml.etree.ElementTree as ET
+
+    for scxml in root.rglob("*.scxml"):
+        try:
+            tree = ET.parse(scxml)
+        except ET.ParseError:
+            continue
+        root_node = tree.getroot()
+        datamodel_attr = (
+            root_node.attrib.get("datamodel")
+            or root_node.attrib.get("datamodel_attribute")
+        )
+        if datamodel_attr and datamodel_attr.strip().lower() != "python":
+            continue
+        rel = scxml.relative_to(root)
+        if rel in ENGINE_KNOWN_UNSUPPORTED:
+            continue
+        yield scxml
+
+
+def _python_smoke_chart(chart: Path) -> tuple[bool, str]:
+    """Execute a single chart minimally to validate the Python engine.
+
+    Parameters
+    ----------
+    chart : Path
+        SCXML chart path.
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(ok, message)`` where ``ok`` indicates success and ``message``
+        contains an error string on failure.
+    """
+    try:
+        ctx = DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
+        ctx.trace_step()
+        return True, ""
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
 
 
 class MismatchInvestigator:
@@ -138,7 +212,7 @@ class MismatchInvestigator:
         canonical: dict[Path, dict],
         tutorial_root: Path,
         out_root: Path | str,
-        reference_langs: tuple[str, ...] = ("python", "javascript", "rust"),
+        reference_langs: tuple[str, ...] = ("python", "javascript", "ruby", "rust", "java"),
     ) -> None:
         self._canonical = canonical
         self._tutorial_root = tutorial_root
@@ -171,7 +245,7 @@ class MismatchInvestigator:
             return []
         lines: list[str] = []
         for stage, counts in self._stats[lang].items():
-            lines.append("Triage summary [{lang}][{stage}]: " + ", ".join(f"{k}:{v}" for k, v in counts.items()))
+            lines.append(f"Triage summary [{lang}][{stage}]: " + ", ".join(f"{k}:{v}" for k, v in counts.items()))
         return lines
 
     def _classify(self, canonical: dict | None, actual: Any | None) -> str:
@@ -288,7 +362,7 @@ def _normalize_for_diff(obj: Any, path: str = "", field_key: str | None = None):
         new: dict[str, Any] = {}
         for k, v in obj.items():
             k = KEY_SYNONYMS.get(k, k)
-            if k in SCXML_NAMESPACE_KEYS or k == "tag":
+            if k in SCXML_NAMESPACE_KEYS or k in SCXML_DROP_KEYS:
                 continue
             if k == "other_attributes" and isinstance(v, dict):
                 for sub_k, sub_v in v.items():
@@ -305,6 +379,8 @@ def _normalize_for_diff(obj: Any, path: str = "", field_key: str | None = None):
                     pass
             elif k in SCXML_FORCE_STR_KEYS and isinstance(v, (int, float)):
                 v = str(v)
+            elif k in SCXML_BOOLEAN_STR_KEYS and isinstance(v, bool):
+                v = "true" if v else "false"
             if k == "target":
                 if isinstance(v, str):
                     parts = [p for p in v.split() if p]
@@ -433,14 +509,20 @@ def main(
         json_dir.mkdir(parents=True, exist_ok=True)
         xml_dir.mkdir(parents=True, exist_ok=True)
         try:
-            if lang == "swift":
+            if lang in {"swift", "go"}:
                 for src in scxml_files:
                     rel = src.relative_to(TUTORIAL)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     jpath.parent.mkdir(parents=True, exist_ok=True)
-                    subprocess.run(cmd + ["json", str(src), "-o", str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                    if lang == "go":
+                        subprocess.run(cmd + ["json", "-o", str(jpath), str(src)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                    else:
+                        subprocess.run(cmd + ["json", str(src), "-o", str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             else:
-                json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
+                if lang == "go":
+                    json_args = ["json", "-o", str(json_dir), "-r", str(TUTORIAL)]
+                else:
+                    json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
                 if lang == "python":
                     json_args.append("--skip-unknown")
                 subprocess.run(cmd + json_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
@@ -465,6 +547,10 @@ def main(
                 if lines:
                     print(f"{lang} JSON mismatch: {rel}")
                     print(diff)
+                    note = None
+                    triage = investigator.capture_issue(lang, src, "json", data, note)
+                    if triage:
+                        print(triage)
                     mismatch_items += lines
                     scjson_mismatch_items += lines
                     diff_lines = _verify_with_python(jpath, canonical[src], handler)
@@ -477,16 +563,23 @@ def main(
                         errors += 1
             if scjson_errors:
                 print(f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items.")
-            if lang == "swift":
+            if lang in {"swift", "go"}:
                 for src in scxml_files:
                     rel = src.relative_to(TUTORIAL)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     xpath = xml_dir / rel
                     xpath.parent.mkdir(parents=True, exist_ok=True)
                     if jpath.exists():
-                        subprocess.run(cmd + ["xml", str(jpath), "-o", str(xpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                        if lang == "go":
+                            subprocess.run(cmd + ["xml", "-o", str(xpath), str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                        else:
+                            subprocess.run(cmd + ["xml", str(jpath), "-o", str(xpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             else:
-                subprocess.run(cmd + ["xml", str(json_dir), "-o", str(xml_dir), "-r"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
+                if lang == "go":
+                    xml_args = ["xml", "-o", str(xml_dir), "-r", str(json_dir)]
+                else:
+                    xml_args = ["xml", str(json_dir), "-o", str(xml_dir), "-r"]
+                subprocess.run(cmd + xml_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             for src in scxml_files:
                 rel = src.relative_to(TUTORIAL)
                 xpath = xml_dir / rel
@@ -504,6 +597,9 @@ def main(
                 if lines:
                     print(f"{lang} XML mismatch: {rel}")
                     print(diff)
+                    triage = investigator.capture_issue(lang, src, "xml", parsed)
+                    if triage:
+                        print(triage)
                     mismatch_items += lines
                     refs = investigator._reference_summary(src, skip_lang=lang)
                     match_count = sum(1 for v in refs.values() if v == "match")
@@ -511,6 +607,8 @@ def main(
                         errors += 1
             if errors:
                 print(f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items.")
+            for line in investigator.summary(lang):
+                print(line)
         except subprocess.CalledProcessError as exc:
             err = exc.stderr
             if isinstance(err, (bytes, bytearray)):
@@ -522,12 +620,46 @@ def main(
             print(f"Skipping {lang}: {exc}")
 
 
+@pytest.mark.skipif(not _python_engine_available(), reason="Python engine not available")
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "chart",
+    list(_iter_python_datamodel_charts(TUTORIAL)),
+    ids=lambda p: str(p.relative_to(TUTORIAL)) if p.is_absolute() else str(p),
+)
+def test_python_engine_executes_chart(chart: Path):
+    ok, msg = _python_smoke_chart(chart)
+    if not ok:
+        pytest.fail(f"{chart}: {msg}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out_dir", nargs="?", default="uber_out", help="directory for intermediate files")
     parser.add_argument("-l", "--language", dest="language", help="limit testing to a single language")
     parser.add_argument("-s", "--subset", dest="subset", help="limit to SCXML files matching a glob (relative to tutorial)")
     parser.add_argument("--consensus-warn", action="store_true", help="warn-only when reference languages match canonical")
+    parser.add_argument("--python-smoke", action="store_true", help="run Python engine smoke over charts with per-chart progress")
+    parser.add_argument("--chart", type=Path, help="run only a single chart for Python smoke mode")
     opts = parser.parse_args()
-    main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)
+    if opts.python_smoke:
+        import sys
 
+        charts = [opts.chart] if opts.chart else list(_iter_python_datamodel_charts(TUTORIAL))
+        if not charts:
+            print("No charts found for smoke run.")
+            sys.exit(0)
+        total = len(charts)
+        failures = 0
+        for idx, chart in enumerate(charts, 1):
+            ok, msg = _python_smoke_chart(chart)
+            rel = chart.relative_to(TUTORIAL) if chart.is_absolute() and TUTORIAL in chart.parents else chart
+            status = "OK" if ok else "FAIL"
+            print(f"[{idx}/{total}] {rel} ... {status}")
+            if not ok and msg:
+                print(f"    {msg}")
+            if not ok:
+                failures += 1
+        sys.exit(1 if failures else 0)
+    else:
+        main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)

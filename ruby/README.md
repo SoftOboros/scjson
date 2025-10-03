@@ -1,4 +1,4 @@
-<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
 
 # scjson Ruby Gem
 
@@ -22,6 +22,16 @@ cd ruby && gem build scjson.gemspec && gem install scjson-*.gem
 scjson json path/to/machine.scxml
 scjson xml path/to/machine.scjson
 scjson validate path/to/dir -r
+```
+
+## Library Usage
+
+```ruby
+require 'scjson'
+
+document = Scjson::Types::ScxmlProps.new
+json = document.to_json
+round_trip = Scjson::Types::ScxmlProps.from_json(json)
 ```
 
 All source code in this directory is released under the BSD 1-Clause license. See [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md) for details.

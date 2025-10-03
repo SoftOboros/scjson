@@ -1,4 +1,4 @@
-<p align="center"><img src="../scjson.png" alt="scjson logo" width="200"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/SoftOboros/scjson/main/scjson.png" alt="scjson logo" width="200"/></p>
 
 # scjson Python Package
 
@@ -32,6 +32,32 @@ cd py && pip install -e .
 - ruby
 - rust
 - swift
+
+## Python Engine — User Guide
+
+For end‑to‑end usage of the Python execution engine (tracing, comparing against a reference, generating vectors, sweeping corpora), see:
+
+- docs/ENGINE-PY.md (in this repository)
+
+Online: https://github.com/SoftOboros/scjson/blob/main/docs/ENGINE-PY.md
+
+## SCION Reference Dependency
+
+Several comparison tests (`py/tests/test_exec_compare_advanced.py`) and the
+`exec_compare` tooling invoke the Node-based [SCION](https://www.npmjs.com/package/scion) runner bundled under
+`tools/scion-runner`. Node.js must be able to resolve the [SCION](https://www.npmjs.com/package/scion) packages
+(`scxml`, `jsdom`, and `regenerator-runtime`) via its module loader. Install
+them once before running comparisons:
+
+```bash
+cd tools/scion-runner
+npm ci  # or npm install
+```
+
+When running the Python tests or CLI comparisons, ensure `node` can load these
+modules (for example by keeping the installation above in place or by adding
+their location to `NODE_PATH`). Without the [SCION](https://www.npmjs.com/package/scion) packages, comparisons fall
+back to the Python engine.
 
 ## Command Line Usage
 

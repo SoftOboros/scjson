@@ -8,8 +8,145 @@ const { pathToFileURL } = require("url");
 const { JSDOM } = require("jsdom");
 require("regenerator-runtime/runtime");
 
+const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
 const scxmlBundle = require("scxml/dist/scxml.js");
 const { documentStringToModel, core } = scxmlBundle;
+const DEFAULT_INVOKERS = Object.assign({}, core.InterpreterScriptingContext.invokers || {});
+
+function createMockSession(interpreter, invokeObj, payload, hooks = {}) {
+  let done = false;
+  let cancelled = false;
+  const registry = interpreter && interpreter.opts && interpreter.opts.sessionRegistry;
+
+  const session = {
+    id: invokeObj.id || `mock-${Math.random().toString(36).slice(2)}`,
+    cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      done = true;
+      if (registry && invokeObj.id && typeof registry.delete === "function") {
+        registry.delete(invokeObj.id);
+      }
+      if (typeof hooks.onCancel === "function") {
+        try {
+          hooks.onCancel();
+        } catch (err) {
+          interpreter._log && interpreter._log("mock cancel error", err);
+        }
+      }
+    },
+    gen(evt) {
+      if (cancelled || done || !evt) {
+        return;
+      }
+      const name = typeof evt === "string" ? evt : (evt && evt.name) || "";
+      const data = evt && typeof evt === "object" ? evt.data : undefined;
+      if (typeof hooks.onEvent === "function") {
+        try {
+          hooks.onEvent(name, data, complete, session);
+        } catch (err) {
+          interpreter._log && interpreter._log("mock event error", err);
+        }
+      }
+    },
+    genAsync(evt) {
+      this.gen(evt);
+      return Promise.resolve();
+    },
+  };
+
+  if (registry && invokeObj.id && typeof registry.set === "function") {
+    registry.set(invokeObj.id, session);
+  }
+
+  function emitDone(outcome) {
+    const eventData = outcome === undefined ? payload : outcome;
+    if (invokeObj.id) {
+      interpreter._scriptingContext.send({
+        target: "#_parent",
+        name: `done.invoke.${invokeObj.id}`,
+        data: eventData,
+        invokeid: invokeObj.id,
+      });
+      interpreter._scriptingContext.send({
+        target: "#_parent",
+        name: "done.invoke",
+        data: eventData,
+        invokeid: invokeObj.id,
+      });
+    } else {
+      interpreter._scriptingContext.send({
+        target: "#_parent",
+        name: "done.invoke",
+        data: eventData,
+      });
+    }
+  }
+
+  function complete(outcome) {
+    if (done) return;
+    done = true;
+    if (registry && invokeObj.id && typeof registry.delete === "function") {
+      registry.delete(invokeObj.id);
+    }
+    emitDone(outcome);
+    if (typeof hooks.onComplete === "function") {
+      try {
+        hooks.onComplete(outcome === undefined ? payload : outcome, session);
+      } catch (err) {
+        interpreter._log && interpreter._log("mock complete error", err);
+      }
+    }
+  }
+
+  if (typeof hooks.onInit === "function") {
+    setImmediate(() => {
+      if (!cancelled && !done) {
+        try {
+          hooks.onInit(complete, session);
+        } catch (err) {
+          interpreter._log && interpreter._log("mock init error", err);
+        }
+      }
+    });
+  }
+
+  return { session, complete };
+}
+
+const MOCK_INVOKERS = {
+  "mock:immediate": (interpreter, invokeObj, _execCtx, cb) => {
+    const payload = invokeObj.params || null;
+    const { session, complete } = createMockSession(interpreter, invokeObj, payload, {
+      onInit: (finish) => finish(payload),
+    });
+    cb(null, session);
+  },
+  "mock:deferred": (interpreter, invokeObj, _execCtx, cb) => {
+    const payload = invokeObj.params || null;
+    const { session } = createMockSession(interpreter, invokeObj, payload, {
+      onEvent: (name, data, finish) => {
+        if (name === "complete") {
+          finish(payload);
+        }
+      },
+    });
+    cb(null, session);
+  },
+  "mock:record": (interpreter, invokeObj, _execCtx, cb) => {
+    const payload = invokeObj.params || null;
+    const recorded = [];
+    const { session } = createMockSession(interpreter, invokeObj, payload, {
+      onEvent: (name, data) => {
+        recorded.push({ name, data });
+      },
+    });
+    session._recordedEvents = recorded;
+    cb(null, session);
+  },
+};
+
+const COMBINED_INVOKERS = Object.assign({}, DEFAULT_INVOKERS, MOCK_INVOKERS);
 
 function usage() {
   console.error(
@@ -199,18 +336,18 @@ function emitTrace(ctx, step, sink) {
 
   documentStringToModel(url, xml, (err, modelFactory) => {
     if (err) {
-      console.error("SCION compile error", err);
+      console.error(`SCION (${SCION_NPM_URL}) compile error`, err);
       process.exit(1);
     }
 
     modelFactory.prepare(
       (prepErr, prepared) => {
         if (prepErr) {
-          console.error("SCION prepare error", prepErr);
+          console.error(`SCION (${SCION_NPM_URL}) prepare error`, prepErr);
           process.exit(1);
         }
 
-        const interpreter = new core.Statechart(prepared, {});
+        const interpreter = new core.Statechart(prepared, { invokers: COMBINED_INVOKERS });
         const listenerState = { current: null };
         const originalLog = console.log;
 
