@@ -2,35 +2,30 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="P" name="parallel_invoke">
   <parallel id="P">
     <state id="L">
-      <onentry>
-        <invoke id="childL">
-          <content>
-            <scxml initial="f" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-              <final id="f"/>
-            </scxml>
-          </content>
-          <finalize>
-            <log label="left" expr="'done'"/>
-          </finalize>
-        </invoke>
-      </onentry>
+      <invoke id="childL">
+        <content>
+          <scxml initial="f" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+            <final id="f"/>
+          </scxml>
+        </content>
+        <finalize>
+          <log label="left" expr="'done'"/>
+        </finalize>
+      </invoke>
       <!-- stay until parallel is done -->
     </state>
     <state id="R">
-      <onentry>
-        <invoke id="childR">
-          <content>
-            <scxml initial="f" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-              <final id="f"/>
-            </scxml>
-          </content>
-          <finalize>
-            <log label="right" expr="'done'"/>
-          </finalize>
-        </invoke>
-      </onentry>
+      <invoke id="childR">
+        <content>
+          <scxml initial="f" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+            <final id="f"/>
+          </scxml>
+        </content>
+        <finalize>
+          <log label="right" expr="'done'"/>
+        </finalize>
+      </invoke>
     </state>
   </parallel>
   <final id="done"/>
 </scxml>
-

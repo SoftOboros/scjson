@@ -4,18 +4,16 @@
     <transition event="go" target="invk"/>
   </state>
   <state id="invk">
-    <onentry>
-      <invoke autoforward="false" id="child1">
-        <content>
-          <scxml initial="cf" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
-            <final id="cf"/>
-          </scxml>
-        </content>
-        <finalize>
-          <log label="child" expr="'done'"/>
-        </finalize>
-      </invoke>
-    </onentry>
+    <invoke autoforward="false" id="child1">
+      <content>
+        <scxml initial="cf" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="cf"/>
+        </scxml>
+      </content>
+      <finalize>
+        <log label="child" expr="'done'"/>
+      </finalize>
+    </invoke>
     <transition event="done.invoke" target="done"/>
   </state>
   <final id="done"/>

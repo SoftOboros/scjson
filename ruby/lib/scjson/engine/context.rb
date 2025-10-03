@@ -122,14 +122,10 @@ module Scjson
               a, d = finalize_invoke(iid, completed: true)
               action_log.concat(a)
               datamodel_delta.merge!(d)
-              # enqueue done.invoke events
-              if (@ordering_mode || 'tolerant').to_s.downcase == 'scion'
-                @internal_queue.unshift({ 'name' => "done.invoke.#{iid}", 'data' => nil })
-                @internal_queue.unshift({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
-              else
-                @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
-                @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
-              end
+              # buffer done.invoke events for ordered flushing
+              rec = @invocations[iid]
+              order = rec && rec[:order] ? rec[:order] : 0
+              (@pending_done_invoke ||= []) << { iid: iid, order: order }
             end
             return
           end
@@ -188,6 +184,8 @@ module Scjson
           else
             process_event.call(ev.to_s, nil)
           end
+          # After handling one internal event, flush any pending done.invoke for immediate processing
+          flush_pending_done_invoke
         end
 
         {
