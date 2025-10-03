@@ -160,6 +160,7 @@ module Scjson
             datamodel_delta.merge!(d1)
             # After a set, enqueue done.state events if any states completed
             enqueue_done_events
+            flush_pending_done_invoke
             # After a set, process eventless transitions to quiescence
             0.upto(100) do
               tx0 = select_transitions_for_event(nil)
@@ -171,6 +172,7 @@ module Scjson
               action_log.concat(a2)
               datamodel_delta.merge!(d2)
               enqueue_done_events
+              flush_pending_done_invoke
             end
           end
         end
@@ -219,6 +221,28 @@ module Scjson
           next if k.nil?
           @data[k.to_s] = v
         end
+      end
+
+      # Flush buffered done.invoke events in a stable order per ordering_mode
+      def flush_pending_done_invoke
+        buf = @pending_done_invoke
+        return unless buf && !buf.empty?
+        mode = (@ordering_mode || 'tolerant').to_s.downcase
+        items = buf.sort_by { |h| h[:order] || 0 }
+        if mode == 'scion'
+          items.reverse_each do |h|
+            iid = h[:iid]
+            @internal_queue.unshift({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+            @internal_queue.unshift({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+          end
+        else
+          items.each do |h|
+            iid = h[:iid]
+            @internal_queue << ({ 'name' => 'done.invoke', 'data' => { 'invokeid' => iid } })
+            @internal_queue << ({ 'name' => "done.invoke.#{iid}", 'data' => nil })
+          end
+        end
+        @pending_done_invoke.clear
       end
 
       # Find the first enabled transition in document order matching the event name.
