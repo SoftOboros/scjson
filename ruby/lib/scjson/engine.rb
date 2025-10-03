@@ -102,6 +102,37 @@ module Scjson
             begin
               adv = msg['advance_time']
               ctx.advance_time(adv.to_f)
+              # After advancing time, flush any pending timers by running a synthetic step.
+              # Only emit a step if something actually changed (entered/exited/fired).
+              rec = ctx.trace_step(name: '__time__', data: nil)
+                if leaf_only && leaves
+                  %w[configuration enteredStates exitedStates].each do |k|
+                    rec[k] = (rec[k] || []).select { |sid| leaves.include?(sid) }
+                  end
+                end
+                rec['event'] = nil # hide synthetic event name
+                rec['actionLog'] = [] if omit_actions
+                unless omit_delta
+                  if rec['datamodelDelta'].is_a?(Hash)
+                    dm = rec['datamodelDelta']
+                    rec['datamodelDelta'] = dm.keys.sort.each_with_object({}) { |k, h| h[k] = dm[k] }
+                  end
+                else
+                  rec['datamodelDelta'] = {}
+                end
+                unless keep_cond
+                  if rec['firedTransitions'].is_a?(Array)
+                    rec['firedTransitions'] = rec['firedTransitions'].map do |ft|
+                      if ft.is_a?(Hash)
+                        ft['cond'] = nil
+                      end
+                      ft
+                    end
+                  end
+                end
+                rec['firedTransitions'] = [] if omit_transitions
+                sink.write(JSON.generate({ step: step_no }.merge(rec)) + "\n")
+                step_no += 1
             rescue StandardError
               # ignore malformed
             end

@@ -14,7 +14,8 @@ For cross-language parity and [SCION](https://www.npmjs.com/package/scion) compa
   - [Overview](#overview)
   - [Quick Start](#quick-start)
   - [Event Streams](#event-streams-eventsjsonl)
-  - [Vector Generation](#vector-generation)
+- [Vector Generation](#vector-generation)
+  - [Time Control](#time-control)
 - Architecture & in-depth reference: `py/ENGINE-PY-DETAILS.md`
 - Compatibility Matrix: `docs/COMPATIBILITY.md`
 
@@ -104,6 +105,26 @@ Control tokens:
   engines that only consume `event`/`name`, but lets the Python engine flush
   delayed `<send>` timers between stimuli to better match engines that do not
   model time explicitly. No trace step is emitted for a control token.
+
+## Time Control
+
+When your event stream ends with a time advance and there is no subsequent
+external event, you might want to force a trace step so that due timers are
+visible in the output. Use the CLI option `--emit-time-steps` to emit a
+synthetic step whenever an `{"advance_time": N}` control token is processed.
+
+Example:
+
+```bash
+python -m scjson.cli engine-trace -I chart.scxml --xml \
+  -e stream.events.jsonl --emit-time-steps --leaf-only --omit-delta
+```
+
+Notes:
+- The synthetic step sets `event` to `null` and otherwise follows the same
+  normalization rules (`--leaf-only`, `--omit-*`).
+- By default (without `--emit-time-steps`) no step is emitted on time advance
+  to keep parity with SCION.
 
 ## Vector Generation
 

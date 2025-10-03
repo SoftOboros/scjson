@@ -61,6 +61,9 @@ module Scjson
         @invocations = {} # id => {state: sid, node: inv_map, status: 'active'|'done'|'canceled'}
         @invocations_by_state = Hash.new { |h, k| h[k] = [] }
         @invoke_seq = 0
+        @internal_queue = []
+        # Schedule invocations for initial configuration
+        schedule_invocations_for_entered(@configuration)
       end
 
       ##
@@ -110,6 +113,56 @@ module Scjson
         @internal_queue ||= []
         @current_event_name = name
         @current_event_data = data
+
+        # Process any pending internal events before external one (SCXML internal priority)
+        0.upto(100) do
+          break if @internal_queue.empty?
+          ev = @internal_queue.shift
+          if ev.is_a?(Hash)
+            # run internal event to quiescence
+            process_ev = ev
+            internal_name = process_ev['name']
+            internal_data = process_ev['data']
+            # Use same microstep machinery
+            # Inline handler mimicking process_event
+            # Note: attributes entered/exited/fired accumulate into this step
+            # Handle special invoke completion
+            if internal_name == '__invoke_complete'
+              iid = internal_data.is_a?(Hash) ? internal_data['invokeid'] : nil
+              if iid
+                a, d = finalize_invoke(iid, completed: true)
+                action_log.concat(a)
+                datamodel_delta.merge!(d)
+                rec = @invocations[iid]
+                order = rec && rec[:order] ? rec[:order] : 0
+                (@pending_done_invoke ||= []) << { iid: iid, order: order }
+              end
+            else
+              tx_set = select_transitions_for_event(internal_name)
+              unless tx_set.empty?
+                e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: internal_name)
+                entered.concat(e1)
+                exited.concat(x1)
+                fired.concat(f1)
+                action_log.concat(a1)
+                datamodel_delta.merge!(d1)
+              end
+              # Eventless to quiescence after internal
+              0.upto(100) do
+                tx0 = select_transitions_for_event(nil)
+                break if tx0.empty?
+                e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
+                entered.concat(e2)
+                exited.concat(x2)
+                fired.concat(f2)
+                action_log.concat(a2)
+                datamodel_delta.merge!(d2)
+              end
+              enqueue_done_events
+            end
+            flush_pending_done_invoke
+          end
+        end
 
         # First, process one external-event transition (if any)
         process_event = lambda do |ev_name, ev_data|
@@ -171,6 +224,18 @@ module Scjson
               flush_pending_done_invoke
             end
           end
+        end
+
+        # Drain any pending internal events before handling the external event
+        0.upto(100) do
+          break if @internal_queue.empty?
+          ev = @internal_queue.shift
+          if ev.is_a?(Hash)
+            process_event.call(ev['name'], ev['data'])
+          else
+            process_event.call(ev.to_s, nil)
+          end
+          flush_pending_done_invoke
         end
 
         process_event.call(name, data)
