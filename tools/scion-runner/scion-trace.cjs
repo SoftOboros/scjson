@@ -46,32 +46,43 @@ function loadScxmlBundle() {
       } catch (tarErr) {
         // fall through to manual extraction
       }
-      if (!fs.existsSync(outJs)) {
-        const gzData = fs.readFileSync(vendorTgz);
-        const tarData = zlib.gunzipSync(gzData);
-        // Tar format: 512-byte headers; filename at 0..99, size at 124..135 (octal)
-        let offset = 0;
-        const BLOCK = 512;
-        const target = "package/dist/scxml.js";
-        while (offset + BLOCK <= tarData.length) {
-          const header = tarData.subarray(offset, offset + BLOCK);
-          const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
-          if (!name) break; // two consecutive zero blocks indicate end of archive
-          const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
-          const size = parseInt(sizeOct || "0", 8);
-          offset += BLOCK;
-          if (name === target) {
-            const fileBuf = tarData.subarray(offset, offset + size);
-            fs.writeFileSync(outJs, fileBuf);
-            break;
+      const gzData = fs.readFileSync(vendorTgz);
+      const tarData = zlib.gunzipSync(gzData);
+      // Tar format: 512-byte headers; filename at 0..99, size at 124..135 (octal)
+      let offset = 0;
+      const BLOCK = 512;
+      const target = "package/dist/scxml.js";
+      while (offset + BLOCK <= tarData.length) {
+        const header = tarData.subarray(offset, offset + BLOCK);
+        const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
+        if (!name) break; // end of archive
+        const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
+        const size = parseInt(sizeOct || "0", 8);
+        offset += BLOCK;
+        if (name === target) {
+          const fileBuf = tarData.subarray(offset, offset + size);
+          // Load module from memory buffer to avoid filesystem writes
+          try {
+            const Module = module.constructor;
+            const m = new Module(target, module.parent);
+            m.filename = target;
+            m.paths = module.paths.slice();
+            m._compile(fileBuf.toString("utf8"), target);
+            return m.exports;
+          } catch (memErr) {
+            // As a fallback, write to disk and require
+            try {
+              fs.writeFileSync(outJs, fileBuf);
+              return require(outJs);
+            } catch (diskErr) {
+              // fall through to throw original error
+            }
           }
-          // Skip file content (rounded up to 512)
-          const pad = ((size + BLOCK - 1) & ~(BLOCK - 1));
-          offset += pad;
+          break;
         }
-      }
-      if (fs.existsSync(outJs)) {
-        return require(outJs);
+        // Skip file content (rounded up to 512)
+        const pad = Math.ceil(size / BLOCK) * BLOCK;
+        offset += pad;
       }
     } catch (ex) {
       // fall through
