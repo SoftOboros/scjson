@@ -128,6 +128,22 @@ module Scjson
             end
             return
           end
+          # Autoforward external events to active children that requested it
+          begin
+            if ev_name && !ev_name.to_s.start_with?('__') && !ev_name.to_s.start_with?('done.')
+              @invocations.each do |iid, rec|
+                next unless rec[:status] == 'active'
+                inv_node = rec[:node]
+                af = inv_node['autoforward']
+                is_true = (af == true) || (af.is_a?(String) && af.to_s.downcase == 'true')
+                if is_true && rec[:ctx]
+                  route_to_child(iid, ev_name.to_s, ev_data, 0.0)
+                end
+              end
+            end
+          rescue StandardError
+            # ignore autoforward errors
+          end
           loop do
             tx_set = select_transitions_for_event(ev_name)
             break if tx_set.empty?
@@ -302,7 +318,7 @@ module Scjson
         @configuration = new_config
 
         # Execute transition actions (between exit and entry)
-        ta, td = run_actions_from_map(transition_map)
+        ta, td = run_actions_from_map(transition_map, context_state: source_id)
         actions.concat(ta)
         delta.merge!(td)
 
@@ -747,7 +763,7 @@ module Scjson
         delta = {}
         wrap_list(node['onexit']).each do |blk|
           next unless blk.is_a?(Hash)
-          a, d = run_actions_from_map(blk)
+          a, d = run_actions_from_map(blk, context_state: state_id)
           actions.concat(a)
           delta.merge!(d)
         end
@@ -766,7 +782,7 @@ module Scjson
         delta = {}
         wrap_list(node['onentry']).each do |blk|
           next unless blk.is_a?(Hash)
-          a, d = run_actions_from_map(blk)
+          a, d = run_actions_from_map(blk, context_state: state_id)
           actions.concat(a)
           delta.merge!(d)
         end
@@ -774,7 +790,7 @@ module Scjson
       end
 
       # Execute actions defined in a map: log, assign, raise, if/elseif/else.
-      def run_actions_from_map(map)
+      def run_actions_from_map(map, context_state: nil)
         actions = []
         delta = {}
         # log
@@ -815,6 +831,17 @@ module Scjson
           if ev_name
             if target.nil? || target == '#_internal' || target == 'internal'
               schedule_internal_event(ev_name.to_s, data_payload, delay)
+            elsif target == '#_child' || target == '#_invokedChild'
+              # route to all active children of the context state (or error if none)
+              routed = false
+              if context_state && @invocations_by_state[context_state]
+                @invocations_by_state[context_state].each do |iid|
+                  routed |= route_to_child(iid, ev_name.to_s, data_payload, delay)
+                end
+              end
+              unless routed
+                schedule_internal_event('error.communication', { 'detail' => 'no child for #_child', 'event' => ev_name.to_s }, 0.0)
+              end
             elsif target == '#_parent'
               if @parent_link
                 @parent_link.enqueue_from_child(ev_name.to_s, data_payload, @child_invoke_id)
