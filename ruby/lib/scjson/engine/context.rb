@@ -1018,6 +1018,14 @@ module Scjson
         # boolean literals
         return true if s.downcase == 'true'
         return false if s.downcase == 'false'
+        # JSON object/array literals
+        if (s.start_with?('[') && s.end_with?(']')) || (s.start_with?('{') && s.end_with?('}'))
+          begin
+            return JSON.parse(s)
+          rescue StandardError
+            # fall through
+          end
+        end
         # integer or float
         if s.match?(/^[-+]?\d+(?:\.\d+)?$/)
           return s.include?('.') ? s.to_f : s.to_i
@@ -1069,6 +1077,17 @@ module Scjson
         if s.downcase.start_with?('not ')
           return !cond_true?(s[4..-1])
         end
+        # membership: X in Y / X not in Y
+        if (m = s.match(/^(.+?)\s+not\s+in\s+(.+)$/i))
+          lhs = eval_expr(m[1])
+          rhs = eval_expr(m[2])
+          return !member?(lhs, rhs)
+        end
+        if (m = s.match(/^(.+?)\s+in\s+(.+)$/i))
+          lhs = eval_expr(m[1])
+          rhs = eval_expr(m[2])
+          return member?(lhs, rhs)
+        end
         # equality/inequality
         if (m = s.match(/^([a-zA-Z_][\w]*)\s*(==|!=)\s*(['\"]?)(.+?)\3$/))
           lhs = (@data || {})[m[1]]
@@ -1091,7 +1110,26 @@ module Scjson
         end
         # direct variable truthiness
         val = eval_expr(s)
-        !!val && val != 0 && val != ''
+        truthy?(val)
+      end
+
+      def member?(item, container)
+        return false if container.nil?
+        if container.is_a?(Array)
+          return container.include?(item)
+        elsif container.is_a?(Hash)
+          return container.key?(item) || container.key?(item.to_s) || container.key?(item.to_sym)
+        elsif container.is_a?(String)
+          return container.include?(item.to_s)
+        end
+        false
+      end
+
+      def truthy?(val)
+        return false if val.nil? || val == false
+        return false if val == ''
+        return false if val == 0
+        true
       end
 
       # Resolve a dotted path from @data or _event context.
