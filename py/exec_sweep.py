@@ -17,14 +17,16 @@ summary for charts without events using ``py/vector_gen.py`` before compare.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List, Tuple
 from tempfile import TemporaryDirectory
-import json
+from typing import Iterable, List, Tuple
+
+from scion_support import augment_node_path, ensure_scion_runner
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -43,8 +45,13 @@ def _iter_charts(root: Path, pattern: str) -> Iterable[Path]:
             yield p
 
 
-def _run(cmd: List[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+def _run(
+    cmd: List[str],
+    cwd: Path | None = None,
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=env)
 
 
 def main() -> None:
@@ -145,6 +152,24 @@ def main() -> None:
                 continue
             opts.skip.append(line)
 
+    repo_root = ROOT
+    common_env = dict(os.environ)
+    py_path = str(repo_root / "py")
+    if common_env.get("PYTHONPATH"):
+        common_env["PYTHONPATH"] = py_path + os.pathsep + common_env["PYTHONPATH"]
+    else:
+        common_env["PYTHONPATH"] = py_path
+    scion_script = (repo_root / "tools" / "scion-runner" / "scion-trace.cjs").resolve()
+    scion_ready = False
+    if scion_script.exists() and not opts.reference:
+        scion_ready = ensure_scion_runner(repo_root)
+        if scion_ready:
+            common_env["NODE_PATH"] = augment_node_path(common_env.get("NODE_PATH"), repo_root)
+
+    python_reference = f"{sys.executable} -m scjson.cli engine-trace"
+    scion_reference = f"node {scion_script}"
+    default_reference = opts.reference or (scion_reference if scion_ready else python_reference)
+
     charts: List[Path] = []
     for c in _iter_charts(opts.root, opts.glob):
         name = str(c)
@@ -161,16 +186,7 @@ def main() -> None:
     cov_count = 0
     cov_by_chart: dict[str, dict] = {}
 
-    base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve())]
-    if opts.reference:
-        base_cmd.extend(["--reference", opts.reference])
-    else:
-        # Default to SCION (https://www.npmjs.com/package/scion) Node reference when available; otherwise fall back to Python engine
-        scion = (ROOT / "tools" / "scion-runner" / "scion-trace.cjs").resolve()
-        if scion.exists():
-            base_cmd.extend(["--reference", f"node {scion}"])
-        else:
-            base_cmd.extend(["--reference", f"{sys.executable} -m scjson.cli engine-trace"])
+    base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve()), "--reference", default_reference]
     if opts.workdir:
         artifacts_root = Path(opts.workdir)
         artifacts_root.mkdir(parents=True, exist_ok=True)
@@ -229,7 +245,7 @@ def main() -> None:
                     vg_cmd.extend(["--limit", str(opts.gen_limit)])
                 if opts.gen_variants_per_event:
                     vg_cmd.extend(["--variants-per-event", str(opts.gen_variants_per_event)])
-                _run(vg_cmd)
+                _run(vg_cmd, env=common_env)
                 gen_events = vec_dir / f"{chart.stem}.events.jsonl"
                 events = gen_events if gen_events.exists() else None
                 # Adopt recommended advance time from vector metadata when user did not pass one
@@ -280,7 +296,42 @@ def main() -> None:
             cmd.append(str(chart))
             if events:
                 cmd.extend(["--events", str(events)])
-            result = _run(cmd)
+            result = _run(cmd, env=common_env)
+            if (
+                result.returncode != 0
+                and not opts.reference
+                and scion_ready
+                and default_reference == scion_reference
+                and (
+                    "Command failed:" in result.stdout
+                    or "Command failed:" in result.stderr
+                )
+            ):
+                try:
+                    ref_idx = cmd.index("--reference") + 1
+                except ValueError:
+                    ref_idx = None
+                if ref_idx is not None and cmd[ref_idx] == scion_reference:
+                    fallback_cmd = list(cmd)
+                    fallback_cmd[ref_idx] = python_reference
+                    fallback = _run(fallback_cmd, env=common_env)
+                    if fallback.returncode == 0:
+                        print(f"SCION reference failed for {chart}; fell back to Python reference.")
+                        result = fallback
+                        cmd = fallback_cmd
+                    else:
+                        combined = (
+                            "SCION reference failed:\n"
+                            + result.stdout
+                            + "\n"
+                            + result.stderr
+                            + "\nFallback to Python reference also failed:\n"
+                            + fallback.stdout
+                            + "\n"
+                            + fallback.stderr
+                        )
+                        mismatches.append((chart, combined))
+                        continue
             if result.returncode != 0:
                 mismatches.append((chart, result.stdout + "\n" + result.stderr))
                 # Keep going; summarize later

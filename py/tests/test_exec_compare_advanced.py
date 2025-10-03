@@ -16,80 +16,22 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "py"))
 
 import pytest
 from tempfile import TemporaryDirectory
 
-SCION_NPM_URL = "https://www.npmjs.com/package/scion"
-
-_SCION_PREPARED: Optional[bool] = None
-
-
-def _ensure_scion_runner(repo_root: Path) -> bool:
-    """Ensure the [SCION](https://www.npmjs.com/package/scion) Node runner is available for tests.
-
-    @param repo_root: Repository root used to locate the [SCION](https://www.npmjs.com/package/scion) runner assets.
-    @returns True when the runner and its dependencies are ready for use.
-    """
-
-    global _SCION_PREPARED
-    if _SCION_PREPARED is not None:
-        return _SCION_PREPARED
-
-    runner_dir = repo_root / "tools" / "scion-runner"
-    runner = runner_dir / "scion-trace.cjs"
-    if shutil.which("node") is None or not runner.exists():
-        _SCION_PREPARED = False
-        return False
-
-    node_modules = runner_dir / "node_modules"
-    jsdom = node_modules / "jsdom"
-    scxml = node_modules / "scxml"
-    if jsdom.exists() and scxml.exists():
-        _SCION_PREPARED = True
-        return True
-
-    npm = shutil.which("npm")
-    if npm is None:
-        _SCION_PREPARED = False
-        return False
-
-    lock_file = runner_dir / "package-lock.json"
-    cmd = [npm, "ci" if lock_file.exists() else "install"]
-    proc = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=str(runner_dir),
-    )
-    if proc.returncode != 0:
-        _SCION_PREPARED = False
-        return False
-
-    _SCION_PREPARED = jsdom.exists() and scxml.exists()
-    return _SCION_PREPARED
-
-
-def _augment_node_path(existing: Optional[str], repo_root: Path) -> str:
-    """Prepend the [SCION](https://www.npmjs.com/package/scion) runner's node_modules to NODE_PATH for child calls.
-
-    @param existing: Existing NODE_PATH environment value, if set.
-    @param repo_root: Repository root used to locate node_modules.
-    @returns Updated NODE_PATH string that includes the [SCION](https://www.npmjs.com/package/scion) modules.
-    """
-
-    runner_modules = repo_root / "tools" / "scion-runner" / "node_modules"
-    parts = [str(runner_modules)]
-    if existing:
-        parts.append(existing)
-    return os.pathsep.join(part for part in parts if part)
+from scion_support import (
+    SCION_NPM_URL,
+    augment_node_path,
+    ensure_scion_runner,
+)
 
 
 def _ref_command(root: Path) -> str:
     scion = root / "tools" / "scion-runner" / "scion-trace.cjs"
-    if scion.exists() and _ensure_scion_runner(root):
+    if scion.exists() and ensure_scion_runner(root):
         return f"node {scion}"
     return f"{sys.executable} -m scjson.cli engine-trace"
 
@@ -105,9 +47,9 @@ def _run_compare(chart: Path, *, generate: bool = True, depth: int = 2, extra: l
     env["PYTHONPATH"] = str(root / "py")
     scion_ready = False
     if not force_python_ref:
-        scion_ready = _ensure_scion_runner(repo_root)
+        scion_ready = ensure_scion_runner(repo_root)
         if scion_ready:
-            env["NODE_PATH"] = _augment_node_path(env.get("NODE_PATH"), repo_root)
+            env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), repo_root)
     args = [
         sys.executable,
         str(root / "py" / "exec_compare.py"),
@@ -228,11 +170,11 @@ def test_parallel_invoke_compare_scion() -> None:
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "parallel_invoke_complete.scxml"
     scion = root / "tools" / "scion-runner" / "scion-trace.cjs"
-    if not scion.exists() or not _ensure_scion_runner(root):
+    if not scion.exists() or not ensure_scion_runner(root):
         pytest.skip(f"SCION ({SCION_NPM_URL}) not available")
     env = dict(os.environ)
     env["PYTHONPATH"] = str(root / "py")
-    env["NODE_PATH"] = _augment_node_path(env.get("NODE_PATH"), root)
+    env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), root)
     # Preflight SCION (https://www.npmjs.com/package/scion) on this chart to avoid hard failures
     pre = subprocess.run([
         "node",
@@ -263,11 +205,11 @@ def test_finalize_order_compare_scion() -> None:
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "finalize_order.scxml"
     scion = root / "tools" / "scion-runner" / "scion-trace.cjs"
-    if not scion.exists() or not _ensure_scion_runner(root):
+    if not scion.exists() or not ensure_scion_runner(root):
         pytest.skip(f"SCION ({SCION_NPM_URL}) not available")
     env = dict(os.environ)
     env["PYTHONPATH"] = str(root / "py")
-    env["NODE_PATH"] = _augment_node_path(env.get("NODE_PATH"), root)
+    env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), root)
     with TemporaryDirectory() as td:
         ev = Path(td) / "events.jsonl"
         ev.write_text('{"event": "complete"}\n', encoding="utf-8")
