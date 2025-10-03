@@ -40,8 +40,8 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Integrate with `py/exec_compare.py` as a “secondary” engine under test (use `--secondary "ruby/bin/scjson engine-trace"`).
 
 2) Multi-document & Invoke/Finalize
-- [x] Implement `<invoke>` lifecycle, `<finalize>`, `done.invoke`/`done.invoke.<id>` events (basic immediate and child-complete detection).
-- [ ] Support child machines (`scxml`/`scjson` inline and file: URIs); `#_parent` and `#_child`/`#_<id>` targets.
+- [x] Implement `<invoke>` lifecycle, `<finalize>`, `done.invoke`/`done.invoke.<id>` events (basic immediate and child-complete detection); buffered ordering with `--ordering scion`.
+- [x] Support child machines (`scxml`/`scjson` inline and file: URIs); `#_parent`, `#_child`/`#_invokedChild`, and `#_<id>` targets; `autoforward`.
 - [x] Support child machines (inline and `src` files); `#_parent`, `#_child`/`#_invokedChild`, and `#_<id>` targets; `autoforward`.
 - [x] Parallel completion (basic), history (shallow/deep) targets, and final states semantics; enqueue `done.state.<id>` events.
 - [ ] Error handling and ordering consistent with SCION; adopt Python’s normalization knobs where helpful.
@@ -54,7 +54,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 4) Documentation & Examples
 - [x] Create `docs/ENGINE-RB.md` (user guide) mirroring `docs/ENGINE-PY.md` structure.
 - [x] Add `ruby/ENGINE-RB-DETAILS.md` (architecture & in-depth reference) analogous to `py/ENGINE-PY-DETAILS.md`.
-- [ ] Port JS/Python example event streams into Ruby-focused examples (without changing `tutorial/`).
+- [x] Port JS/Python example event streams into Ruby-focused examples (without changing `tutorial/`): membership, invoke_inline, invoke_timer, parallel_invoke.
 - [x] Add troubleshooting and normalization guidance (step-0, timers, expression limitations) in `docs/ENGINE-RB.md`.
 
 5) Packaging & Release
@@ -91,7 +91,9 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - Converter CLI and schema types exist in `ruby/lib/scjson`.
 - Engine trace CLI stub added (`scjson engine-trace`); harness can call Ruby via `--secondary`.
 - Documentation skeletons added (`docs/ENGINE-RB.md`, `ruby/ENGINE-RB-DETAILS.md`).
- - Timers supported (delayed send + `advance_time`), internal events, and basic conditions.
+ - Timers supported (delayed send + `advance_time`), internal events, membership tests, and JSON literals.
+ - Invoke: child contexts (inline + src), parent↔child routing, `autoforward`, `param` mapping, and buffered done.invoke ordering with `--ordering`.
+ - Parallel initial entry fixed for multiple regions.
 
 ---
 
