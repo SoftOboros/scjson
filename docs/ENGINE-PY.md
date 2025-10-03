@@ -104,27 +104,28 @@ Control tokens:
   before the next external event is processed. This is ignored by reference
   engines that only consume `event`/`name`, but lets the Python engine flush
   delayed `<send>` timers between stimuli to better match engines that do not
-  model time explicitly. No trace step is emitted for a control token.
+  model time explicitly.
 
 ## Time Control
 
-When your event stream ends with a time advance and there is no subsequent
-external event, you might want to force a trace step so that due timers are
-visible in the output. Use the CLI option `--emit-time-steps` to emit a
-synthetic step whenever an `{"advance_time": N}` control token is processed.
+By default, the CLI emits a synthetic step whenever an `{"advance_time": N}`
+control token is processed so that due timers are visible even when no
+subsequent external events occur. Disable this behavior with
+`--no-emit-time-steps` when strict parity with tools that do not emit such
+steps is desired.
 
 Example:
 
 ```bash
 python -m scjson.cli engine-trace -I chart.scxml --xml \
-  -e stream.events.jsonl --emit-time-steps --leaf-only --omit-delta
+  -e stream.events.jsonl --leaf-only --omit-delta
 ```
 
 Notes:
 - The synthetic step sets `event` to `null` and otherwise follows the same
   normalization rules (`--leaf-only`, `--omit-*`).
-- By default (without `--emit-time-steps`) no step is emitted on time advance
-  to keep parity with SCION.
+- Use `--no-emit-time-steps` to suppress these steps if comparing against tools
+  that do not emit them.
 
 ## Vector Generation
 

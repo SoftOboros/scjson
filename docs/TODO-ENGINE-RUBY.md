@@ -19,7 +19,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [ ] Provide a dedicated Ruby engine user guide (like Python’s), with deeper details and runnable examples.
 - [ ] Highlight the Ruby engine in the top of the README and mention SCXML/SCML execution in description, package metadata, and search terms.
 - [ ] Enhance RubyGems documentation support and add RubyGems package details to the bottom section of the README.
-- [ ] Bump project version to 0.3.4 as part of the release including the Ruby engine.
+- [ ] Bump project version to 0.3.5 as part of the release including the Ruby engine.
 
 ## Reference Semantics
 - [ ] Use [SCION](https://www.npmjs.com/package/scion) (Node) as behavioral reference.
@@ -61,7 +61,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Enhance RubyGems doc support: README sections, YARD/RDoc hooks, homepage and source links, extended summary/description.
 - [ ] Update gem metadata keywords (search terms): "scxml", "statecharts", "state-machine", "scjson", "scml", "execution".
 - [x] README updates: highlight Ruby engine at the top; add RubyGems package details at bottom.
-- [x] Version bump to 0.3.4 across repo (Python and Ruby packages updated).
+- [x] Version bump to 0.3.5 across repo (Python, Ruby, and JS packages updated).
 
 ## Test Vectors & Corpora
 - [ ] Convert JS/Python test docs into Ruby vector extensions hosted in-repo (e.g., `tests/exec/*.events.jsonl` variants if Ruby requires timing tokens). Do not modify `tutorial/` content.
@@ -73,7 +73,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [ ] CI job runs `exec_compare` for Ruby vs SCION and reports zero mismatches on the acceptance suite.
 - [ ] `docs/ENGINE-RB.md` and `ruby/ENGINE-RB-DETAILS.md` are published with runnable examples.
 - [ ] README highlights Ruby engine; RubyGems links and metadata are updated.
-- [ ] Repository version is bumped to 0.3.4 and released artifacts are tagged.
+- [ ] Repository version is bumped to 0.3.5 and released artifacts are tagged.
 
 ## Immediate Next Steps
 - [x] Draft trace schema parity doc for Ruby (reuse Python schema and flags).
