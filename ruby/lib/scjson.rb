@@ -7,7 +7,13 @@
 # Licensed under the BSD 1-Clause License.
 
 require 'json'
-require 'nokogiri'
+begin
+  require 'nokogiri'
+  NOKOGIRI_AVAILABLE = true
+rescue LoadError
+  NOKOGIRI_AVAILABLE = false
+end
+require 'shellwords'
 
 require_relative 'scjson/version'
 require_relative 'scjson/types'
@@ -46,14 +52,32 @@ module Scjson
   # @param [Boolean] omit_empty Remove empty containers when true.
   # @return [String] Canonical scjson output.
   def xml_to_json(xml_str, omit_empty = true)
-    doc = Nokogiri::XML(xml_str) { |cfg| cfg.strict.nonet }
-    root = locate_root(doc)
-    raise ArgumentError, 'Document missing <scxml> root element' unless root
+    if NOKOGIRI_AVAILABLE
+      doc = Nokogiri::XML(xml_str) { |cfg| cfg.strict.nonet }
+      root = locate_root(doc)
+      raise ArgumentError, 'Document missing <scxml> root element' unless root
 
-    map = element_to_hash(root)
-    collapse_whitespace(map)
-    remove_empty(map) if omit_empty
-    JSON.pretty_generate(map)
+      map = element_to_hash(root)
+      collapse_whitespace(map)
+      remove_empty(map) if omit_empty
+      return JSON.pretty_generate(map)
+    end
+    # Fallback: use Python CLI converter when Nokogiri is unavailable.
+    begin
+      require 'tmpdir'
+      Dir.mktmpdir('scjson-rb-xml2json') do |dir|
+        in_path = File.join(dir, 'in.scxml')
+        out_path = File.join(dir, 'out.scjson')
+        File.write(in_path, xml_str)
+        py = ENV['PYTHON'] || 'python'
+        cmd = [py, '-m', 'scjson.cli', 'json', in_path, '-o', out_path]
+        ok = system(*cmd, out: File::NULL, err: File::NULL)
+        raise 'python converter failed' unless ok && File.file?(out_path)
+        return File.read(out_path)
+      end
+    rescue StandardError => e
+      raise LoadError, "SCXML->JSON conversion unavailable: Nokogiri missing and external converter failed (#{e})"
+    end
   end
 
   ##
@@ -62,13 +86,32 @@ module Scjson
   # @param [String] json_str Canonical scjson input.
   # @return [String] XML document encoded as UTF-8.
   def json_to_xml(json_str)
-    data = JSON.parse(json_str)
-    remove_empty(data)
-    doc = Nokogiri::XML::Document.new
-    doc.encoding = 'utf-8'
-    root = build_element(doc, 'scxml', data)
-    doc.root = root
-    doc.to_xml
+    if NOKOGIRI_AVAILABLE
+      data = JSON.parse(json_str)
+      remove_empty(data)
+      doc = Nokogiri::XML::Document.new
+      doc.encoding = 'utf-8'
+      root = build_element(doc, 'scxml', data)
+      doc.root = root
+      return doc.to_xml
+    end
+    # Fallback: use Python CLI converter when Nokogiri is unavailable.
+    begin
+      require 'tmpdir'
+      Dir.mktmpdir('scjson-rb-json2xml') do |dir|
+        in_path = File.join(dir, 'in.scjson')
+        out_path = File.join(dir, 'out.scxml')
+        File.write(in_path, json_str)
+        py = ENV['PYTHON'] || 'python'
+        # Python CLI supports scjson->SCXML via `xml` subcommand
+        cmd = [py, '-m', 'scjson.cli', 'xml', in_path, '-o', out_path]
+        ok = system(*cmd, out: File::NULL, err: File::NULL)
+        raise 'python converter failed' unless ok && File.file?(out_path)
+        return File.read(out_path)
+      end
+    rescue StandardError => e
+      raise LoadError, "JSON->SCXML conversion unavailable: Nokogiri missing and external converter failed (#{e})"
+    end
   end
 
   # ----------------------------

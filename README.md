@@ -186,6 +186,17 @@ For a full example of installing toolchains and dependencies across languages se
 - Agents overview: `AGENTS.md`
 
 
+## Known Divergences and Issues
+
+Cross‑engine comparisons sometimes surface intentional, documented differences (e.g., ordering nuances, ECMA `in` semantics, history re‑entry). Use these resources to understand, normalize, and triage behavior across SCION (Node), Python, and Ruby:
+
+- Comprehensive overview: docs/COMPATIBILITY.md
+- Normalization profile: `--norm scion` in exec_compare sets leaf‑only, omit‑delta, omit‑transitions, strip‑step0‑states, and ordering=scion.
+  - Example: `python py/exec_compare.py tests/exec/toggle.scxml --events tests/exec/toggle.events.jsonl --reference "node tools/scion-runner/scion-trace.cjs" --norm scion`
+- CI known‑diffs list: scripts/ci_ruby_known_diffs.txt (used by `scripts/ci_ruby_harness.sh --known` to keep CI green while still reporting expected mismatches).
+- Ruby converter in CI: when Nokogiri isn’t available, the Ruby CLI falls back to the Python converter for SCXML↔scjson only; execution remains Ruby. See docs/ENGINE-RB.md (CI Notes).
+
+
 ## Quick Installs.
 
 ### Python Module

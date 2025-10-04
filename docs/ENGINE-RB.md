@@ -95,6 +95,40 @@ Control tokens:
 - `advance_time` – number of seconds to advance the engine’s clock before the next external event is processed. No trace step is emitted for this control token. This mirrors Python’s behavior to keep traces comparable.
   - Ruby CLI also supports `--advance-time N` to apply an initial time advance before the first event.
 
+## CI Notes — Converter Fallback
+
+- Ruby’s SCXML↔scjson converter uses Nokogiri when available. Some CI environments do not install Ruby gems (Nokogiri requires native extensions). To keep the engine harness usable in those environments, the Ruby converter transparently falls back to the Python CLI for conversion:
+  - SCXML→scjson: `python -m scjson.cli json <in.scxml> -o <out.scjson>`
+  - scjson→SCXML: `python -m scjson.cli xml <in.scjson> -o <out.scxml>`
+- This fallback is only about file format conversion; execution/tracing is still performed by the Ruby engine. Using the Python converter keeps the canonical JSON identical across languages and avoids CI‑only variance.
+- If preferred, pre‑convert charts up front and run the Ruby engine on scjson inputs to bypass XML parsing entirely:
+  - `python -m scjson.cli json chart.scxml -o chart.scjson`
+  - `ruby/bin/scjson engine-trace -I chart.scjson -e chart.events.jsonl`
+
+Documentation coverage
+- Conversion and documentation build checks run earlier in the CI pipeline; by the time the Ruby engine harness executes, the docs and converters have already been validated. The Nokogiri fallback simply removes the need for a Ruby‑native XML stack in later stages.
+
+## Troubleshooting
+
+- Known differences in CI runs
+  - Some charts have intentional, documented differences between engines (e.g., ECMA `in` semantics, history reentry nuances). Use the known‑diffs list to keep CI green while still reporting these cases:
+    - File: `scripts/ci_ruby_known_diffs.txt`
+    - Harness: `bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt --known scripts/ci_ruby_known_diffs.txt`
+
+- Normalization profile for comparisons
+  - Use the SCION profile to align output fields and ordering across engines:
+    - `python py/exec_compare.py <chart> --events <events> --reference "node tools/scion-runner/scion-trace.cjs" --norm scion`
+  - `--norm scion` sets: leaf‑only, omit‑delta, omit‑transitions, strip‑step0‑states, and ordering=scion.
+
+- Pre‑convert SCXML to scjson for Ruby execution
+  - To avoid XML parser differences or Nokogiri setup on your machine, pre‑convert once and run Ruby on scjson:
+    - `python -m scjson.cli json chart.scxml -o chart.scjson`
+    - `ruby/bin/scjson engine-trace -I chart.scjson -e chart.events.jsonl`
+
+- Nokogiri dependency (local development)
+  - Ruby’s SCXML↔scjson converter uses the Nokogiri gem for XML parsing when running from source. If the gem is not installed, the Ruby CLI falls back to the Python converter transparently (see “CI Notes”).
+  - For best local performance and to keep everything in Ruby, install Nokogiri (and system build deps) in your environment. Otherwise the Python fallback will be used for conversion while execution remains in Ruby.
+
 ---
 
 Back to
