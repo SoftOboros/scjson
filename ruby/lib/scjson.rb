@@ -72,14 +72,13 @@ module Scjson
         py_candidates = [ENV['PYTHON'], 'python3', 'python'].compact.uniq
         ok = false
         py_candidates.each do |py|
-          # Try package entrypoint
+          # Try package entrypoint; add repo-local 'py' to PYTHONPATH for import
+          repo_py = File.expand_path('../../py', __dir__)
+          env = {}
+          current_pp = ENV['PYTHONPATH']
+          env['PYTHONPATH'] = current_pp ? (repo_py + File::PATH_SEPARATOR + current_pp) : repo_py
           cmd = [py, '-m', 'scjson.cli', 'json', in_path, '-o', out_path]
-          ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
-          break if ok
-          # Try repo-local module as a package (py.scjson.cli)
-          # Assumes current working directory is repo root so 'py' is importable.
-          cmd2 = [py, '-m', 'py.scjson.cli', 'json', in_path, '-o', out_path]
-          ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          ok = system(env, *cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
           break if ok
         end
         raise 'python converter failed' unless ok
@@ -115,11 +114,12 @@ module Scjson
         py_candidates = [ENV['PYTHON'], 'python3', 'python'].compact.uniq
         ok = false
         py_candidates.each do |py|
+          repo_py = File.expand_path('../../py', __dir__)
+          env = {}
+          current_pp = ENV['PYTHONPATH']
+          env['PYTHONPATH'] = current_pp ? (repo_py + File::PATH_SEPARATOR + current_pp) : repo_py
           cmd = [py, '-m', 'scjson.cli', 'xml', in_path, '-o', out_path]
-          ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
-          break if ok
-          cmd2 = [py, '-m', 'py.scjson.cli', 'xml', in_path, '-o', out_path]
-          ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          ok = system(env, *cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
           break if ok
         end
         raise 'python converter failed' unless ok
