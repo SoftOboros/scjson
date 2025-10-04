@@ -69,10 +69,22 @@ module Scjson
         in_path = File.join(dir, 'in.scxml')
         out_path = File.join(dir, 'out.scjson')
         File.write(in_path, xml_str)
-        py = ENV['PYTHON'] || 'python'
-        cmd = [py, '-m', 'scjson.cli', 'json', in_path, '-o', out_path]
-        ok = system(*cmd, out: File::NULL, err: File::NULL)
-        raise 'python converter failed' unless ok && File.file?(out_path)
+        py_candidates = [ENV['PYTHON'], 'python', 'python3'].compact.uniq
+        ok = false
+        py_candidates.each do |py|
+          # Try package entrypoint
+          cmd = [py, '-m', 'scjson.cli', 'json', in_path, '-o', out_path]
+          ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          break if ok
+          # Try repo-local module path
+          local_cli = File.expand_path('../../py/scjson/cli.py', __dir__)
+          if File.file?(local_cli)
+            cmd2 = [py, local_cli, 'json', in_path, '-o', out_path]
+            ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+            break if ok
+          end
+        end
+        raise 'python converter failed' unless ok
         return File.read(out_path)
       end
     rescue StandardError => e
@@ -102,11 +114,20 @@ module Scjson
         in_path = File.join(dir, 'in.scjson')
         out_path = File.join(dir, 'out.scxml')
         File.write(in_path, json_str)
-        py = ENV['PYTHON'] || 'python'
-        # Python CLI supports scjson->SCXML via `xml` subcommand
-        cmd = [py, '-m', 'scjson.cli', 'xml', in_path, '-o', out_path]
-        ok = system(*cmd, out: File::NULL, err: File::NULL)
-        raise 'python converter failed' unless ok && File.file?(out_path)
+        py_candidates = [ENV['PYTHON'], 'python', 'python3'].compact.uniq
+        ok = false
+        py_candidates.each do |py|
+          cmd = [py, '-m', 'scjson.cli', 'xml', in_path, '-o', out_path]
+          ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          break if ok
+          local_cli = File.expand_path('../../py/scjson/cli.py', __dir__)
+          if File.file?(local_cli)
+            cmd2 = [py, local_cli, 'xml', in_path, '-o', out_path]
+            ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+            break if ok
+          end
+        end
+        raise 'python converter failed' unless ok
         return File.read(out_path)
       end
     rescue StandardError => e
