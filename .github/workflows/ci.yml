@@ -316,12 +316,14 @@ jobs:
         env:
           RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
         run: |
-          if [ -z "$RUBYGEMS_API_KEY" ]; then
+          if [ -z "${RUBYGEMS_API_KEY:-}" ]; then
             echo "No RubyGems API key provided; skipping publish." && exit 0
           fi
           mkdir -p ~/.gem
-          printf '---\n:rubygems_api_key: %s\n' "$RUBYGEMS_API_KEY" > ~/.gem/credentials
-          chmod 0600 ~/.gem/credentials
+          umask 077
+          # Prevent printf from interpreting leading dashes as options
+          printf -- '---\n:rubygems_api_key: %s\n' "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 600 ~/.gem/credentials
           gem push scjson-*.gem
 
       - id: determine_npm
