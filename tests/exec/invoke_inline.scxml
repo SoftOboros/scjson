@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0" name="invoke_inline">
+  <state id="s0">
+    <transition event="go" target="invk"/>
+  </state>
+  <state id="invk">
+    <invoke autoforward="false" id="child1">
+      <content>
+        <scxml initial="cf" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+          <final id="cf"/>
+        </scxml>
+      </content>
+      <finalize>
+        <log label="child" expr="'done'"/>
+      </finalize>
+    </invoke>
+    <transition event="done.invoke" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

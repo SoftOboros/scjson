@@ -7,5 +7,5 @@
 # Licensed under the BSD 1-Clause License.
 
 module Scjson
-  VERSION = '0.1.4'
+  VERSION = '0.3.5'
 end

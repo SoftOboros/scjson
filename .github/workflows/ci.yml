@@ -26,7 +26,9 @@ jobs:
 
       - name: Install JS dependencies
         working-directory: js
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          npm install scion-core --no-audit --no-fund
 
       - name: Typecheck + compile (JS)
         working-directory: js
@@ -35,6 +37,10 @@ jobs:
       - name: Lint (JS)
         working-directory: js
         run: npm run lint
+
+      - name: Run JS harness sample (SCION)
+        working-directory: js
+        run: npm run ci:harness
 
       - uses: actions/setup-python@v5
         with:
@@ -51,6 +57,15 @@ jobs:
       - name: Run Python tests
         working-directory: py
         run: python -m pytest
+
+      - name: Ruby engine harness (focused)
+        run: bash scripts/ci_ruby_harness.sh
+      - name: Ruby engine harness (tests/exec)
+        run: |
+          bash scripts/ci_ruby_harness.sh tests/exec/*.scxml
+      - name: Ruby engine harness (list)
+        run: |
+          bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt
 
       - name: Sweep small corpus (Python/SCION reference)
         run: |
@@ -144,7 +159,9 @@ jobs:
 
       - name: Install JS dependencies
         working-directory: js
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          npm install scion-core --no-audit --no-fund
 
       - name: Typecheck + compile (JS)
         working-directory: js
@@ -153,6 +170,10 @@ jobs:
       - name: Lint (JS)
         working-directory: js
         run: npm run lint
+
+      - name: Run JS harness sample (SCION)
+        working-directory: js
+        run: npm run ci:harness
 
       - uses: actions/setup-python@v5
         with:
@@ -169,6 +190,15 @@ jobs:
       - name: Run Python tests
         working-directory: py
         run: python -m pytest
+
+      - name: Ruby engine harness (focused)
+        run: bash scripts/ci_ruby_harness.sh
+      - name: Ruby engine harness (tests/exec)
+        run: |
+          bash scripts/ci_ruby_harness.sh tests/exec/*.scxml
+      - name: Ruby engine harness (list)
+        run: |
+          bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt
 
       - name: Sweep small corpus (Python/SCION reference)
         run: |

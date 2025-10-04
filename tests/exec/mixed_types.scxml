@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Agent Name: ruby-test-mixed-types
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0">
+  <state id="s0">
+    <onentry>
+      <assign location="x" expr="2"/>
+    </onentry>
+    <transition event="check" cond="x == '2'" target="pass"/>
+    <transition event="check" target="fail"/>
+  </state>
+  <final id="pass"/>
+  <final id="fail"/>
+</scxml>
+

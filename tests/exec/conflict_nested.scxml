@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Agent Name: ruby-test-conflict-nested
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="A">
+  <state id="A">
+    <state id="B">
+      <!-- Deeper transition should win on 'go' -->
+      <transition event="go" target="C"/>
+    </state>
+    <!-- Parent transition with same trigger; should be shadowed by B's -->
+    <transition event="go" target="C"/>
+  </state>
+  <state id="C"/>
+</scxml>
+

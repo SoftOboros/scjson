@@ -1,7 +1,7 @@
 {
   "name": "scjson",
-  "version": "0.3.3",
-  "description": "A JSON-based serialization of SCXML (State Chart XML).",
+  "version": "0.3.5",
+  "description": "A JSON-based serialization of SCXML (State Chart XML) with SCXML/SCML execution tooling and converters.",
   "author": "Softoboros Technology Inc. <ira@softoboros.com>",
   "repository": {
     "type": "git",
@@ -41,18 +41,33 @@
     "LICENSE"
   ],
   "bin": {
-    "scjson": "bin/scjson.js"
+    "scjson": "bin/scjson.js",
+    "scjson-scion-trace": "dist/harness.js"
   },
+  "keywords": [
+    "scxml",
+    "statecharts",
+    "state-machine",
+    "scjson",
+    "scml",
+    "execution"
+  ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "node ../tools/scion-runner/extract.cjs",
     "test": "jest",
-    "lint": "eslint"
+    "lint": "eslint",
+    "harness:sample": "node dist/harness.js -I ../tests/exec/toggle.scxml -e ../tests/exec/toggle.events.jsonl --xml --leaf-only --omit-delta --strip-step0-noise",
+    "ci:harness": "npm run build && npm run harness:sample"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "commander": "^14.0.0",
     "eslint": "^9.31.0",
     "fast-xml-parser": "^5.2.5"
+  },
+  "peerDependencies": {
+    "scion-core": "*"
   },
   "devDependencies": {
     "@babel/parser": "^7.28.0",

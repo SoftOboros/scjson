@@ -1,0 +1,3 @@
+{"event": "start"}
+{"event": "check", "data": {"val": 3, "arr": [1,2,3]}}
+

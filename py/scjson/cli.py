@@ -436,6 +436,16 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     show_default=True,
     help="Ordering policy for child→parent emissions (finalize, etc.)",
 )
+@click.option(
+    "--emit-time-steps/--no-emit-time-steps",
+    "emit_time_steps",
+    is_flag=True,
+    default=False,
+    help=(
+        "When an advance_time control token is seen, emit a synthetic step to flush timers."
+        " Disabled by default to keep control tokens from affecting step counts."
+    ),
+)
 def engine_trace(
     input_path: Path,
     events_path: Path | None,
@@ -453,6 +463,7 @@ def engine_trace(
     omit_transitions: bool,
     advance_time: float,
     ordering: str,
+    emit_time_steps: bool,
 ) -> None:
     """Produce a JSON lines trace of engine steps for comparison harnesses.
 
@@ -555,7 +566,27 @@ def engine_trace(
                 adv = msg.get("advance_time") if isinstance(msg, dict) else None
                 if isinstance(adv, (int, float)) and adv > 0:
                     ctx.advance_time(float(adv))
-                    # Do not emit a trace step for time advancement
+                    if emit_time_steps:
+                        trace = ctx.trace_step(Event(name="__time__", data=None))
+                        if leaf_only:
+                            leaf_ids = ctx.leaf_state_ids()
+                            for key in ("configuration", "enteredStates", "exitedStates"):
+                                vals = trace.get(key)
+                                if isinstance(vals, list):
+                                    trace[key] = [v for v in vals if v in leaf_ids]
+                        if omit_actions and "actionLog" in trace:
+                            trace["actionLog"] = []
+                        if omit_delta and "datamodelDelta" in trace:
+                            trace["datamodelDelta"] = {}
+                        if not omit_delta and isinstance(trace.get("datamodelDelta"), dict):
+                            dm = trace["datamodelDelta"]
+                            trace["datamodelDelta"] = {k: dm[k] for k in sorted(dm)}
+                        if omit_transitions and "firedTransitions" in trace:
+                            trace["firedTransitions"] = []
+                        trace["event"] = None
+                        trace["step"] = step_no
+                        sink.write(dumps(trace) + "\n")
+                        step_no += 1
                     continue
             except Exception:
                 # Fall through to normal event handling

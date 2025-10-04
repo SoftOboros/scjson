@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0" name="invoke_timer">
+  <state id="s0">
+    <transition event="go" target="invk"/>
+  </state>
+  <state id="invk">
+    <onentry>
+      <send event="tick" delay="1s"/>
+    </onentry>
+      <invoke id="child1">
+        <content>
+          <scxml initial="f" xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+            <final id="f"/>
+          </scxml>
+        </content>
+        <finalize>
+          <log label="child1" expr="'done'"/>
+        </finalize>
+      </invoke>
+    <transition event="done.invoke" target="mid"/>
+    <transition event="tick" target="done"/>
+  </state>
+  <state id="mid">
+    <transition event="tick" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

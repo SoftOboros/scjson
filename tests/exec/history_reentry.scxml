@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="S" name="history_reentry">
+  <state id="S" initial="L">
+    <state id="L" initial="LA">
+      <history id="LH" type="shallow">
+        <transition target="LA"/>
+      </history>
+      <state id="LA">
+        <transition event="flip" target="LB"/>
+        <transition event="toR" target="R"/>
+      </state>
+      <state id="LB">
+        <transition event="flip" target="LA"/>
+        <transition event="toR" target="R"/>
+      </state>
+    </state>
+    <state id="R">
+      <transition event="back" target="LH"/>
+    </state>
+  </state>
+</scxml>

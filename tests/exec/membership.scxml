@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="s0" name="membership">
+  <state id="s0">
+    <transition event="check" cond="_event.data.val in _event.data.arr" target="pass"/>
+    <transition event="check" target="fail"/>
+  </state>
+  <final id="pass"/>
+  <final id="fail"/>
+</scxml>
+

@@ -1,0 +1,24 @@
+# Agent Name: ci-known-diffs
+#
+# Part of the scjson project.
+# Developed by Softoboros Technology Inc.
+# Licensed under the BSD 1-Clause License.
+
+# Format: <chart> <category>
+# category: py-ref | ref-sec | any
+
+# ECMAScript 'in' operator vs Python membership semantics
+tests/exec/membership.scxml py-ref
+
+# Step-0 configuration differences: immediate child completion collapse
+tests/exec/parallel_history_invoke.scxml py-ref
+
+# History reentry target differences (Python vs SCION)
+tests/exec/history_reentry.scxml py-ref
+
+# Parallel final collapse at step-0 (SCION) vs leaf retention (Python)
+tests/exec/conflict_parallel.scxml py-ref
+
+# Ruby supports in(stateId); SCION ECMAScript does not
+tests/exec/in_predicate.scxml ref-sec
+

@@ -5,11 +5,81 @@
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
-const { JSDOM } = require("jsdom");
-require("regenerator-runtime/runtime");
+let JSDOM = null;
+try {
+  ({ JSDOM } = require("jsdom"));
+} catch (e) {
+  // Optional: jsdom not installed; we'll use a minimal stub DOM
+}
+try {
+  require("regenerator-runtime/runtime");
+} catch (e) {
+  // Optional: when not present, Node's native async should suffice
+}
 
 const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
-const scxmlBundle = require("scxml/dist/scxml.js");
+function loadScxmlBundle() {
+  const zlib = require("zlib");
+  const vendorDir = path.resolve(__dirname, "vendor");
+  const vendorTgz = path.resolve(vendorDir, "scxml-5.0.4.tgz");
+  const preExtracted = path.resolve(vendorDir, "package", "dist", "scxml.js");
+  const preExtractedCore = path.resolve(vendorDir, "package", "dist", "core.js");
+  // 1) Prefer vendored files if present
+  if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
+    return require(preExtracted);
+  }
+  // 2) If tgz exists, try system tar first
+  if (fs.existsSync(vendorTgz)) {
+    try {
+      const { execSync } = require("child_process");
+      execSync(
+        `tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js package/dist/core.js`,
+        { stdio: "ignore" }
+      );
+      if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
+        return require(preExtracted);
+      }
+    } catch (_) {
+      // ignore and fall back to manual extraction
+    }
+    // Manual extractor: minimal TAR reader
+    try {
+      const gzData = fs.readFileSync(vendorTgz);
+      const tarData = zlib.gunzipSync(gzData);
+      let offset = 0;
+      const BLOCK = 512;
+      const targets = new Set(["package/dist/scxml.js", "package/dist/core.js"]);
+      const writes = {};
+      while (offset + BLOCK <= tarData.length && targets.size > 0) {
+        const header = tarData.subarray(offset, offset + BLOCK);
+        const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
+        if (!name) break;
+        const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
+        const size = parseInt(sizeOct || "0", 8);
+        offset += BLOCK;
+        if (targets.has(name)) {
+          writes[name] = tarData.subarray(offset, offset + size);
+          targets.delete(name);
+        }
+        const pad = Math.ceil(size / BLOCK) * BLOCK;
+        offset += pad;
+      }
+      const pkgDir = path.resolve(vendorDir, "package", "dist");
+      try { fs.mkdirSync(pkgDir, { recursive: true }); } catch (_) {}
+      if (writes["package/dist/core.js"]) fs.writeFileSync(preExtractedCore, writes["package/dist/core.js"]);
+      if (writes["package/dist/scxml.js"]) fs.writeFileSync(preExtracted, writes["package/dist/scxml.js"]);
+      if (fs.existsSync(preExtracted)) {
+        return require(preExtracted);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+  // 3) As a final attempt, use installed module if present
+  return require("scxml/dist/scxml.js");
+}
+
+const scxmlBundle = loadScxmlBundle();
 const { documentStringToModel, core } = scxmlBundle;
 const DEFAULT_INVOKERS = Object.assign({}, core.InterpreterScriptingContext.invokers || {});
 
@@ -207,11 +277,25 @@ function readEvents(filePath) {
 }
 
 function makeDom(url) {
-  const dom = new JSDOM("", { url });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.location = dom.window.location;
-  return dom;
+  if (JSDOM) {
+    const dom = new JSDOM("", { url });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.location = dom.window.location;
+    return dom;
+  }
+  // Fallback stub when jsdom is unavailable
+  const stub = {
+    window: {
+      close() {},
+      document: undefined,
+      location: { href: url },
+    },
+  };
+  global.window = stub.window;
+  global.document = stub.window.document;
+  global.location = stub.window.location;
+  return stub;
 }
 
 function createContext(event) {

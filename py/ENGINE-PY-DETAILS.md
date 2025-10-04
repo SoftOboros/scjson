@@ -174,7 +174,7 @@ File: `py/vector_gen.py`, helpers in `py/vector_lib/`
 
 File: `py/pyproject.toml`
 
-- Version: `0.3.4`
+- Version: `0.3.5`
 - Dependencies: `pydantic`, `lxml`, `jsonschema`, `click`, `py-sandboxed` (sandbox), `jinja2`, `xmlschema`, `xsdata`.
 - Console scripts:
   - `scjson` — main CLI

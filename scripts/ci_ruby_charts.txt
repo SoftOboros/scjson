@@ -1,0 +1,24 @@
+# Agent Name: ci-ruby-charts-list
+#
+# Part of the scjson project.
+# Developed by Softoboros Technology Inc.
+# Licensed under the BSD 1-Clause License.
+
+# Focused acceptance set targeting corner cases
+tests/exec/toggle.scxml
+# Known divergence: ECMAScript 'in' operator vs Python membership semantics
+tests/exec/membership.scxml
+tests/exec/invoke_inline.scxml
+tests/exec/parallel_invoke.scxml
+tests/exec/invoke_timer.scxml
+# Known divergence: step-0 configuration differs (Python collapses via immediate child completion)
+tests/exec/parallel_history_invoke.scxml
+# Known divergence: history reentry target varies (Python vs SCION)
+tests/exec/history_reentry.scxml
+tests/exec/conflict_nested.scxml
+# Known divergence: parallel-final collapse at step-0 (SCION) vs leaf retention (Python)
+tests/exec/conflict_parallel.scxml
+tests/exec/cancel_send.scxml
+tests/exec/mixed_types.scxml
+# Known divergence: Ruby supports in(stateId); SCION ECMAScript does not
+tests/exec/in_predicate.scxml

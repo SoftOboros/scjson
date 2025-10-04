@@ -4,6 +4,17 @@
 
 > A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education.
 
+**Execution Engines**
+- Python engine: Deterministic trace emitter, vector generation, and compare tools. See `docs/ENGINE-PY.md` and `py/ENGINE-PY-DETAILS.md`.
+- Ruby engine: Trace interface under active development with growing feature parity. See `docs/ENGINE-RB.md`.
+
+**JS/TS Harness (via SCION)**
+- The JS package ships a harness CLI `scjson-scion-trace` that directly requires `scion-core` to execute SCXML and emit JSONL traces. Install `scion-core` in your project to enable it.
+- Supports both `.scxml` and `.scjson` input (the latter is converted to SCXML internally).
+- Normalization flags: `--leaf-only`, `--omit-delta`, `--omit-transitions`, `--strip-step0-noise`, `--strip-step0-states`.
+- Usage (package): `npx scjson-scion-trace -I chart.(scxml|scjson) -e events.jsonl [--xml] [--leaf-only] [--omit-delta] [...]`
+- Dev alternative (in this repo): `node tools/scion-runner/scion-trace.cjs -I chart.scxml -e events.jsonl --xml`
+
 ---
 
 ## Overview
@@ -58,13 +69,13 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 ---
 
-## Converters
+## Converters & Engines
 
 | Language  | Status | Path | Notes |
 |-----------|--------|------|-------|
 | Python    | ✅ Canonical | [py](./py/README.md) | Reference implementation and compatibility baseline |
-| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus |
-| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Matches Python output on the tutorial corpus |
+| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus; harness available via SCION |
+| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Converter parity; engine trace interface under active development |
 | Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
 | Java      | ✅ Parity | [java](./java/README.md) | Uses [SCION](https://www.npmjs.com/package/scion)-backed runner; matches Python output |
 | Go        | ✅ Parity | [go](./go/README.md) | Matches Python output on the tutorial corpus |
@@ -136,7 +147,21 @@ pip install scjson
 npm: [https://www.npmjs.com/package/scjson]
 ```bash
 npm install scjson
+# harness requires scion-core
+npm install scion-core
 ```
+
+Harness (Node):
+```bash
+npx scjson-scion-trace -I path/to/chart.scxml -e events.jsonl --xml
+```
+
+rubygems: [https://rubygems.org/gems/scjson]
+```bash
+gem install scjson
+```
+RubyGems notes:
+- Ruby CLI includes converters and a trace interface. See `docs/ENGINE-RB.md` for engine usage and maturity. The gem is published at the link above.
 
 cargo: [https://crates.io/crates/scjson]
 ```bash
@@ -159,6 +184,17 @@ For a full example of installing toolchains and dependencies across languages se
 - Compatibility matrix: `docs/COMPATIBILITY.md`
 - Testing guide: `TESTING.md`
 - Agents overview: `AGENTS.md`
+
+
+## Known Divergences and Issues
+
+Cross‑engine comparisons sometimes surface intentional, documented differences (e.g., ordering nuances, ECMA `in` semantics, history re‑entry). Use these resources to understand, normalize, and triage behavior across SCION (Node), Python, and Ruby:
+
+- Comprehensive overview: docs/COMPATIBILITY.md
+- Normalization profile: `--norm scion` in exec_compare sets leaf‑only, omit‑delta, omit‑transitions, strip‑step0‑states, and ordering=scion.
+  - Example: `python py/exec_compare.py tests/exec/toggle.scxml --events tests/exec/toggle.events.jsonl --reference "node tools/scion-runner/scion-trace.cjs" --norm scion`
+- CI known‑diffs list: scripts/ci_ruby_known_diffs.txt (used by `scripts/ci_ruby_harness.sh --known` to keep CI green while still reporting expected mismatches).
+- Ruby converter in CI: when Nokogiri isn’t available, the Ruby CLI falls back to the Python converter for SCXML↔scjson only; execution remains Ruby. See docs/ENGINE-RB.md (CI Notes).
 
 
 ## Quick Installs.

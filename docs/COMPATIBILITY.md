@@ -83,6 +83,11 @@ The table below summarizes the current Python engine feature coverage relative t
 
 ---
 
+Note on time-step emission
+- The Python engine emits a synthetic trace step by default when an `{"advance_time": N}` control token is processed so that timer-driven changes are visible even without a subsequent external event. Use `--no-emit-time-steps` to suppress these steps when strict parity with tools that do not emit them is desired.
+
+---
+
 Back to
 - User guide: `docs/ENGINE-PY.md`
 - Architecture & reference: `py/ENGINE-PY-DETAILS.md`

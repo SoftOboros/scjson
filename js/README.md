@@ -47,6 +47,40 @@ scjson xml path/to/machine.scjson
 scjson validate path/to/dir -r
 ```
 
+## Harness CLI (SCION)
+
+The package also ships a harness CLI that executes SCXML using the SCION engine
+and emits JSONL traces compatible with compare tooling.
+
+Install peer dependency:
+```bash
+npm i scion-core
+```
+
+Usage:
+```bash
+npx scjson-scion-trace -I path/to/chart.(scxml|scjson) -e path/to/events.jsonl [--xml]
+```
+
+Quick check (from this repo):
+```bash
+cd js
+npm ci
+npm run harness:sample
+```
+
+Flags:
+- `--leaf-only` – emit leaf-only configurations (SCION already reports atomic states)
+- `--omit-delta` – clear `datamodelDelta`
+- `--omit-transitions` – clear `firedTransitions`
+- `--strip-step0-noise` – at step 0, clear `datamodelDelta` and `firedTransitions`
+- `--strip-step0-states` – at step 0, clear `enteredStates` and `exitedStates`
+
+Notes:
+- `.scjson` input is converted to SCXML internally before execution.
+- SCION does not model time; `{"advance_time": N}` control tokens emit a
+  synthetic step to keep streams progressing.
+
 ## Conversion Functions
 ```js
 /**

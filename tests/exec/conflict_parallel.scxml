@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Agent Name: ruby-test-conflict-parallel
+
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml">
+  <parallel id="P">
+    <state id="L">
+      <transition event="tick" target="LF"/>
+      <final id="LF"/>
+    </state>
+    <state id="R">
+      <transition event="tick" target="RF"/>
+      <final id="RF"/>
+    </state>
+  </parallel>
+  <final id="done"/>
+  <transition event="done.state.P" target="done"/>
+</scxml>
+
