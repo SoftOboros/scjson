@@ -54,6 +54,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "node ../tools/scion-runner/extract.cjs",
     "test": "jest",
     "lint": "eslint",
     "harness:sample": "node dist/harness.js -I ../tests/exec/toggle.scxml -e ../tests/exec/toggle.events.jsonl --xml --leaf-only --omit-delta --strip-step0-noise",
