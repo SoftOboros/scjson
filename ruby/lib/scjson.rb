@@ -69,20 +69,18 @@ module Scjson
         in_path = File.join(dir, 'in.scxml')
         out_path = File.join(dir, 'out.scjson')
         File.write(in_path, xml_str)
-        py_candidates = [ENV['PYTHON'], 'python', 'python3'].compact.uniq
+        py_candidates = [ENV['PYTHON'], 'python3', 'python'].compact.uniq
         ok = false
         py_candidates.each do |py|
           # Try package entrypoint
           cmd = [py, '-m', 'scjson.cli', 'json', in_path, '-o', out_path]
           ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
           break if ok
-          # Try repo-local module path
-          local_cli = File.expand_path('../../py/scjson/cli.py', __dir__)
-          if File.file?(local_cli)
-            cmd2 = [py, local_cli, 'json', in_path, '-o', out_path]
-            ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
-            break if ok
-          end
+          # Try repo-local module as a package (py.scjson.cli)
+          # Assumes current working directory is repo root so 'py' is importable.
+          cmd2 = [py, '-m', 'py.scjson.cli', 'json', in_path, '-o', out_path]
+          ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          break if ok
         end
         raise 'python converter failed' unless ok
         return File.read(out_path)
@@ -114,18 +112,15 @@ module Scjson
         in_path = File.join(dir, 'in.scjson')
         out_path = File.join(dir, 'out.scxml')
         File.write(in_path, json_str)
-        py_candidates = [ENV['PYTHON'], 'python', 'python3'].compact.uniq
+        py_candidates = [ENV['PYTHON'], 'python3', 'python'].compact.uniq
         ok = false
         py_candidates.each do |py|
           cmd = [py, '-m', 'scjson.cli', 'xml', in_path, '-o', out_path]
           ok = system(*cmd, out: File::NULL, err: File::NULL) && File.file?(out_path)
           break if ok
-          local_cli = File.expand_path('../../py/scjson/cli.py', __dir__)
-          if File.file?(local_cli)
-            cmd2 = [py, local_cli, 'xml', in_path, '-o', out_path]
-            ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
-            break if ok
-          end
+          cmd2 = [py, '-m', 'py.scjson.cli', 'xml', in_path, '-o', out_path]
+          ok = system(*cmd2, out: File::NULL, err: File::NULL) && File.file?(out_path)
+          break if ok
         end
         raise 'python converter failed' unless ok
         return File.read(out_path)
