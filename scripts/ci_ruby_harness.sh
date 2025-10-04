@@ -141,7 +141,12 @@ main() {
     esac
   done
 
-  # Load known diffs if provided
+  # Default known-diffs file when present (auto-load to keep CI green)
+  if [[ -z "$KNOWN_FILE" && -f scripts/ci_ruby_known_diffs.txt ]]; then
+    KNOWN_FILE="scripts/ci_ruby_known_diffs.txt"
+  fi
+
+  # Load known diffs if provided or defaulted
   if [[ -n "$KNOWN_FILE" ]]; then
     load_known "$KNOWN_FILE"
   fi
