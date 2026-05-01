@@ -454,7 +454,15 @@ class DocumentContext(BaseModel):
     ) -> ActivationRecord:
         """Recursively create activations and collect datamodel entries."""
 
-        ident = getattr(node, "id", None) or getattr(node, "name", None) or "anon"
+        # The Scxml root has no `id` attribute — its `name` is metadata, not an
+        # identifier, and using it as the activation id collides with state ids
+        # of the same value (e.g. <scxml name="menu">…<state id="menu"/></scxml>).
+        # The collision wipes the matching state from `_filter_states` outputs
+        # because `_is_user_state` rejects anything == root_activation.id.
+        if isinstance(node, Scxml):
+            ident = "__scxml_root__"
+        else:
+            ident = getattr(node, "id", None) or getattr(node, "name", None) or "anon"
         act = ActivationRecord(id=ident, node=node, parent=parent)
         act.local_data.update(
             DocumentContext._extract_datamodel(node, evaluator, allow_unsafe_eval)
