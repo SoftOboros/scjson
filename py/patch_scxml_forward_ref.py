@@ -90,7 +90,7 @@ class FieldStripper(ast.NodeTransformer):
             self._make_optional("expr", "Optional[str]", None),
             self._make_field_call(
                 "other_attributes",
-                "dict[str, str]",
+                "dict[str, Any]",
                 'field(default_factory=dict, title="Other Attributes")',
             ),
         ]
@@ -168,17 +168,19 @@ def patch_generated_model(file_path: str, class_name: str, fields_to_remove: Lis
 
     modified_code = ast.unparse(modified_ast)
 
-    # Post-processing to ensure List import
+    # Post-processing to ensure List, Any imports
     lines = modified_code.splitlines()
     typing_line_found = False
     for i, line in enumerate(lines):
         if line.startswith("from typing import"):
             typing_line_found = True
             if "List" not in line:
-                lines[i] = line.rstrip() + ", List"
+                lines[i] = lines[i].rstrip() + ", List"
+            if "Any" not in lines[i]:
+                lines[i] = lines[i].rstrip() + ", Any"
             break
     if not typing_line_found:
-        lines.insert(0, "from typing import Optional, List  # inserted by patch")
+        lines.insert(0, "from typing import Optional, List, Any  # inserted by patch")
 
     # Write and format
     modified_code = "\n".join(lines)

@@ -1,6 +1,6 @@
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List
+from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict
 from xsdata_pydantic.fields import field
 
@@ -82,7 +82,7 @@ class ScxmlCancelType(BaseModel):
     )
     sendid: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     sendidexpr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -90,7 +90,7 @@ class ScxmlCancelType(BaseModel):
 class ScxmlContentType(BaseModel):
     content: Optional[List["Scxml"]] = None
     expr: Optional[str] = None
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, title="Other Attributes"
     )
 
@@ -109,7 +109,7 @@ class ScxmlDataType(BaseModel):
     id: str = field(metadata={"type": "Attribute", "required": True})
     src: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
     content: list[object] = field(
@@ -124,7 +124,7 @@ class ScxmlElseType(BaseModel):
         name = "scxml.else.type"
 
     model_config = ConfigDict(defer_build=True)
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -136,7 +136,7 @@ class ScxmlElseifType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     cond: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -152,7 +152,7 @@ class ScxmlLogType(BaseModel):
     )
     label: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -169,7 +169,7 @@ class ScxmlParamType(BaseModel):
     name: str = field(metadata={"type": "Attribute", "required": True})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     location: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -181,7 +181,7 @@ class ScxmlRaiseType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     event: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -193,7 +193,7 @@ class ScxmlScriptType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     src: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
     content: list[object] = field(
@@ -305,7 +305,7 @@ class ScxmlAssignType(BaseModel):
         metadata={"name": "type", "type": "Attribute"},
     )
     attr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
     content: list[object] = field(
@@ -337,7 +337,7 @@ class ScxmlDatamodelType(BaseModel):
     other_element: list[object] = field(
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -356,7 +356,7 @@ class ScxmlDonedataType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -397,7 +397,7 @@ class ScxmlSendType(BaseModel):
     )
     delayexpr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     namelist: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -494,7 +494,7 @@ class ScxmlIfType(BaseModel):
         },
     )
     cond: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -561,7 +561,7 @@ class ScxmlForeachType(BaseModel):
     array: str = field(metadata={"type": "Attribute", "required": True})
     item: str = field(metadata={"type": "Attribute", "required": True})
     index: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -625,7 +625,7 @@ class ScxmlFinalizeType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -679,7 +679,7 @@ class ScxmlOnentryType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -733,7 +733,7 @@ class ScxmlOnexitType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -801,7 +801,7 @@ class ScxmlTransitionType(BaseModel):
     type_value: Optional[TransitionTypeDatatype] = field(
         default=None, metadata={"name": "type", "type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -868,7 +868,7 @@ class ScxmlFinalType(BaseModel):
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
     id: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -893,7 +893,7 @@ class ScxmlHistoryType(BaseModel):
     type_value: Optional[HistoryTypeDatatype] = field(
         default=None, metadata={"name": "type", "type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -914,7 +914,7 @@ class ScxmlInitialType(BaseModel):
             "required": True,
         }
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -952,7 +952,7 @@ class ScxmlInvokeType(BaseModel):
     autoforward: BooleanDatatype = field(
         default=BooleanDatatype.FALSE, metadata={"type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -1051,7 +1051,7 @@ class ScxmlStateType(BaseModel):
         default_factory=list,
         metadata={"name": "initial", "type": "Attribute", "tokens": True},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -1108,7 +1108,7 @@ class ScxmlParallelType(BaseModel):
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
     id: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 
@@ -1170,7 +1170,7 @@ class ScxmlScxmlType(BaseModel):
     exmode: Optional[ExmodeDatatype] = field(
         default=None, metadata={"type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
 

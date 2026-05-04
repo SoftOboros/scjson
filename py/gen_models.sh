@@ -61,3 +61,10 @@ xsdata generate \
 # Patch pydantic models for forward references in schema (see script)
 python patch_scxml_forward_ref.py --file ./scjson/pydantic/generated.py
 python patch_scxml_forward_ref.py --file ./scjson/pydantic_strict/generated.py
+# Loosen other_attributes typing from dict[str, str] to dict[str, Any] for the
+# pydantic models only. JSON round-trips integer/object metadata used by
+# downstream tools (e.g. Infinity State layout coordinates). The dataclasses
+# variants stay dict[str, str] because xsdata's XML serializer requires
+# string-typed Attributes for xs:anyAttribute round-trips.
+python patch_other_attributes_any.py --file ./scjson/pydantic/generated.py
+python patch_other_attributes_any.py --file ./scjson/pydantic_strict/generated.py
