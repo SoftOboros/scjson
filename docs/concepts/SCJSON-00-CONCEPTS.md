@@ -377,6 +377,14 @@ pointer to `docs/COMPATIBILITY.md`.
 R-6: Engine TODO files remain living checklists. They should not carry unique
 definitions that are absent from this concepts doc or a successor phase doc.
 
+R-7: Localized documentation trees are removed from this repository. Translated
+publication is owned by softoboros.com through submodule inclusion, so localized
+planning copies MUST NOT be regenerated here.
+
+R-8: Converter and execution backlog is split into child concepts docs:
+`SCJSON-CONV-00-CONCEPTS.md`, `SCJSON-EXEC-00-CONCEPTS.md`, and
+`SCJSON-WORKSTREAMS-00-MANAGER-MAP.md`.
+
 ## Section 11. Non-Goals
 
 - This baseline does not prove that every implementation currently conforms.
@@ -408,6 +416,9 @@ definitions that are absent from this concepts doc or a successor phase doc.
 - `docs/ENGINE-RB.md`
 - `docs/TODO-ENGINE-PY.md`
 - `docs/TODO-ENGINE-RUBY.md`
+- `docs/concepts/SCJSON-CONV-00-CONCEPTS.md`
+- `docs/concepts/SCJSON-EXEC-00-CONCEPTS.md`
+- `docs/concepts/SCJSON-WORKSTREAMS-00-MANAGER-MAP.md`
 - `js/src/converters.js`
 - `py/ENGINE-PY-DETAILS.md`
 - `py/scjson/cli.py`
@@ -437,3 +448,4 @@ Initial archive candidates after reconciliation:
 ## Section 15. Change Log
 
 - 2026-05-14: Initial baseline drafted from existing docs and runtime surfaces.
+- 2026-05-14: Added child concept-doc split and localized-doc removal policy.

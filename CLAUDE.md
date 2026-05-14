@@ -29,8 +29,9 @@ around that representation.
   landed behavior; unchecked items remain pending. Update the relevant
   checklist in the same change as code that changes its status.
 - Write agent-generated docs, comments, commit messages, and source text in
-  American English (`en-US`). Localization output lives under locale
-  directories and should not change the root source language.
+  American English (`en-US`). Do not maintain localized documentation trees in
+  this repository; translated publication is handled by softoboros.com when it
+  includes this repo as a submodule.
 
 ## Environment Discipline
 
