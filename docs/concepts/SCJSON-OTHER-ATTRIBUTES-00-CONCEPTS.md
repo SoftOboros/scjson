@@ -235,9 +235,13 @@ unless a target is itself visual or documentary.
   `condition_text_box` through
   `docs/schemas/other_attributes/infinity-state/v1/annotation-box.schema.json`.
 - [x] Core `scjson.schema.json` remains open to unknown `other_attributes`.
-  (Ratified 2026-05-24: every applies-to model retains
-  `other_attributes: { additionalProperties: { type: "string" } }`; no
-  closure introduced.)
+  (Ratified 2026-05-24: every applies-to model exposes `other_attributes`
+  as an open `{ type: "object" }` map with no `additionalProperties`
+  constraint, accepting unknown keys of any JSON type — strictly more
+  permissive than the prior `additionalProperties: { type: "string" }`
+  shape, which was a stale artifact of pre-CONV-B generation that the
+  CONV-E schema regen reconciled. Strict registry validation (per
+  OA-INV-2) remains an opt-in product policy outside core SCJSON.)
 
 ## Section 14. Files Cited
 
@@ -263,3 +267,13 @@ unless a target is itself visual or documentary.
   §6 entry shape, §7 seed registry, and §10 inventory backlog are now
   normative. The remaining open box ("downstream schemas imported, copied, or
   referenced with stable URIs") moves to parent ISTATE08a1 ownership.
+- 2026-05-24: Amended the §13 "Core `scjson.schema.json` remains open"
+  ratification note. The CONV-E Python schema regen revealed that
+  `other_attributes` no longer carries `additionalProperties: { type: "string" }`
+  in the canonical schema — that constraint was a stale artifact of
+  pre-CONV-B generation. The current canonical shape is an open
+  `{ type: "object" }` map accepting unknown keys of any JSON value type,
+  which is strictly more permissive than the prior shape and consistent with
+  OA-INV-1 (round-trip preservation) and the CONV-B pydantic
+  `dict[str, Any]` decision. Spirit ("no closure introduced") preserved;
+  literal claim corrected.
