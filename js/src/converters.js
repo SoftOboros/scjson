@@ -33,6 +33,7 @@ const ARRAY_KEYS = new Set([
   'final',
   'finalize',
   'foreach',
+  'help_text',
   'history',
   'if_value',
   'initial',
@@ -47,6 +48,19 @@ const ARRAY_KEYS = new Set([
   'script',
   'send',
   'state',
+]);
+
+/**
+ * CONV-E: Set of known structural metadata keys that live alongside the
+ * SCXML child surface but are not themselves SCXML child elements. These
+ * keys MUST round-trip through JSON-side normalization without being folded
+ * into ``other_attributes`` or generic ``content``.
+ *
+ * ``help_text`` is the only member today; future structural metadata keys
+ * (e.g. promoted authoring annotations from CONV-F) should be added here.
+ */
+const STRUCTURAL_METADATA_KEYS = new Set([
+  'help_text',
 ]);
 
 /// Known SCXML structural fields that should be pulled out of `content[]`
@@ -1219,6 +1233,15 @@ function jsonToXml(jsonStr) {
           }
           continue;
         }
+        if (nk === 'help_text') {
+          // CONV-E: help_text is JSON-only authoring metadata. SCXML emission
+          // is owned by CONV-F (comment promotion). For this commit we mirror
+          // Python's xsdata ``type: Ignore`` approach and drop help_text from
+          // the XML output rather than smashing it into an attribute or
+          // generic content. JSON-side round-trip preservation is covered by
+          // the structural-metadata helpers above.
+          continue;
+        }
         for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
           if (prop === nk) {
             nk = `@_${attr}`;
@@ -1387,4 +1410,6 @@ module.exports = {
   reorderScxml,
   stripNestedDataAttrs,
   stripXmlns,
+  ARRAY_KEYS,
+  STRUCTURAL_METADATA_KEYS,
 };
