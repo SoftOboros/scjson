@@ -68,3 +68,13 @@ python patch_scxml_forward_ref.py --file ./scjson/pydantic_strict/generated.py
 # string-typed Attributes for xs:anyAttribute round-trips.
 python patch_other_attributes_any.py --file ./scjson/pydantic/generated.py
 python patch_other_attributes_any.py --file ./scjson/pydantic_strict/generated.py
+# Inject the CONV-E ``help_text: list[str]`` first-class authoring metadata
+# field next to every ``other_attributes`` field. The patch is idempotent and
+# applies to both pydantic and dataclasses variants. XML serialization of
+# ``help_text`` is intentionally suppressed (xsdata ``type: Ignore``) because
+# CONV-F owns SCXML comment promotion; CONV-E only commits the JSON-side
+# schema surface. See ``docs/concepts/SCJSON-CONV-00-CONCEPTS.md`` CONV-E.
+python patch_help_text.py --file ./scjson/pydantic/generated.py
+python patch_help_text.py --file ./scjson/pydantic_strict/generated.py
+python patch_help_text.py --file ./scjson/dataclasses/generated.py
+python patch_help_text.py --file ./scjson/dataclasses_strict/generated.py

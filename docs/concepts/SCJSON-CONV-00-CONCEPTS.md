@@ -447,7 +447,12 @@ Independent from: comment promotion mechanics.
   documented as repository maintenance tools, not installed runtime package
   entry points.
 - [x] `INFERENCE.md` no longer competes with schema/Python converter authority.
-- [ ] CONV-E `help_text` schema surface lands.
+- [~] CONV-E `help_text` schema surface lands. Python side complete
+  (generated pydantic/dataclasses models, `scjson.schema.json` + js/java
+  mirrors, round-trip tests under `py/tests/test_help_text_round_trip.py`).
+  JavaScript side pending. SCXML round-trip is intentionally deferred to
+  CONV-F; `help_text` is tagged xsdata `type: Ignore` on the model side so
+  XML serialization is a no-op until comment promotion lands.
 - [ ] CONV-F SCXML comment promotion lands in Python and JavaScript parity
   tests.
 - [x] CONV-G extension metadata registry and optional schema catalog documents
@@ -508,3 +513,13 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   for suggested `other_attributes` conventions while keeping the core SCJSON
   extension surface open, and added
   `SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` as the catalog stub.
+- 2026-05-24: CONV-E Python side landed. `help_text: list[str]` is now a
+  first-class field on every applies-to model in `py/scjson/pydantic`,
+  `py/scjson/pydantic_strict`, `py/scjson/dataclasses`, and
+  `py/scjson/dataclasses_strict` (injected by `py/patch_help_text.py` from
+  `py/gen_models.sh`). `scjson.schema.json` re-exported and byte-mirrored to
+  `js/scjson.schema.json` and `java/src/main/resources/scjson.schema.json`.
+  JSON round-trip preserves entry order, never collapses single entries,
+  omits empty arrays under `omit_empty=True`, and stays distinct from
+  `other_attributes`. XML serialization of `help_text` is intentionally
+  suppressed (xsdata `type: Ignore`) pending CONV-F SCXML comment promotion.

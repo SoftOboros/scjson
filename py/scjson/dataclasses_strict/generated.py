@@ -99,6 +99,9 @@ class ScxmlCancelType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -112,6 +115,9 @@ class ScxmlContentType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
     expr: Optional[str] = field(
         default=None,
@@ -160,6 +166,9 @@ class ScxmlDataType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
     content: list[object] = field(
         default_factory=list,
         metadata={
@@ -182,6 +191,9 @@ class ScxmlElseType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -202,6 +214,9 @@ class ScxmlElseifType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -235,6 +250,9 @@ class ScxmlLogType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -276,6 +294,9 @@ class ScxmlParamType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -297,6 +318,9 @@ class ScxmlRaiseType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -316,6 +340,9 @@ class ScxmlScriptType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
     content: list[object] = field(
         default_factory=list,
@@ -428,6 +455,9 @@ class ScxmlAssignType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
     content: list[object] = field(
         default_factory=list,
         metadata={
@@ -471,6 +501,9 @@ class ScxmlDatamodelType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -505,6 +538,9 @@ class ScxmlDonedataType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -609,6 +645,9 @@ class ScxmlSendType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -732,6 +771,9 @@ class ScxmlIfType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -838,6 +880,9 @@ class ScxmlForeachType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -924,6 +969,9 @@ class ScxmlFinalizeType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1003,6 +1051,9 @@ class ScxmlOnentryType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1081,6 +1132,9 @@ class ScxmlOnexitType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1188,6 +1242,9 @@ class ScxmlTransitionType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1264,6 +1321,9 @@ class ScxmlFinalType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1306,6 +1366,9 @@ class ScxmlHistoryType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1334,6 +1397,9 @@ class ScxmlInitialType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1425,6 +1491,9 @@ class ScxmlInvokeType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1559,6 +1628,9 @@ class ScxmlStateType:
             "namespace": "##other",
         },
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
 
 
 @dataclass
@@ -1648,6 +1720,9 @@ class ScxmlParallelType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1751,6 +1826,9 @@ class ScxmlScxmlType:
             "type": "Attributes",
             "namespace": "##other",
         },
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
