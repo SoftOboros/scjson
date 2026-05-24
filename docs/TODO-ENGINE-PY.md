@@ -124,14 +124,14 @@ Comparison Tooling
 - [x] Support optional secondary comparisons via CLI/env overrides.
 
 ## Milestones & Deliverables
-- [ ] M1: Core trace + macrostep + CLI; trace unit tests; 10 simple charts pass vs chosen runner.
-- [ ] M2: Parallel + finalization + shallow history; expanded corpus; runner usage docs.
-- [ ] M3: Safe expression evaluator; exec content conformance; increased coverage.
-- [ ] M4: send/cancel/timers with mock clock; error events; trace schema stabilized.
-- [ ] M5: invoke/finalize with mocks; CI job for full corpus diff.
+- [x] M1: Core trace + macrostep + CLI; trace unit tests; 10 simple charts pass vs chosen runner.
+- [x] M2: Parallel + finalization + shallow history; expanded corpus; runner usage docs.
+- [x] M3: Safe expression evaluator; exec content conformance; increased coverage.
+- [x] M4: send/cancel/timers with mock clock; error events; trace schema stabilized.
+- [ ] M5: invoke/finalize with mocks; CI job for full corpus diff. Invoke/finalize mocks and child-machine coverage have landed; the full-corpus CI diff remains open.
 
 ## Risks & Mitigations
-- [ ] Decide on reference engine if Maven hoops block Java; switch to a free alternative with comparable authority (e.g., scion-core).
+- [x] Decide on reference engine if Maven hoops block Java; switch to a free alternative with comparable authority. SCION/scion-core is the canonical behavioral reference.
 - [x] Constrain expression features to cross‑engine subset or inject via event data; provide Python‑only mode for advanced expressions. (safe sandbox by default; presets via --expr-preset with optional --expr-allow/--expr-deny; Python eval with --unsafe-eval)
 - [ ] Enforce deterministic ordering where SCXML permits implementation choice.
 
@@ -152,7 +152,8 @@ Comparison Tooling
 - [x] W3C sweep (253/338/422/554): `engine-verify` outcomes are pass when using `--advance-time`; `exec_compare` leaf-only normalization matches on 554; others differ at step 0 due to initial transition visibility. Step-0 normalization now strips `datamodelDelta` and `firedTransitions`, with optional stripping of `enteredStates`/`exitedStates` gated by `--keep-step0-states`.
 - [x] Emit a generic `error` alias alongside `error.execution` to improve compatibility with charts listening for `error.*`.
 - [x] Add spec-conformant invalid-assign handling: assigning to a non-existent location now enqueues `error.execution` and does not create a new variable; this enables W3C `test401.scxml`. Removed from `ENGINE_KNOWN_UNSUPPORTED`.
-- [ ] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py` and plan removals as features land.
+- [x] Review `ENGINE_KNOWN_UNSUPPORTED` in `py/uber_test.py` and plan removals as features land. With initialized tutorial data, W3C optional `test457.scxml` now reaches `pass` and was removed; remaining entries are retained with inline reasons for unsupported BasicHTTPEventProcessor and event payload normalization behavior.
+- [x] Correct `docs/ENGINE-PY.md` time-control wording: `advance_time` control tokens do not emit trace steps by default; synthetic time steps require `--emit-time-steps`.
 
 New work items (updated plan)
 - [ ] Invoke/finalize

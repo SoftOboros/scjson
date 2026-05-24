@@ -167,10 +167,12 @@ Independent from: execution semantics.
 ## Section 7. Acceptance Checklist
 
 - [ ] CONV-A schema field registry audit lands.
-- [ ] CONV-B typed extension metadata tests land.
-- [ ] CONV-C active converter guide replaces stale inference claims.
-- [ ] CONV-D generator packaging decision lands.
-- [ ] `INFERENCE.md` no longer competes with schema/Python converter authority.
+- [x] CONV-B typed extension metadata tests land.
+- [x] CONV-C active converter guide replaces stale inference claims.
+- [x] CONV-D generator packaging decision lands. The generator patch scripts are
+  documented as repository maintenance tools, not installed runtime package
+  entry points.
+- [x] `INFERENCE.md` no longer competes with schema/Python converter authority.
 
 ## Section 8. Manager Notes
 

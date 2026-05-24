@@ -41,9 +41,11 @@ TUTORIAL = ROOT / "tutorial"
 
 # Optional features known unsupported by the Python engine for now
 ENGINE_KNOWN_UNSUPPORTED = {
-    Path("Tests/python/W3C/Optional/Auto/test457.scxml"),
+    # BasicHTTPEventProcessor external I/O is not implemented.
     Path("Tests/python/W3C/Optional/Auto/test520.scxml"),
     Path("Tests/python/W3C/Optional/Auto/test532.scxml"),
+    # Event payload content is preserved structurally, not normalized into the
+    # Python datamodel strings/objects expected by these W3C optional tests.
     Path("Tests/python/W3C/Optional/Auto/test562.scxml"),
     Path("Tests/python/W3C/Optional/Auto/test578.scxml"),
 }

@@ -18,9 +18,12 @@ single version stream.
 
 ## Cross-language entries
 
-### 2026-05-01 — Python 0.3.7 (engine bugfix)
+### 2026-05-01 — Python 0.3.7 (engine and metadata bugfixes)
 
-Python-only fix to the execution engine: root activation no longer collides
-with state ids when `<scxml name="X">` matches a `<state id="X">`. Other
-languages do not implement the engine and are not affected. See
+Python-only fixes to the execution engine and generated pydantic model surface:
+root activation no longer collides with state ids when `<scxml name="X">`
+matches a `<state id="X">`, and pydantic `other_attributes` now accepts typed
+JSON metadata while dataclass models remain string typed for XML
+serialization. Other languages do not implement the Python engine and are not
+affected by the engine fix. See
 [`py/CHANGELOG.md`](py/CHANGELOG.md) for details.

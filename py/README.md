@@ -4,10 +4,16 @@
 
 This directory contains the Python implementation of **scjson**, a format for representing SCXML state machines in JSON. The package provides a command line interface and utility functions to convert between `.scxml` and `.scjson` files and to validate documents against the project's schema.
 
-The package includes pydantic and dataclasses types for the associated objects / enums in both standard and strict forms.
+The package includes generated Pydantic and dataclass model variants for the
+schema objects and enumerations in both standard and strict forms.
 
-For details on how SCXML elements are inferred during conversion see [INFERENCE.md](https://github.com/SoftOboros/scjson/blob/main/INFERENCE.md).  In python, inference for conversion is handled by the 
-dataclasses models. See below.
+For current SCJSON representation and converter authority, see the semantic
+baseline and converter concepts docs:
+[SCJSON-00-CONCEPTS.md](https://github.com/SoftOboros/scjson/blob/main/docs/concepts/SCJSON-00-CONCEPTS.md)
+and
+[SCJSON-CONV-00-CONCEPTS.md](https://github.com/SoftOboros/scjson/blob/main/docs/concepts/SCJSON-CONV-00-CONCEPTS.md).
+For language status and parity notes, see
+[docs/COMPATIBILITY.md](https://github.com/SoftOboros/scjson/blob/main/docs/COMPATIBILITY.md).
 
 ## Installation
 
@@ -164,7 +170,9 @@ python py/uber_test.py -l swift -s "Examples/Qt/StopWatch/*.scxml" --consensus-w
 
 - `-s/--subset` filters SCXML files by a glob relative to `tutorial/`.
 - `--consensus-warn` downgrades mismatches to warnings when reference languages (Python/JavaScript/Rust) match the canonical structure.
-- The harness normalizes structural differences (see INFERENCE.md) to produce actionable diffs and prints a triage line with a recommendation.
+- The harness normalizes structural differences according to the active
+  converter and compatibility docs to produce actionable diffs and prints a
+  triage line with a recommendation.
 
 ## Model Variants
 
@@ -192,12 +200,22 @@ shown below mirror those defined in the SCJSON schema.
 
 Several generated classes share generic helper fields:
 
-- `other_attributes`: `dict[str, str]` capturing additional XML attributes from
-  foreign namespaces.
+- `other_attributes`: extension attributes from foreign namespaces. Pydantic
+  model variants use `dict[str, Any]` so JSON tooling can preserve typed
+  metadata; dataclass variants intentionally use `dict[str, str]` for XML
+  serialization.
 - `other_element`: `list[object]` allowing untyped child nodes from other
   namespaces to be preserved.
 - `content`: `list[object]` used when elements permit mixed or wildcard
   content.
+
+## Model Generation Maintenance
+
+The checked-in generated models are refreshed from the repository checkout with
+`py/gen_models.sh`, which applies `py/patch_scxml_forward_ref.py` and
+`py/patch_other_attributes_any.py` after generation. These scripts are
+repository maintenance tools, not installed runtime commands or Python package
+entry points.
 
 ### `scjson.dataclasses`
 

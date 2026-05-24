@@ -52,6 +52,16 @@ def _create_scjson(handler: SCXMLDocumentHandler) -> str:
     return handler.xml_to_json(xml)
 
 
+def _tutorial_dir_or_skip() -> Path:
+    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    if not tutorial_dir.is_dir() or not any(tutorial_dir.rglob("*.scxml")):
+        pytest.skip(
+            "tutorial data is absent; initialize the tutorial submodule "
+            "to run recursive tutorial CLI tests"
+        )
+    return tutorial_dir
+
+
 def test_single_xml_conversion(tmp_path):
     handler = SCXMLDocumentHandler()
     json_path = tmp_path / "sample.scjson"
@@ -80,7 +90,7 @@ def test_directory_xml_conversion(tmp_path):
 
 def test_recursive_conversion(tmp_path):
     runner = CliRunner()
-    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    tutorial_dir = _tutorial_dir_or_skip()
     scjson_dir = tmp_path / "tests" / "scjson"
     scxml_dir = tmp_path / "tests" / "scxml"
 
@@ -106,7 +116,7 @@ def test_recursive_conversion(tmp_path):
 def test_recursive_validation(tmp_path):
     """Validate all converted files recursively."""
     runner = CliRunner()
-    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    tutorial_dir = _tutorial_dir_or_skip()
     scjson_dir = tmp_path / "tests" / "scjson"
     scxml_dir = tmp_path / "tests" / "scxml"
 
@@ -126,7 +136,7 @@ def test_recursive_validation(tmp_path):
 def test_recursive_verify(tmp_path):
     """Verify converted files recursively using -v option."""
     runner = CliRunner()
-    tutorial_dir = Path(__file__).resolve().parents[2] / "tutorial"
+    tutorial_dir = _tutorial_dir_or_skip()
     scjson_dir = tmp_path / "tests" / "scjson"
     scxml_dir = tmp_path / "tests" / "scxml"
 

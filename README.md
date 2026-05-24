@@ -43,7 +43,10 @@ Why JSON?
 
 The canonical `scjson.schema.json` file is located in [`/scjson.schema.json`](./scjson.schema.json).
 It is generated from Pydantic models and used to validate all `*.scjson` documents.
-Detailed inference rules used by the converters are described in [INFERENCE.md](./INFERENCE.md).
+Current SCJSON representation and converter authority are documented in
+[`docs/concepts/SCJSON-00-CONCEPTS.md`](./docs/concepts/SCJSON-00-CONCEPTS.md)
+and
+[`docs/concepts/SCJSON-CONV-00-CONCEPTS.md`](./docs/concepts/SCJSON-CONV-00-CONCEPTS.md).
 
 ---
 
@@ -71,20 +74,22 @@ Each directory is designed to be independently usable as a library or CLI tool.
 
 ## Converters & Engines
 
-| Language  | Status | Path | Notes |
-|-----------|--------|------|-------|
-| Python    | ✅ Canonical | [py](./py/README.md) | Reference implementation and compatibility baseline |
-| JavaScript| ✅ Parity | [js](./js/README.md) | Matches Python output on the tutorial corpus; harness available via SCION |
-| Ruby      | ✅ Parity | [ruby](./ruby/README.md) | Converter parity; engine trace interface under active development |
-| Rust      | ✅ Parity | [rust](./rust/README.md) | Matches Python output on the tutorial corpus |
-| Java      | ✅ Parity | [java](./java/README.md) | Uses [SCION](https://www.npmjs.com/package/scion)-backed runner; matches Python output |
-| Go        | ✅ Parity | [go](./go/README.md) | Matches Python output on the tutorial corpus |
-| Swift     | ✅ Parity | [swift](./swift/README.md) | Matches Python output on the tutorial corpus |
-| C#        | ⚠️ Beta | [csharp](./csharp/README.md) | Functional CLI; parity work in progress |
-| Lua       | ✅ Parity | [lua](./lua/README.md) | Matches Python output on the tutorial corpus |
+Language compatibility status is owned by
+[`docs/COMPATIBILITY.md`](./docs/COMPATIBILITY.md). The table below is a package
+map only; consult the compatibility matrix for current status tiers, parity
+details, and test notes.
 
-See [docs/COMPATIBILITY.md](./docs/COMPATIBILITY.md) for the latest cross-language
-parity details and test notes.
+| Language  | Path | Notes |
+|-----------|------|-------|
+| Python    | [py](./py/README.md) | Canonical converter output and Python engine docs |
+| JavaScript| [js](./js/README.md) | Converter package and SCION trace harness |
+| Ruby      | [ruby](./ruby/README.md) | Converter package and Ruby engine docs |
+| Rust      | [rust](./rust/README.md) | Converter package |
+| Java      | [java](./java/README.md) | Converter package and [SCION](https://www.npmjs.com/package/scion)-backed runner |
+| Go        | [go](./go/README.md) | Converter package |
+| Swift     | [swift](./swift/README.md) | Converter package |
+| C#        | [csharp](./csharp/README.md) | Converter package |
+| Lua       | [lua](./lua/README.md) | Converter package |
 
 ---
 

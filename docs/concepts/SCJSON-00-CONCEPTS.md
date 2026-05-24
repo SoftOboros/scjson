@@ -401,7 +401,7 @@ R-8: Converter and execution backlog is split into child concepts docs:
 - [x] Register frozen schema enums, runtime modes, trace fields, event families,
   and compatibility tiers.
 - [x] Record reconciliation decisions required before old docs can be archived.
-- [ ] Update old docs to cite this concepts doc and remove conflicting claims.
+- [x] Update old docs to cite this concepts doc and remove conflicting claims.
 - [ ] Add archive index and move superseded docs only after their essential
   content has been captured in current concepts/user-guide docs.
 

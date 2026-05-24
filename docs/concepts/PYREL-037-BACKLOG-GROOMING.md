@@ -269,9 +269,14 @@ archiving or heavily rewriting the old inference and engine docs.
 - [x] Ruby TODO items classified as out of scope for Python 0.3.7.
 - [x] Localized TODO docs classified as non-authoritative planning copies.
 - [x] Localized documentation trees removed from the repository source surface.
-- [ ] Implement accepted Python 0.3.7 release gates.
-- [ ] Rebaseline `docs/TODO-ENGINE-PY.md` after accepted release gates land.
-- [ ] Reconcile old docs with `SCJSON-00-CONCEPTS.md` before archiving.
+- [x] Implement accepted Python 0.3.7 release gates. Landed: root activation
+  regression, typed `other_attributes` regression, changelog coverage,
+  generator-tool packaging decision, missing-tutorial recursive test skips, and
+  Python time-control docs. With initialized tutorial data, W3C optional
+  `test457.scxml` now reaches `pass` and was removed from the unsupported list;
+  retained entries have inline reasons.
+- [x] Rebaseline `docs/TODO-ENGINE-PY.md` after accepted release gates land.
+- [x] Reconcile old docs with `SCJSON-00-CONCEPTS.md` before archiving.
 
 ## Section 11. Files Cited
 

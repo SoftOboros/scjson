@@ -108,11 +108,11 @@ Control tokens:
 
 ## Time Control
 
-By default, the CLI emits a synthetic step whenever an `{"advance_time": N}`
-control token is processed so that due timers are visible even when no
-subsequent external events occur. Disable this behavior with
-`--no-emit-time-steps` when strict parity with tools that do not emit such
-steps is desired.
+By default, an `{"advance_time": N}` control token advances the Python engine's
+mock clock without emitting a trace step. This keeps event scripts comparable
+with reference tools that only report externally visible event steps. Pass
+`--emit-time-steps` when due timers must be visible even if no subsequent
+external event occurs.
 
 Example:
 
@@ -122,10 +122,10 @@ python -m scjson.cli engine-trace -I chart.scxml --xml \
 ```
 
 Notes:
-- The synthetic step sets `event` to `null` and otherwise follows the same
-  normalization rules (`--leaf-only`, `--omit-*`).
-- Use `--no-emit-time-steps` to suppress these steps if comparing against tools
-  that do not emit them.
+- With `--emit-time-steps`, the synthetic step sets `event` to `null` and
+  otherwise follows the same normalization rules (`--leaf-only`, `--omit-*`).
+- Leave `--emit-time-steps` unset when comparing against tools that do not emit
+  synthetic time steps.
 
 ## Vector Generation
 

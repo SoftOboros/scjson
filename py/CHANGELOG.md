@@ -47,6 +47,21 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
   `"__scxml_root__"` instead of `getattr(doc, "name", None) or "anon"`; any
   caller that relied on the old behaviour to recover the chart's `name`
   should read `ctx.doc.name` directly (which was always the source of truth).
+- **Pydantic: `other_attributes` accepts typed JSON metadata.**
+  The generated `scjson.pydantic` and `scjson.pydantic_strict` models now type
+  `other_attributes` as `dict[str, Any]`, allowing integer, boolean, array, and
+  object values that downstream JSON tooling stores on extension attributes.
+  The dataclass model families intentionally remain `dict[str, str]` because
+  they back XML serialization, where attribute values are strings.
+
+### Packaging Notes
+
+- `py/gen_models.sh`, `py/patch_other_attributes_any.py`, and
+  `py/patch_scxml_forward_ref.py` remain repository maintenance tools for
+  regenerating checked-in models. They are not added to the Python runtime
+  package surface or wheel entry points. Runtime package data continues to be
+  limited to the files already included by `py/MANIFEST.in`, including README,
+  license/legal text, tests, and bundled templates.
 
 ## 0.3.6 and earlier
 

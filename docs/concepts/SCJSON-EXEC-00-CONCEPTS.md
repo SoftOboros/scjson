@@ -182,10 +182,13 @@ EXEC-D, EXEC-E, and EXEC-F are deferred to larger initiatives.
 
 ## Section 7. Acceptance Checklist
 
-- [ ] EXEC-A Python time-control docs corrected.
-- [ ] EXEC-B root activation regression test lands.
-- [ ] EXEC-C unsupported corpus review lands or is explicitly deferred with
-  submodule validation notes.
+- [x] EXEC-A Python time-control docs corrected.
+- [x] EXEC-B root activation regression test lands.
+- [x] EXEC-C unsupported corpus review lands or is explicitly deferred with
+  submodule validation notes. Recursive tutorial CLI tests now skip clearly
+  when tutorial data is absent; with initialized tutorial data, W3C optional
+  `test457.scxml` was removed from `ENGINE_KNOWN_UNSUPPORTED` and retained
+  entries now carry inline reasons.
 - [ ] EXEC-D invoke/finalize ordering concepts drafted before behavioral
   changes.
 - [ ] EXEC-E vector-generation Phase 3 plan drafted before implementation.
