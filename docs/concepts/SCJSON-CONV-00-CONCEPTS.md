@@ -450,10 +450,13 @@ Independent from: comment promotion mechanics.
 - [ ] CONV-E `help_text` schema surface lands.
 - [ ] CONV-F SCXML comment promotion lands in Python and JavaScript parity
   tests.
-- [ ] CONV-G extension metadata registry and optional schema catalog documents
+- [x] CONV-G extension metadata registry and optional schema catalog documents
   Infinity State-derived `other_attributes` conventions, object applicability,
   value shapes, and the `description` migration path without closing the core
-  extension surface.
+  extension surface. (Ratified 2026-05-24:
+  `SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` §2 boundary, §3 definitions, §5
+  invariants, §6 entry shape, §7 seed registry, §10 inventory backlog; draft
+  optional schemas under `docs/schemas/other_attributes/infinity-state/v1/`.)
 
 ## Section 8. Manager Notes
 
@@ -497,6 +500,10 @@ It remains rejected for Python 0.3.7 and is not a dependency.
 - 2026-05-24: Added CONV-E/F/G planning stubs for first-class `help_text`,
   deterministic SCXML comment promotion, and an extension metadata registry
   seeded by Infinity State `other_attributes` conventions.
+- 2026-05-24: Ratified CONV-G. The extension metadata registry and optional
+  schema catalog (`SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` + draft schemas at
+  `docs/schemas/other_attributes/infinity-state/v1/`) are accepted. CONV-E and
+  CONV-F remain open pending implementation.
 - 2026-05-24: Clarified that CONV-G produces a separate optional schema catalog
   for suggested `other_attributes` conventions while keeping the core SCJSON
   extension surface open, and added

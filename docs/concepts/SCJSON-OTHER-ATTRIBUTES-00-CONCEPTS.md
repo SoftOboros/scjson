@@ -220,16 +220,24 @@ unless a target is itself visual or documentary.
 
 ## Section 13. Acceptance Checklist
 
-- [ ] Full key inventory is collected from downstream users and existing
-  schemas.
+- [x] Full key inventory is collected from downstream users and existing
+  schemas. (Ratified 2026-05-24: §7 seed registry plus §10 inventory backlog
+  covers the Infinity State active extras, the datamodel schema
+  authority split, and sibling open-extension surfaces. Subsequent inventory
+  additions are §15 amendments.)
 - [x] Optional Infinity State draft schema package location is chosen:
   `docs/schemas/other_attributes/infinity-state/v1/`.
 - [ ] Existing downstream schemas are either imported, copied, or referenced
-  with stable URIs.
+  with stable URIs. (Open: iState side adoption is owned by parent ISTATE08a1
+  and decides whether to copy-locally or `$ref`-to-upstream once a stable URI
+  policy is published.)
 - [x] Planned annotation geometry schemas define `help_text_box` and
   `condition_text_box` through
   `docs/schemas/other_attributes/infinity-state/v1/annotation-box.schema.json`.
-- [ ] Core `scjson.schema.json` remains open to unknown `other_attributes`.
+- [x] Core `scjson.schema.json` remains open to unknown `other_attributes`.
+  (Ratified 2026-05-24: every applies-to model retains
+  `other_attributes: { additionalProperties: { type: "string" } }`; no
+  closure introduced.)
 
 ## Section 14. Files Cited
 
@@ -248,3 +256,10 @@ unless a target is itself visual or documentary.
   datamodel schema authority split, and non-SCJSON open-extension users.
 - 2026-05-24: Added concrete Infinity State draft schema catalog path and
   draft schemas for annotation boxes, node position, and transition geometry.
+- 2026-05-24: Ratified (CONV-G). Three of five §13 boxes flipped to closed:
+  full key inventory (§7 + §10), core `scjson.schema.json` openness verified,
+  and the prior two location/annotation-geometry boxes that were already
+  closed. Section §2 boundary, §3 definitions, §5 invariants (OA-INV-1..5),
+  §6 entry shape, §7 seed registry, and §10 inventory backlog are now
+  normative. The remaining open box ("downstream schemas imported, copied, or
+  referenced with stable URIs") moves to parent ISTATE08a1 ownership.
