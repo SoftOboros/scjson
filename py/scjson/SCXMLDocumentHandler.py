@@ -27,6 +27,11 @@ from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
 from xml.etree import ElementTree as ET
+from .comment_promotion import (
+    attach_help_text_to_model,
+    extract_help_text_from_xml,
+    inject_help_text_comments_into_xml,
+)
 
 class SCXMLDocumentHandler:
     def __init__(
@@ -132,7 +137,17 @@ class SCXMLDocumentHandler:
         This method tolerates documents that omit the default SCXML namespace by
         inserting it prior to parsing.  Such files are technically invalid but
         appear in the W3C test suite.
+
+        CONV-F: an SCXML comment-promotion pre-pass runs before namespace
+        insertion so element addresses stay stable across the mutation. The
+        pre-pass strips comments from the XML; the resulting model receives
+        ``help_text`` entries via :func:`attach_help_text_to_model`.
         """
+        # CONV-F pre-pass: extract comments and rewrite ``xml_str`` to be
+        # comment-free. We do this BEFORE default-namespace insertion so the
+        # local-name-based addresses we compute aren't affected by namespace
+        # rewriting.
+        xml_str, address_help = extract_help_text_from_xml(xml_str)
         try:
             root = ET.fromstring(xml_str)
         except Exception:
@@ -142,6 +157,8 @@ class SCXMLDocumentHandler:
             root.attrib["xmlns"] = "http://www.w3.org/2005/07/scxml"
             xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
+        # Attach help_text to the model nodes addressed by the pre-pass.
+        attach_help_text_to_model(model, address_help)
         if hasattr(model, "model_dump"):
             data = model.model_dump()
         else:
@@ -232,11 +249,19 @@ class SCXMLDocumentHandler:
         return data
 
     def json_to_xml(self, json_str: str) -> str:
-        """Convert stored JSON string to SCXML."""
+        """Convert stored JSON string to SCXML.
+
+        CONV-F: after xsdata serializes the model, any non-empty
+        ``help_text`` entries are re-emitted as leading XML comments via
+        :func:`inject_help_text_comments_into_xml`. ``help_text`` itself
+        carries xsdata metadata ``{"type": "Ignore"}`` and is therefore not
+        serialized by xsdata directly.
+        """
         data = json.loads(json_str)
         if hasattr(self.model_class, "model_validate"):
             model = self.model_class.model_validate(data)
         else:
             model = self._to_dataclass(self.model_class, data)
-        return self.to_string(model)
+        xml_str = self.to_string(model)
+        return inject_help_text_comments_into_xml(xml_str, model)
 

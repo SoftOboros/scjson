@@ -453,8 +453,12 @@ Independent from: comment promotion mechanics.
   JavaScript side pending. SCXML round-trip is intentionally deferred to
   CONV-F; `help_text` is tagged xsdata `type: Ignore` on the model side so
   XML serialization is a no-op until comment promotion lands.
-- [ ] CONV-F SCXML comment promotion lands in Python and JavaScript parity
-  tests.
+- [~] CONV-F SCXML comment promotion. Python side complete (pre-pass
+  + post-pass in `py/scjson/comment_promotion.py`, wired into
+  `py/scjson/SCXMLDocumentHandler.py`; round-trip + escaping + non-promotion
+  + engine-trace-invariance tests under
+  `py/tests/test_comment_promotion.py`). JavaScript parity is a separate
+  future wave; no JS converter or test changes land in this step.
 - [x] CONV-G extension metadata registry and optional schema catalog documents
   Infinity State-derived `other_attributes` conventions, object applicability,
   value shapes, and the `description` migration path without closing the core
@@ -523,3 +527,19 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   omits empty arrays under `omit_empty=True`, and stays distinct from
   `other_attributes`. XML serialization of `help_text` is intentionally
   suppressed (xsdata `type: Ignore`) pending CONV-F SCXML comment promotion.
+- 2026-05-24: CONV-F Python side landed. A new
+  `py/scjson/comment_promotion.py` module owns the SCXML pre-pass and
+  post-pass; `py/scjson/SCXMLDocumentHandler.xml_to_json` now runs the
+  pre-pass before namespace insertion to keep local-name addresses stable
+  (CONV-F §323-325), and `json_to_xml` runs the post-pass after xsdata
+  serializes to re-emit `help_text` as leading XML comments with the
+  required `--`/trailing-`-` repair (CONV-F §340-344). The xsdata field
+  metadata stays `{"type": "Ignore"}` — schema and JS mirrors are byte
+  unchanged. Focused tests live in `py/tests/test_comment_promotion.py`
+  (root-leading/trailing, parent-trailing, nested-state,
+  transition-leading, onentry/onexit-leading, multiple-consecutive,
+  whitespace-separated, non-whitespace-text severance, script/data/PI
+  non-promotion, opaque extension non-promotion, multi-entry no-coalesce,
+  root-emit-after-decl, `<`/`>`/`&`/`--`/trailing-`-` escaping,
+  multi-line dedent + round-trip, engine-trace invariance). JS parity is a
+  separate future wave.
