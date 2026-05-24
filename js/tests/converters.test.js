@@ -314,13 +314,14 @@ describe('CONV-E help_text distinct from other_attributes', () => {
   });
 });
 
-describe('CONV-E SCXML emission (CONV-F deferral)', () => {
-  test('jsonToXml drops help_text rather than emitting it as an attribute', () => {
-    // CONV-E permits dropping help_text on the XML emission boundary; CONV-F
-    // will land XML comment promotion in a follow-up. The contract this test
-    // pins is the negative one: ``help_text`` MUST NOT appear as an
-    // ``@_help_text`` XML attribute, MUST NOT be folded into a generic
-    // ``<content>`` child, and MUST NOT corrupt sibling SCXML output.
+describe('CONV-F SCXML emission (comment promotion)', () => {
+  test('jsonToXml emits help_text as leading XML comments, not attributes', () => {
+    // CONV-F replaces the CONV-E deferral: ``help_text`` MUST emit as one
+    // leading ``<!-- ... -->`` per entry, in array order, immediately
+    // before the owning element. The negative invariants from the CONV-E
+    // landing remain: ``help_text`` MUST NOT appear as an ``@_help_text``
+    // XML attribute, MUST NOT be folded into a generic ``<content>``
+    // child, and MUST NOT corrupt sibling SCXML output.
     const input = {
       name: 'm1',
       version: 1.0,
@@ -350,6 +351,11 @@ describe('CONV-E SCXML emission (CONV-F deferral)', () => {
     expect(xmlStr).toContain('id="S2"');
     expect(xmlStr).toContain('event="go"');
     expect(xmlStr).toContain('target="S2"');
+    // Comments now appear as leading siblings (CONV-F emission rule).
+    expect(xmlStr).toContain('<!--doc1-->');
+    expect(xmlStr).toContain('<!--doc2-->');
+    expect(xmlStr).toContain('<!--state doc-->');
+    expect(xmlStr).toContain('<!--t1-->');
   });
 
   test('jsonToXml leaves other_attributes alone when help_text is also present', () => {

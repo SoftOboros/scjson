@@ -453,12 +453,16 @@ Independent from: comment promotion mechanics.
   JavaScript side pending. SCXML round-trip is intentionally deferred to
   CONV-F; `help_text` is tagged xsdata `type: Ignore` on the model side so
   XML serialization is a no-op until comment promotion lands.
-- [~] CONV-F SCXML comment promotion. Python side complete (pre-pass
+- [x] CONV-F SCXML comment promotion. Python side complete (pre-pass
   + post-pass in `py/scjson/comment_promotion.py`, wired into
   `py/scjson/SCXMLDocumentHandler.py`; round-trip + escaping + non-promotion
   + engine-trace-invariance tests under
-  `py/tests/test_comment_promotion.py`). JavaScript parity is a separate
-  future wave; no JS converter or test changes land in this step.
+  `py/tests/test_comment_promotion.py`). JavaScript side complete
+  (pre-pass + post-pass in `js/src/comment_promotion.js`, wired into
+  `js/src/converters.js`; address shape `[[local_tag, sibling_index], ...]`
+  byte-matches the Python tuple shape via canonical JSON projection;
+  focused tests + cross-language fixture parity under
+  `js/tests/comment_promotion.test.js`).
 - [x] CONV-G extension metadata registry and optional schema catalog documents
   Infinity State-derived `other_attributes` conventions, object applicability,
   value shapes, and the `description` migration path without closing the core
@@ -543,3 +547,33 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   root-emit-after-decl, `<`/`>`/`&`/`--`/trailing-`-` escaping,
   multi-line dedent + round-trip, engine-trace invariance). JS parity is a
   separate future wave.
+- 2026-05-24: CONV-F JavaScript side landed. A new
+  `js/src/comment_promotion.js` module mirrors the Python implementation:
+  pre-pass uses `fast-xml-parser` v5 in `preserveOrder` +
+  `commentPropName: '#comment'` mode to harvest comment nodes onto
+  deterministic addresses of shape `[[local_tag, sibling_index], ...]`
+  (byte-parity with Python via canonical JSON projection); the cleaned
+  XML is then re-serialized for the existing `xmlToJson` pipeline.
+  `xmlToJson` runs the pre-pass before namespace insertion and attaches
+  `help_text` after `removeEmpty`; `jsonToXml` runs the post-pass after
+  the XMLBuilder produces comment-free XML, re-parses with the same
+  preserve-order parser, splices `#comment` nodes (with the `--`
+  / trailing-`-` repair) immediately before each owning element, and
+  injects root help_text as document-level siblings before `<scxml>`.
+  Renamed JS attributes (`if_value`, `raise_value`, `else_value`) and
+  singleton-transition fields (`History.transition`,
+  `Initial.transition`) resolve through a small tag->attr map so
+  navigation matches Python's xsdata model traversal. Existing CONV-E
+  emission-deferral test in `js/tests/converters.test.js` is replaced
+  with a positive emission contract; new
+  `js/tests/comment_promotion.test.js` covers repair/emit-safe
+  helpers, module surface, eight promotion rules + deterministic edge
+  cases, non-promotion (`<script>`, `<data>`, PI, opaque extension),
+  emission (round-trip, multi-entry no-coalesce, root-before-scxml,
+  multi-line dedent survival), escaping (`<`, `>`, `&`, `--`, trailing
+  `-`), pre-pass surface (address-map JSON projection, attach,
+  no-op-without-help-text), cross-language fixture parity (five
+  Python-aligned vectors + an explicit address-shape parity check), and
+  engine-trace invariance (canonical JSON minus `help_text` identical
+  with/without comments). All 78 JS tests pass (was 33). No schema or
+  Python changes; `package-lock.json` untouched.

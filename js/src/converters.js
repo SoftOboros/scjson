@@ -13,6 +13,11 @@
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const Ajv = require('ajv');
 const schema = require('../scjson.schema.json');
+const {
+  extractHelpTextFromXml,
+  attachHelpTextToModel,
+  injectHelpTextCommentsIntoXml,
+} = require('./comment_promotion.js');
 
 /**
  * Keys that should always be represented as arrays.
@@ -1073,6 +1078,21 @@ function stripNestedDataAttrs(value) {
 }
 
 function xmlToJson(xmlStr, omitEmpty = true) {
+  // CONV-F pre-pass: harvest XML comments into deterministic address ->
+  // help_text lists and continue the rest of the pipeline on a
+  // comment-free XML string. The pre-pass uses local element names so
+  // addresses survive the namespace-attribute insertion below.
+  let promotionAddressMap = null;
+  try {
+    const promo = extractHelpTextFromXml(xmlStr);
+    if (promo && promo.addressMap && promo.addressMap.size > 0) {
+      promotionAddressMap = promo.addressMap;
+      xmlStr = promo.cleanedXml;
+    }
+  } catch (_promotionErr) {
+    // Pre-pass failures fall through to the existing parser, which will
+    // surface a descriptive error if the XML itself is malformed.
+  }
   const parser = new XMLParser({
     ignoreAttributes: false,
     trimValues: false,
@@ -1146,6 +1166,16 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     stripQnameNs(obj);
     stripNestedDataAttrs(obj);
     stripXmlns(obj);
+  }
+  // CONV-F: attach promoted help_text after the model surface is stable
+  // and after removeEmpty() so empty arrays from earlier passes do not
+  // clobber what we add here.
+  if (promotionAddressMap !== null) {
+    try {
+      attachHelpTextToModel(obj, promotionAddressMap);
+    } catch (_attachErr) {
+      // Promotion attach is best-effort; converter output remains valid.
+    }
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
@@ -1383,7 +1413,17 @@ function jsonToXml(jsonStr) {
   if (cleaned['@_xmlns'] === undefined) {
     cleaned['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
-  return { result: builder.build({ scxml: cleaned }), valid, errors };
+  let xmlOut = builder.build({ scxml: cleaned });
+  // CONV-F post-pass: inject leading XML comments for every model element
+  // with a non-empty help_text array. ``obj`` (the input model) is the
+  // source of truth for help_text; the XMLBuilder above already stripped
+  // it via the ``nk === 'help_text'`` guard.
+  try {
+    xmlOut = injectHelpTextCommentsIntoXml(xmlOut, obj);
+  } catch (_postPassErr) {
+    // Best-effort: emit existing XML if injection fails.
+  }
+  return { result: xmlOut, valid, errors };
 }
 
 module.exports = {
@@ -1412,4 +1452,7 @@ module.exports = {
   stripXmlns,
   ARRAY_KEYS,
   STRUCTURAL_METADATA_KEYS,
+  extractHelpTextFromXml,
+  attachHelpTextToModel,
+  injectHelpTextCommentsIntoXml,
 };
