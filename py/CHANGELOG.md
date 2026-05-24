@@ -6,6 +6,55 @@ The Python package version is independent of the JS, Ruby, Rust, Java, Swift,
 Lua, Go, and C# package versions; cross-language work is coordinated through
 the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
+## 0.4.0 — 2026-05-24
+
+### Added
+
+- **CONV-E: `help_text: list[str]` as a first-class SCJSON authoring metadata field.**
+  Added to every applies-to model surface (root `Scxml` plus 25 child element
+  models) on all four generated.py variants (pydantic, pydantic_strict,
+  dataclasses, dataclasses_strict). Injected by the new
+  `py/patch_help_text.py` post-generation script, invoked from
+  `py/gen_models.sh`. Field is optional; canonical JSON omits empty arrays;
+  scalar single-entry collapse is forbidden; entry order is authoring order;
+  no auto-dedup. `help_text` is intentionally separate from
+  `other_attributes`. `scjson.schema.json` validates it as
+  `{type: array, items: {type: string}}` and the root / `js/` / `java/`
+  mirrors stay byte-identical.
+
+- **CONV-F: SCXML comment promotion in Python.** New
+  `py/scjson/comment_promotion.py` implements the comment-preserving lxml
+  pre-pass before xsdata parsing and the post-pass XML comment injection
+  after xsdata serialization. Deterministic addressing via tuple of
+  `(local_tag, sibling_index_among_same_tag)` for cross-language fixture
+  parity with the JS converter. Honors the eight CONV-F attachment rules,
+  the script / data / extension non-promotion exclusions, the XML-comment
+  text repair (`--` → `- -`, trailing `-` + space), and multi-line
+  common-indent dedent. `SCXMLDocumentHandler.xml_to_json` and `json_to_xml`
+  wire the pre-/post-pass around the existing xsdata pipeline.
+
+- **CONV-G: extension metadata registry.** New
+  `docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` documents
+  `other_attributes` conventions and optional schema-catalog policy seeded
+  from the downstream Infinity State `otherAttributes` registry. Optional
+  draft schemas live under
+  `docs/schemas/other_attributes/infinity-state/v1/` (annotation-box,
+  node-position, transition-geometry). Core `scjson.schema.json` continues
+  to preserve unknown `other_attributes` keys (OA-INV-1).
+
+### Tests
+
+- 249 new `help_text` round-trip tests (`py/tests/test_help_text_round_trip.py`).
+- 28 new comment-promotion tests (`py/tests/test_comment_promotion.py`).
+- Full suite: 391 passed, 1 skipped (baseline before 0.4.0: 363 passed, 1 skipped).
+
+### Invariants
+
+- CONV-INV-7: `help_text` and promoted SCXML comments MUST NOT alter
+  canonical execution semantics or trace output.
+- CONV-INV-8: comment promotion MUST be deterministic across Python and
+  JavaScript converters; Python remains the canonical output.
+
 ## 0.3.7 — 2026-05-01
 
 ### Fixed
