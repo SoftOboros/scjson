@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softoboros.com/scjson/schemas/other_attributes/infinity-state/v1/annotation-box.schema.json",
+  "title": "Infinity State Annotation Box Metadata (v1)",
+  "description": "Optional visual metadata for SCJSON other_attributes.help_text_box and other_attributes.condition_text_box. This schema is a suggested Infinity State convention and is not part of core SCJSON validation.",
+
+  "type": "object",
+  "properties": {
+    "visibility": {
+      "type": "string",
+      "enum": ["inherit", "hidden", "preview", "full", "marker"],
+      "default": "inherit",
+      "description": "Display mode for the rendered annotation."
+    },
+    "x": {
+      "type": "number",
+      "description": "Annotation box x coordinate in canvas units."
+    },
+    "y": {
+      "type": "number",
+      "description": "Annotation box y coordinate in canvas units."
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "User-sized annotation box width in canvas units."
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "User-sized annotation box height in canvas units."
+    },
+    "shape": {
+      "type": "string",
+      "enum": ["rectangle", "rounded_rectangle", "callout", "note"],
+      "description": "Renderer-specific annotation box shape token."
+    },
+    "spacing": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Preferred gap between the owning object and the annotation box."
+    }
+  },
+  "additionalProperties": false
+}

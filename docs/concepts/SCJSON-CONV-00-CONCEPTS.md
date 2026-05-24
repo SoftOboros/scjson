@@ -73,6 +73,31 @@ Pydantic `other_attributes` fields MAY contain JSON-typed metadata. Dataclass
 `other_attributes` fields remain string typed because xsdata XML serialization
 requires XML attribute values.
 
+### Help Text
+
+`help_text` is a proposed SCJSON authoring metadata field, owned by this
+converter/schema initiative until it is promoted into generated schema
+artifacts. It is a child-element-style array of strings attached to any SCJSON
+element that can carry author-facing documentation. It is distinct from
+`other_attributes`: `help_text` carries chart documentation for editors,
+visualizers, code generators, and assistants; `other_attributes` carries
+extension attributes and editor/tooling metadata.
+
+`help_text` MUST NOT affect SCXML validation, state-machine execution,
+transition selection, datamodel evaluation, or trace output.
+
+### SCXML Comment Promotion
+
+SCXML comments are lexical XML nodes, not SCXML execution semantics. When
+comment preservation is enabled by this initiative, SCXML comments are promoted
+into semantic SCJSON authoring metadata instead of being preserved as a
+positional sidecar.
+
+The promotion target is `help_text`. The promoted value is the XML comment text
+without the `<!--` and `-->` delimiters. Converter implementations SHOULD trim
+only delimiter-adjacent indentation needed to recover the author's text; broad
+rewrapping and concatenation are not part of promotion.
+
 ## Section 4. Frozen Converter Invariants
 
 - CONV-INV-1: SCJSON conversion MUST preserve SCXML hierarchy and executable
@@ -87,6 +112,10 @@ requires XML attribute values.
   schema artifacts, and parity harness expectations in one change.
 - CONV-INV-6: Localized docs MUST NOT be generated or maintained in this repo;
   softoboros.com owns translated publication.
+- CONV-INV-7: `help_text` and promoted SCXML comments MUST NOT alter canonical
+  execution semantics or trace output.
+- CONV-INV-8: Comment promotion MUST be deterministic across Python and
+  JavaScript converters; Python remains the canonical output.
 
 ## Section 5. Structural Field Registry
 
@@ -101,6 +130,7 @@ surface to audit and align is:
 | payloads | `content`, `param`, `donedata`, `datamodel`, `data` | Mixed content and typed JSON payload behavior needs explicit tests. |
 | invokes | `invoke`, `finalize`, `content`, `param` | Invoke semantics are owned by execution docs, but representation is owned here. |
 | extensions | `other_element`, `other_attributes` | Preserve unknowns within schema-supported surfaces. |
+| authoring metadata | `help_text` | Proposed public schema field for chart documentation and promoted SCXML comments. |
 
 Changes to this registry require Standards Action because they affect every
 language converter and generated type surface.
@@ -164,6 +194,250 @@ Dependencies: CONV-B for release-note wording.
 
 Independent from: execution semantics.
 
+### CONV-E: Help Text Schema Surface
+
+Goal: add `help_text: list[str]` as first-class SCJSON authoring metadata.
+
+Applies-to model families:
+
+- `help_text` applies to SCJSON element models that can carry XML attributes or
+  child content, not to scalar datatype/enumeration models.
+- The initial schema/model surface SHOULD mirror the current
+  `other_attributes` element-model surface: `Scxml`, `State`, `Parallel`,
+  `Final`, `History`, `Initial`, `Transition`, `Onentry`, `Onexit`, `Invoke`,
+  `Finalize`, `Datamodel`, `Data`, `Donedata`, `Content`, `Param`, `Assign`,
+  `Log`, `Raise`, `If`, `Elseif`, `Else`, `Foreach`, `Send`, `Cancel`, and
+  `Script`.
+- `help_text` is intentionally separate from `other_attributes`. Core SCJSON
+  schema changes for `help_text` MUST NOT close or reinterpret optional
+  registry schemas for `other_attributes` conventions.
+
+Canonical conversion and output rules:
+
+- `help_text` is optional. When absent or empty, converters MUST omit it from
+  canonical JSON when their existing omit-empty mode is enabled.
+- When present, `help_text` MUST be an array of strings. Converters MUST NOT
+  collapse a single entry to a scalar string.
+- Entry order is authoring order. Converters MUST NOT sort, deduplicate, merge,
+  or rewrap entries.
+- Empty strings SHOULD be rejected by schema/model validation if the generator
+  supports that constraint; if not, converters SHOULD drop empty promoted
+  comments before model validation. Whitespace-only comments are not authoring
+  documentation.
+- `help_text` MUST NOT be copied into `other_attributes.description`, and
+  `other_attributes.description` MUST NOT be silently promoted during generic
+  conversion. Product-specific migrations MAY migrate legacy description fields
+  under CONV-G guidance.
+- `help_text` MUST NOT affect SCXML validation, executable ordering, transition
+  selection, datamodel evaluation, trace output, or engine conformance.
+
+Python plumbing expectations:
+
+- Generated dataclass, pydantic, and pydantic_strict model surfaces MUST expose
+  `help_text` as an optional list of strings on the applies-to models above.
+- `SCXMLDocumentHandler.xml_to_json()` remains the canonical Python conversion
+  entry point. Once CONV-F lands, any comment-preserving pre-pass MUST run
+  before xsdata parsing and MUST hand xsdata comment-free SCXML plus a
+  deterministic element-to-`help_text` annotation map.
+- `SCXMLDocumentHandler.json_to_xml()` MUST accept canonical `help_text` and
+  route it to the SCXML emitter without requiring callers to use
+  `other_attributes`.
+
+JavaScript plumbing expectations:
+
+- The JavaScript converter MUST treat `help_text` as a known structural
+  metadata key for SCJSON input/output cleanup, array preservation, and empty
+  pruning.
+- `xmlToJson()` MUST match Python canonical output for `help_text`, including
+  omission of empty arrays and preservation of entry order.
+- `jsonToXml()` MUST emit comments from `help_text` without treating them as
+  attributes or generic `content`.
+
+Output:
+
+- Generated pydantic and dataclass surfaces carry `help_text` where supported
+  by SCJSON element models.
+- `scjson.schema.json` validates `help_text` as an optional array of strings.
+- Language bindings expose the field idiomatically without requiring consumers
+  to parse `other_attributes`.
+- Absence of `help_text` leaves canonical output unchanged for existing
+  SCJSON documents.
+
+Dependencies: `SCJSON-00-CONCEPTS.md`.
+
+Independent from: execution semantics and engine trace behavior.
+
+### CONV-F: SCXML Comment Promotion
+
+Goal: preserve useful SCXML comments by promoting them into `help_text` instead
+of preserving lexical XML positions.
+
+Canonical promotion rules:
+
+1. A comment node immediately before an element sibling attaches to that next
+   element sibling.
+2. A run of consecutive comments and whitespace-only text before an element
+   attaches to that next element sibling, one `help_text` entry per comment in
+   document order.
+3. A comment with no following element sibling attaches to its parent element.
+4. Comments before the root `<scxml>` element, after the root element, or
+   otherwise outside the document element attach to the root `Scxml` object.
+5. Comments inside `<script>` and `<data>` content, including comments in
+   CDATA-backed target-language source, remain content and MUST NOT be
+   promoted.
+6. Comments inside arbitrary unknown XML preserved through `content` or
+   `other_element` remain lexical content of that extension subtree unless the
+   extension subtree is parsed into a supported SCJSON element model.
+7. Multiple comments attached to the same element append to existing
+   `help_text` entries after any entries already present in the source SCJSON
+   or intermediate model.
+8. Promotion text is the XML comment text without `<!--` and `-->`. Converters
+   SHOULD remove one common indentation margin from multi-line block comments
+   and trim leading/trailing blank lines, but MUST NOT paragraph-wrap,
+   concatenate adjacent comments, normalize internal line endings beyond the
+   repo's existing JSON string normalization, or decode text as executable
+   content.
+
+Deterministic edge cases:
+
+- Comments separated from the next element only by whitespace attach to the next
+  element. Comments separated by non-whitespace character data attach to the
+  parent because the next-element intent is ambiguous.
+- For `<state><!-- a --><transition/>text<!-- b --></state>`, `a` attaches to
+  the `Transition`; `b` attaches to the `State`.
+- For `<state><transition/><!-- trailing --></state>`, `trailing` attaches to
+  the `State`, not the preceding `Transition`.
+- For `<state><!-- a --><!-- b --><onentry/></state>`, both comments attach to
+  the `Onentry` in order.
+- For comments before a nested `<scxml>` inside `<content>`, the promotion
+  target is that nested `Scxml` if the nested machine is parsed as SCJSON;
+  otherwise the comment remains part of the extension content.
+- XML processing instructions, DTD declarations, and entity declarations are
+  not comments and MUST NOT produce `help_text`.
+
+Parser plumbing expectations:
+
+- Python MUST use a comment-preserving XML reader for the pre-pass because
+  `xml.etree.ElementTree.fromstring()` and xsdata parsing do not preserve
+  comments by default.
+- The Python pre-pass SHOULD produce stable element addresses before namespace
+  insertion/defaulting mutates the tree. Acceptable addresses are deterministic
+  sibling-index paths scoped to element nodes.
+- JavaScript MUST enable comment preservation in its XML parser or run an
+  equivalent tokenizing pre-pass before the existing `fast-xml-parser`
+  normalization pipeline discards comments.
+- Both implementations MUST apply namespace insertion, token splitting, array
+  normalization, and default-value normalization after promotion in a way that
+  leaves the same final JSON as Python.
+
+SCJSON to SCXML emission rule:
+
+- Each `help_text` entry emits as a leading XML comment immediately before the
+  owning element.
+- Round-trip fidelity is content-preserving, not character-preserving.
+- Consumers needing exact lexical XML fidelity should keep the original SCXML
+  source; SCJSON is the semantic authoring surface.
+- Comment text MUST be XML-comment safe on emission. Emitters MUST escape XML
+  metacharacters as needed by the serializer and MUST NOT emit the forbidden
+  comment sequence `--` or a trailing `-` before the closing delimiter. The
+  canonical repair is replacing each `--` with `- -` and appending one space
+  when a comment body would end in `-`.
+- Emitted comments precede the owning element after indentation for that
+  element and before the element start tag. For the root `Scxml`, root-level
+  `help_text` emits after the XML declaration and before `<scxml>`.
+- When an element owns multiple `help_text` entries, emit one XML comment per
+  entry in array order. Emitters MUST NOT coalesce entries into a single
+  multi-line comment.
+- `help_text` is an SCJSON-only metadata field. It MUST NOT also serialize as
+  an SCXML attribute, child element, or `other_attributes` entry.
+
+Focused test matrix:
+
+- Schema/model: every applies-to model accepts `help_text: ["..."]`; scalar
+  datatype/enumeration models do not expose `help_text`; empty/missing
+  `help_text` is omitted in canonical JSON.
+- Python parser: root-leading, root-trailing, parent-trailing, nested-state,
+  transition-leading, onentry/onexit-leading, multiple-consecutive, and
+  whitespace-separated comments promote to the expected element.
+- JavaScript parser: the same vectors produce byte-for-byte canonical JSON
+  parity with Python after the existing normalization harness.
+- Non-promotion: comments inside `<script>`, comments inside `<data>` inline
+  XML/source content, processing instructions, and comments inside opaque
+  extension subtrees do not become `help_text`.
+- Emission: `help_text` on root, state, transition, executable action, payload,
+  and script-capable models emits before the owning SCXML element and validates
+  with the W3C SCXML schema after stripping comments.
+- Escaping: comment text containing `<`, `&`, `>`, `--`, trailing `-`, leading
+  indentation, and multi-line content emits as valid XML and round-trips back
+  to the canonical repaired `help_text` string.
+- Round trip: `SCXML comments -> SCJSON help_text -> SCXML comments -> SCJSON
+  help_text` preserves entry count, order, owning element, and repaired text.
+- Semantics: engine traces for machines with and without equivalent
+  `help_text` are identical.
+
+Output:
+
+- Python converter pre-pass using a comment-preserving XML tree before xsdata
+  parsing.
+- JavaScript converter parity using the same promotion rule.
+- Focused tests for root, leading, trailing, nested, multiple, transition, and
+  script/data comment cases.
+
+Dependencies: CONV-E.
+
+Independent from: engine execution and trace output.
+
+### CONV-G: Extension Metadata Registry and Optional Schemas
+
+Goal: document common `other_attributes` conventions without conflating them
+with `help_text`. `other_attributes` remains an open extension surface in the
+core SCJSON schema; registry schemas are optional/suggested validation aids for
+tools that recognize a convention.
+
+Initial registry input:
+
+- Infinity State layout and editor metadata conventions: `position`, `arc`,
+  `skew`, `base_pos`, `arrow_pos`, `help_text_box`,
+  `condition_text_box`, and document/editor display metadata.
+- Legacy documentation metadata: `description`, to be treated as a migration
+  source for `help_text` by products that already wrote it.
+
+Output:
+
+- A scjson concepts or registry document describing `other_attributes` as
+  extension metadata, not executable semantics:
+  `SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`.
+- A separate optional schema catalog for documented `other_attributes`
+  conventions. The catalog SHOULD identify the stored key, applies-to object
+  types, value shape, schema URI or planned schema URI, casing, and migration
+  notes for each entry.
+- A full initial inventory of existing Infinity State-derived entries and newly
+  planned annotation entries, including document display, title style, node
+  position, transition geometry, style overrides, datamodel schema metadata,
+  `help_text_box`, and `condition_text_box`.
+- A reconciliation backlog for discovered downstream keys that are not yet
+  preferred registry entries, including legacy coordinate spellings,
+  document-level codegen/layout hints, transition render identifiers, and
+  schema/style naming drift.
+- A migration note for products that currently use
+  `other_attributes.description`.
+- A casing note: canonical SCJSON uses snake_case field names; product APIs MAY
+  map to camelCase on their own wire surfaces.
+- A compatibility note: the core SCJSON schema MUST continue to preserve
+  unknown `other_attributes` keys; optional registry schemas MUST NOT make
+  unrecognized extension metadata invalid unless a product explicitly opts into
+  strict validation for that registry.
+- Downstream editor and visualizer guidance: consumers MAY expose `help_text`
+  in inspectors, tooltips, or optional canvas annotations, but display choices
+  are product policy and MUST NOT affect runtime semantics.
+- Downstream annotation geometry guidance: products MAY store per-object
+  help-text and condition-text annotation geometry as extension metadata; those
+  fields remain editor/visualizer metadata and MUST NOT affect execution.
+
+Dependencies: CONV-E for the `help_text` distinction.
+
+Independent from: comment promotion mechanics.
+
 ## Section 7. Acceptance Checklist
 
 - [ ] CONV-A schema field registry audit lands.
@@ -173,6 +447,13 @@ Independent from: execution semantics.
   documented as repository maintenance tools, not installed runtime package
   entry points.
 - [x] `INFERENCE.md` no longer competes with schema/Python converter authority.
+- [ ] CONV-E `help_text` schema surface lands.
+- [ ] CONV-F SCXML comment promotion lands in Python and JavaScript parity
+  tests.
+- [ ] CONV-G extension metadata registry and optional schema catalog documents
+  Infinity State-derived `other_attributes` conventions, object applicability,
+  value shapes, and the `description` migration path without closing the core
+  extension surface.
 
 ## Section 8. Manager Notes
 
@@ -187,6 +468,10 @@ Recommended worker boundaries:
 - Worker 1: schema/constant audit only.
 - Worker 2: tests for typed `other_attributes` only.
 - Worker 3: docs replacement only after Worker 1 reports decisions.
+- Worker 4: `help_text` schema/model surface, without comment parsing.
+- Worker 5: comment promotion tests and converter changes, after Worker 4.
+- Worker 6: extension metadata registry and optional schema-catalog docs,
+  disjoint from converter code.
 
 ## Section 9. Rejections
 
@@ -198,11 +483,21 @@ It remains rejected for Python 0.3.7 and is not a dependency.
 - `INFERENCE.md`
 - `docs/COMPATIBILITY.md`
 - `docs/concepts/SCJSON-00-CONCEPTS.md`
+- `docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`
 - `js/src/converters.js`
 - `py/uber_test.py`
 - `py/scjson/pydantic/generated.py`
 - `py/scjson/pydantic_strict/generated.py`
+- Downstream input: SoftOboros Infinity Stack
+  `docs/SCJSON-OTHER-ATTRIBUTES.md`
 
 ## Section 11. Change Log
 
 - 2026-05-14: Initial converter concepts document.
+- 2026-05-24: Added CONV-E/F/G planning stubs for first-class `help_text`,
+  deterministic SCXML comment promotion, and an extension metadata registry
+  seeded by Infinity State `other_attributes` conventions.
+- 2026-05-24: Clarified that CONV-G produces a separate optional schema catalog
+  for suggested `other_attributes` conventions while keeping the core SCJSON
+  extension surface open, and added
+  `SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` as the catalog stub.

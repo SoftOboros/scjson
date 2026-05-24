@@ -238,6 +238,9 @@ The following invariants are frozen under Standards Action.
 - Structural children MUST be lifted into named array fields.
 - Non-structural children and mixed text payloads MUST remain in generic
   content surfaces.
+- Authoring metadata and SCXML comment promotion are delegated to
+  `SCJSON-CONV-00-CONCEPTS.md`. The planned `help_text` field and promoted
+  comments MUST remain non-executable metadata.
 - Top-level transitions under `<scxml>` are currently stripped for Python
   parity (`js/src/converters.js:107-120`). This decision is frozen as
   Specification Required until the Python converter behavior is audited against
@@ -385,6 +388,15 @@ R-8: Converter and execution backlog is split into child concepts docs:
 `SCJSON-CONV-00-CONCEPTS.md`, `SCJSON-EXEC-00-CONCEPTS.md`, and
 `SCJSON-WORKSTREAMS-00-MANAGER-MAP.md`.
 
+R-9: First-class chart documentation, SCXML comment promotion, and common
+`other_attributes` registry work belong to `SCJSON-CONV-00-CONCEPTS.md`
+CONV-E/F/G. The registry work should publish optional/suggested schemas outside
+the core SCJSON schema so products can validate known extension metadata while
+unknown extension keys still round-trip. The planning registry starts in
+`SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`. Runtime engines MUST continue to
+ignore those fields for execution semantics unless a future execution concepts
+doc explicitly promotes a field.
+
 ## Section 11. Non-Goals
 
 - This baseline does not prove that every implementation currently conforms.
@@ -418,6 +430,7 @@ R-8: Converter and execution backlog is split into child concepts docs:
 - `docs/TODO-ENGINE-RUBY.md`
 - `docs/concepts/SCJSON-CONV-00-CONCEPTS.md`
 - `docs/concepts/SCJSON-EXEC-00-CONCEPTS.md`
+- `docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`
 - `docs/concepts/SCJSON-WORKSTREAMS-00-MANAGER-MAP.md`
 - `js/src/converters.js`
 - `py/ENGINE-PY-DETAILS.md`
@@ -449,3 +462,8 @@ Initial archive candidates after reconciliation:
 
 - 2026-05-14: Initial baseline drafted from existing docs and runtime surfaces.
 - 2026-05-14: Added child concept-doc split and localized-doc removal policy.
+- 2026-05-24: Pointed authoring metadata and SCXML comment-promotion work at
+  `SCJSON-CONV-00-CONCEPTS.md` CONV-E/F/G.
+- 2026-05-24: Clarified that documented `other_attributes` conventions should
+  become optional/suggested schemas outside the core SCJSON schema and linked
+  the planning registry stub.
