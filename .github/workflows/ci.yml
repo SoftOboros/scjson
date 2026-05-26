@@ -260,7 +260,7 @@ jobs:
       - name: Run uber_test for release languages
         working-directory: py
         env:
-          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile }
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ruby/Gemfile
           RUBYOPT: -rbundler/setup
         run: |
           python uber_test.py -l python
