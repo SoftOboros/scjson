@@ -85,7 +85,7 @@ def test_uber_test_python_exec_compare_mode_accepts_reference(tmp_path: Path) ->
 
 
 @pytest.mark.skipif(shutil.which("ruby") is None, reason="Ruby CLI unavailable")
-def test_uber_test_ruby_preserves_xinclude_extension(tmp_path: Path) -> None:
+def test_uber_test_ruby_matches_focused_conversion_corpus(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     corpus = root / "tests" / "conv_corpus"
 
@@ -98,8 +98,6 @@ def test_uber_test_ruby_preserves_xinclude_extension(tmp_path: Path) -> None:
             "ruby",
             "--corpus",
             str(corpus),
-            "--subset",
-            "xinclude_preserve.scxml",
             "--consensus-warn",
         ],
         stdout=subprocess.PIPE,

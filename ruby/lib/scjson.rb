@@ -39,6 +39,8 @@ module Scjson
     else content donedata initial
   ].freeze
 
+  SOURCE_BODY_TAGS = %w[script data].freeze
+
   STRUCTURAL_FIELDS = %w[
     state parallel final history transition invoke finalize datamodel data
     onentry onexit log send cancel raise assign script foreach param if_value
@@ -60,6 +62,7 @@ module Scjson
       raise ArgumentError, 'Document missing <scxml> root element' unless root
 
       map = element_to_hash(root)
+      attach_root_sibling_comments(doc, root, map)
       collapse_whitespace(map)
       remove_empty(map) if omit_empty
       return JSON.pretty_generate(map)
@@ -104,6 +107,7 @@ module Scjson
       doc.encoding = 'utf-8'
       root = build_element(doc, 'scxml', data)
       doc.root = root
+      add_preceding_help_text_comments(doc, root, data)
       return doc.to_xml
     end
     # Fallback: use Python CLI converter when Nokogiri is unavailable.
@@ -158,6 +162,16 @@ module Scjson
   end
   private_class_method :extension_element?
 
+  def comment_node?(node)
+    node.respond_to?(:comment?) && node.comment?
+  end
+  private_class_method :comment_node?
+
+  def processing_instruction_node?(node)
+    node.respond_to?(:processing_instruction?) && node.processing_instruction?
+  end
+  private_class_method :processing_instruction_node?
+
   def clark_name(node)
     ns = node.namespace&.href
     return node.name if ns.nil? || ns.empty?
@@ -186,6 +200,74 @@ module Scjson
   end
   private_class_method :wrap_list
 
+  def repair_comment_text(raw)
+    text = raw.to_s
+    return text.strip unless text.include?("\n")
+
+    lines = text.lines.map { |line| line.chomp("\n") }
+    lines.shift while !lines.empty? && lines.first.strip.empty?
+    lines.pop while !lines.empty? && lines.last.strip.empty?
+    return '' if lines.empty?
+
+    indents = lines.map do |line|
+      next if line.strip.empty?
+
+      line.length - line.lstrip(" \t").length
+    end.compact
+    common = indents.empty? ? 0 : indents.min
+    lines = lines.map { |line| line.length >= common ? line[common, line.length] : line } if common.positive?
+    lines.join("\n")
+  end
+  private_class_method :repair_comment_text
+
+  def emit_safe_comment_text(text)
+    safe = text.to_s.gsub('--', '- -')
+    safe = "#{safe} " if safe.end_with?('-')
+    safe
+  end
+  private_class_method :emit_safe_comment_text
+
+  def append_help_text(map, comments)
+    repaired = comments.map(&:to_s)
+    return if repaired.empty?
+
+    existing = map['help_text']
+    map['help_text'] = existing ? wrap_list(existing) + repaired : repaired
+  end
+  private_class_method :append_help_text
+
+  def add_preceding_help_text_comments(doc, element, map)
+    return unless map.is_a?(Hash)
+
+    wrap_list(map['help_text']).each do |text|
+      element.add_previous_sibling(Nokogiri::XML::Comment.new(doc, emit_safe_comment_text(text)))
+    end
+  end
+  private_class_method :add_preceding_help_text_comments
+
+  def add_child_element(doc, parent, child_name, child_map)
+    child = build_element(doc, child_name, child_map)
+    if child_map.is_a?(Hash)
+      wrap_list(child_map['help_text']).each do |text|
+        parent.add_child(Nokogiri::XML::Comment.new(doc, emit_safe_comment_text(text)))
+      end
+    end
+    parent.add_child(child)
+  end
+  private_class_method :add_child_element
+
+  def attach_root_sibling_comments(doc, root, map)
+    comments = []
+    doc.children.each do |child|
+      next if child.equal?(root)
+      next unless comment_node?(child)
+
+      comments << repair_comment_text(child.text || '')
+    end
+    append_help_text(map, comments) unless comments.empty?
+  end
+  private_class_method :attach_root_sibling_comments
+
   def any_element_to_hash(node)
     result = { 'qname' => clark_name(node) }
     text = node.text
@@ -205,9 +287,11 @@ module Scjson
   end
   private_class_method :any_element_to_hash
 
-  def element_to_hash(node)
+  def element_to_hash(node, inside_source_body = false, inside_extension = false)
     map = {}
     local = local_name(node)
+    elem_in_source = inside_source_body || SOURCE_BODY_TAGS.include?(local)
+    elem_in_extension = inside_extension || (!SCXML_ELEMENTS.include?(local) && local != 'scxml')
 
     node.attribute_nodes.each do |attr|
       name = local_name(attr)
@@ -261,8 +345,13 @@ module Scjson
     end
 
     text_items = []
+    pending_comments = []
     node.children.each do |child|
-      if child.element?
+      if comment_node?(child)
+        pending_comments << repair_comment_text(child.text || '')
+      elsif processing_instruction_node?(child)
+        next
+      elsif child.element?
         child_local = local_name(child)
         if scxml_element?(child)
           key = case child_local
@@ -271,7 +360,14 @@ module Scjson
                 when 'raise' then 'raise_value'
                 else child_local
                 end
-          child_map = element_to_hash(child)
+          child_map = element_to_hash(child, elem_in_source, elem_in_extension)
+          target_eligible = SCXML_ELEMENTS.include?(child_local) && !elem_in_source && !elem_in_extension
+          if !pending_comments.empty? && target_eligible
+            append_help_text(child_map, pending_comments)
+          elsif !pending_comments.empty? && SCXML_ELEMENTS.include?(local) && !elem_in_source && !elem_in_extension
+            append_help_text(map, pending_comments)
+          end
+          pending_comments = []
           target_key = if child_local == 'scxml' && local != 'scxml'
                          'content'
                        elsif local == 'content' && child_local == 'scxml'
@@ -285,13 +381,25 @@ module Scjson
             append_child(map, target_key, child_map)
           end
         else
+          if !pending_comments.empty? && SCXML_ELEMENTS.include?(local) && !elem_in_source && !elem_in_extension
+            append_help_text(map, pending_comments)
+          end
+          pending_comments = []
           target_key = extension_element?(child) ? 'other_element' : 'content'
           append_child(map, target_key, any_element_to_hash(child))
         end
       elsif child.text?
         value = child.text
+        if value && !value.strip.empty? && !pending_comments.empty?
+          append_help_text(map, pending_comments) if SCXML_ELEMENTS.include?(local) && !elem_in_source && !elem_in_extension
+          pending_comments = []
+        end
         text_items << value if value && !value.strip.empty?
       end
+    end
+
+    if !pending_comments.empty? && SCXML_ELEMENTS.include?(local) && !elem_in_source && !elem_in_extension
+      append_help_text(map, pending_comments)
     end
 
     text_items.each { |text| append_child(map, 'content', text) }
@@ -423,7 +531,7 @@ module Scjson
     end
 
     map.each do |key, value|
-      next if %w[qname text attributes].include?(key)
+      next if %w[qname text attributes help_text].include?(key)
 
       case key
       when 'content'
@@ -433,13 +541,13 @@ module Scjson
           next unless child_map.is_a?(Hash)
 
           child_name = child_map['qname'] || 'content'
-          element.add_child(build_element(doc, child_name, child_map))
+          add_child_element(doc, element, child_name, child_map)
         end
       when 'children'
         wrap_list(value).each do |child_map|
           next unless child_map.is_a?(Hash)
           child_name = child_map['qname'] || 'content'
-          element.add_child(build_element(doc, child_name, child_map))
+          add_child_element(doc, element, child_name, child_map)
         end
       when 'other_attributes'
         next unless value.is_a?(Hash)
@@ -468,7 +576,7 @@ module Scjson
           element['initial'] = joined
         else
           wrap_list(value).each do |child|
-            element.add_child(build_element(doc, 'initial', child))
+            add_child_element(doc, element, 'initial', child)
           end
           next
         end
@@ -484,12 +592,12 @@ module Scjson
 
         if STRUCTURAL_FIELDS.include?(key) || %w[if_value else_value raise_value].include?(key)
           wrap_list(value).each do |child|
-            element.add_child(build_element(doc, child_name, child))
+            add_child_element(doc, element, child_name, child)
           end
         elsif value.is_a?(Array) && value.all? { |item| !item.is_a?(Hash) }
           element[key] = join_tokens(value)
         elsif value.is_a?(Hash)
-          element.add_child(build_element(doc, child_name, value))
+          add_child_element(doc, element, child_name, value)
         elsif !value.nil?
           element[key] = value.to_s
         end
@@ -524,7 +632,7 @@ module Scjson
           if inner.is_a?(String)
             content_element.add_child(Nokogiri::XML::Text.new(inner, doc))
           elsif inner.is_a?(Hash)
-            content_element.add_child(build_element(doc, 'content', inner))
+            add_child_element(doc, content_element, 'content', inner)
           end
           element.add_child(content_element)
         end
@@ -537,7 +645,7 @@ module Scjson
           if inner.is_a?(String)
             content_element.add_child(Nokogiri::XML::Text.new(inner, doc))
           elsif inner.is_a?(Hash)
-            content_element.add_child(build_element(doc, 'content', inner))
+            add_child_element(doc, content_element, 'content', inner)
           end
         end
         element.add_child(content_element)
@@ -545,8 +653,7 @@ module Scjson
       end
 
       if item.key?('qname')
-        child = build_element(doc, item['qname'], item)
-        element.add_child(child)
+        add_child_element(doc, element, item['qname'], item)
         next
       end
 
@@ -561,8 +668,7 @@ module Scjson
       if parent_name == 'data' && child_name == 'content'
         element.add_child(Nokogiri::XML::Text.new(item['content'].to_s, doc))
       else
-        child_element = build_element(doc, child_name, item)
-        element.add_child(child_element)
+        add_child_element(doc, element, child_name, item)
       end
     end
   end
