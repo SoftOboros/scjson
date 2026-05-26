@@ -585,12 +585,12 @@ and iState UI behavior.
   documented as repository maintenance tools, not installed runtime package
   entry points.
 - [x] `INFERENCE.md` no longer competes with schema/Python converter authority.
-- [~] CONV-E `help_text` schema surface lands. Python side complete
-  (generated pydantic/dataclasses models, `scjson.schema.json` + js/java
-  mirrors, round-trip tests under `py/tests/test_help_text_round_trip.py`).
-  JavaScript side pending. SCXML round-trip is intentionally deferred to
-  CONV-F; `help_text` is tagged xsdata `type: Ignore` on the model side so
-  XML serialization is a no-op until comment promotion lands.
+- [x] CONV-E `help_text` schema surface lands. Python generated pydantic and
+  dataclass models expose `help_text`; `scjson.schema.json` plus the js/java
+  mirrors validate it as an array of strings; Python and JavaScript
+  normalization tests preserve it as first-class authoring metadata distinct
+  from `other_attributes`. SCXML comment promotion and emission are complete
+  under CONV-F.
 - [x] CONV-F SCXML comment promotion. Python side complete (pre-pass
   + post-pass in `py/scjson/comment_promotion.py`, wired into
   `py/scjson/SCXMLDocumentHandler.py`; round-trip + escaping + non-promotion
@@ -685,6 +685,10 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   omits empty arrays under `omit_empty=True`, and stays distinct from
   `other_attributes`. XML serialization of `help_text` is intentionally
   suppressed (xsdata `type: Ignore`) pending CONV-F SCXML comment promotion.
+- 2026-05-24: CONV-E JavaScript side landed. `js/src/converters.js` treats
+  `help_text` as known structural metadata for JSON cleanup, array
+  preservation, empty pruning, and distinct handling from `other_attributes`.
+  The CONV-E checklist is complete; XML-side behavior remains owned by CONV-F.
 - 2026-05-24: CONV-F Python side landed. A new
   `py/scjson/comment_promotion.py` module owns the SCXML pre-pass and
   post-pass; `py/scjson/SCXMLDocumentHandler.xml_to_json` now runs the

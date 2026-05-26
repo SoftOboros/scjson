@@ -1424,12 +1424,9 @@ function jsonToXml(jsonStr) {
           continue;
         }
         if (nk === 'help_text') {
-          // CONV-E: help_text is JSON-only authoring metadata. SCXML emission
-          // is owned by CONV-F (comment promotion). For this commit we mirror
-          // Python's xsdata ``type: Ignore`` approach and drop help_text from
-          // the XML output rather than smashing it into an attribute or
-          // generic content. JSON-side round-trip preservation is covered by
-          // the structural-metadata helpers above.
+          // CONV-E: help_text is first-class authoring metadata, not an SCXML
+          // attribute or element. CONV-F injects it as leading XML comments
+          // after XMLBuilder emits the comment-free structural tree.
           continue;
         }
         if (nk === 'other_element') {

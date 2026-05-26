@@ -33,6 +33,13 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
   common-indent dedent. `SCXMLDocumentHandler.xml_to_json` and `json_to_xml`
   wire the pre-/post-pass around the existing xsdata pipeline.
 
+- **CONV-F: SCXML comment promotion in JavaScript.** New
+  `js/src/comment_promotion.js` mirrors the Python promotion and emission
+  rules. `xmlToJson` harvests comments into `help_text` after canonical
+  normalization; `jsonToXml` re-emits non-empty `help_text` entries as leading
+  XML comments without serializing `help_text` as an attribute, child element,
+  or generic content.
+
 - **CONV-G: extension metadata registry.** New
   `docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` documents
   `other_attributes` conventions and optional schema-catalog policy seeded
@@ -46,7 +53,11 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
 - 249 new `help_text` round-trip tests (`py/tests/test_help_text_round_trip.py`).
 - 28 new comment-promotion tests (`py/tests/test_comment_promotion.py`).
-- Full suite: 391 passed, 1 skipped (baseline before 0.4.0: 363 passed, 1 skipped).
+- JavaScript converter and comment-promotion suites cover `help_text`
+  preservation, promotion, emission, escaping, and cross-language address
+  parity.
+- Full Python suite after CONV-H follow-up: 401 passed, 1 skipped (baseline
+  before 0.4.0: 363 passed, 1 skipped).
 
 ### Invariants
 

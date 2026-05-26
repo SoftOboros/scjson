@@ -136,10 +136,8 @@ test('root transitions are dropped', () => {
 /* never collapsed to scalar, omitted when empty, never folded into           */
 /* ``other_attributes`` or generic ``content``.                               */
 /*                                                                            */
-/* XML-side emission (SCXML comment promotion) is owned by CONV-F and is     */
-/* deferred from this commit. Today's contract: JSON-side round-trip          */
-/* preserves help_text; ``jsonToXml`` drops it cleanly (matching Python's     */
-/* xsdata ``type: Ignore`` approach).                                         */
+/* XML-side emission is covered by CONV-F comment-promotion tests; this       */
+/* section keeps the JSON-side metadata contract focused and explicit.        */
 /* ------------------------------------------------------------------------- */
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
