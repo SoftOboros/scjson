@@ -1,0 +1,15 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       datamodel="python"
+       initial="idle">
+  <!-- root chart help -->
+  <!-- state help -->
+  <state id="idle">
+    <!-- entry help -->
+    <onentry>
+      <log label="entry" expr="'idle'"/>
+    </onentry>
+    <!-- transition help -->
+    <transition event="go" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>

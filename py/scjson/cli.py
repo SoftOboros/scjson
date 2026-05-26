@@ -116,6 +116,13 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
     default=True,
     help="Fail on unknown XML elements when converting",
 )
+@click.option(
+    "--xinclude",
+    type=click.Choice(["preserve", "resolve"]),
+    default="preserve",
+    show_default=True,
+    help="Preserve xi:include directives or resolve them before conversion",
+)
 def json(
     path: Path,
     output: Path | None,
@@ -123,15 +130,20 @@ def json(
     verify: bool,
     keep_empty: bool,
     fail_unknown: bool,
+    xinclude: str,
 ):
     """Convert a single SCXML file or all SCXML files in a directory."""
-    handler = SCXMLDocumentHandler(omit_empty=not keep_empty, fail_on_unknown_properties=fail_unknown)
+    handler = SCXMLDocumentHandler(
+        omit_empty=not keep_empty,
+        fail_on_unknown_properties=fail_unknown,
+        xinclude=xinclude,
+    )
 
     def convert_file(src: Path, dest: Path | None):
         try:
             with open(src, "r", encoding="utf-8") as f:
                 xml_str = f.read()
-            json_str = handler.xml_to_json(xml_str)
+            json_str = handler.xml_to_json(xml_str, xinclude_base_url=str(src))
             if verify:
                 handler.json_to_xml(json_str)
                 click.echo(f"Verified {src}")

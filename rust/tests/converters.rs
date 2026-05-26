@@ -71,3 +71,65 @@ fn empty_else_and_final() {
     assert_eq!(rt_final, obj_final);
 }
 
+#[test]
+fn other_attributes_preserve_json_metadata() {
+    let scjson = serde_json::json!({
+        "version": 1.0,
+        "datamodel_attribute": "null",
+        "state": [{
+            "id": "s",
+            "other_attributes": {
+                "position": "1,2",
+                "help_text_box": {"visible": true, "x": 1},
+                "priority": 3
+            }
+        }]
+    });
+    let xml = json_to_xml(&scjson.to_string()).unwrap();
+
+    assert!(xml.contains("position=\"1,2\""));
+    assert!(xml.contains("priority=\"3\""));
+    assert!(xml.contains("help_text_box=\""));
+    assert!(!xml.contains("<other_attributes"));
+
+    let back: Value = serde_json::from_str(&xml_to_json(&xml, true).unwrap()).unwrap();
+    let attrs = &back["state"][0]["other_attributes"];
+    assert_eq!(attrs["position"], "1,2");
+    assert_eq!(attrs["priority"], "3");
+    assert_eq!(attrs["help_text_box"]["visible"], true);
+    assert_eq!(attrs["help_text_box"]["x"], 1);
+}
+
+#[test]
+fn comments_promote_to_help_text_and_emit_back() {
+    let xml = r#"
+<!-- root help -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s">
+  <!-- state help -->
+  <state id="s">
+    <!-- transition help -->
+    <transition target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>
+"#;
+    let obj: Value = serde_json::from_str(&xml_to_json(xml, true).unwrap()).unwrap();
+    assert_eq!(obj["help_text"], serde_json::json!(["root help"]));
+    assert_eq!(obj["state"][0]["help_text"], serde_json::json!(["state help"]));
+    assert_eq!(
+        obj["state"][0]["transition"][0]["help_text"],
+        serde_json::json!(["transition help"])
+    );
+
+    let emitted = json_to_xml(&obj.to_string()).unwrap();
+    assert!(emitted.contains("<!--root help-->"));
+    assert!(emitted.contains("state help"));
+    assert!(emitted.contains("transition help"));
+    let rt: Value = serde_json::from_str(&xml_to_json(&emitted, true).unwrap()).unwrap();
+    assert_eq!(rt["help_text"], serde_json::json!(["root help"]));
+    assert_eq!(rt["state"][0]["help_text"], serde_json::json!(["state help"]));
+    assert_eq!(
+        rt["state"][0]["transition"][0]["help_text"],
+        serde_json::json!(["transition help"])
+    );
+}

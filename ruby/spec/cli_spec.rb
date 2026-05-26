@@ -65,6 +65,62 @@ RSpec.describe 'scjson CLI' do
     end
   end
 
+  it 'preserves unresolved XInclude elements as extension elements' do
+    Dir.mktmpdir do |dir|
+      xml_path = File.join(dir, 'xinclude.scxml')
+      json_path = File.join(dir, 'xinclude.scjson')
+      out_xml_path = File.join(dir, 'xinclude.out.scxml')
+      File.write(
+        xml_path,
+        '<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:xi="http://www.w3.org/2001/XInclude">' \
+          '<xi:include href="child.xml"/>' \
+          '</scxml>'
+      )
+
+      expect(system('ruby', cli_path, 'json', xml_path, '-o', json_path)).to be(true)
+      data = JSON.parse(File.read(json_path))
+      include_node = data.fetch('other_element').first
+      expect(include_node['qname']).to eq('{http://www.w3.org/2001/XInclude}include')
+      expect(include_node.fetch('attributes').fetch('href')).to eq('child.xml')
+
+      expect(system('ruby', cli_path, 'xml', json_path, '-o', out_xml_path)).to be(true)
+      xml = File.read(out_xml_path)
+      expect(xml).to include('<xi:include')
+      expect(xml).to include('href="child.xml"')
+      expect(xml).to include('xmlns:xi="http://www.w3.org/2001/XInclude"')
+    end
+  end
+
+  it 'promotes and emits help_text comments' do
+    Dir.mktmpdir do |dir|
+      xml_path = File.join(dir, 'comments.scxml')
+      json_path = File.join(dir, 'comments.scjson')
+      out_xml_path = File.join(dir, 'comments.out.scxml')
+      File.write(
+        xml_path,
+        '<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="idle">' \
+          '<!-- state help -->' \
+          '<state id="idle">' \
+          '<!-- transition help -->' \
+          '<transition event="go" target="done"/>' \
+          '</state>' \
+          '<final id="done"/>' \
+          '</scxml>'
+      )
+
+      expect(system('ruby', cli_path, 'json', xml_path, '-o', json_path)).to be(true)
+      data = JSON.parse(File.read(json_path))
+      state = data.fetch('state').first
+      expect(state.fetch('help_text')).to eq(['state help'])
+      expect(state.fetch('transition').first.fetch('help_text')).to eq(['transition help'])
+
+      expect(system('ruby', cli_path, 'xml', json_path, '-o', out_xml_path)).to be(true)
+      xml = File.read(out_xml_path)
+      expect(xml).to include('<!--state help-->')
+      expect(xml).to include('<!--transition help-->')
+    end
+  end
+
   it 'directory xml conversion' do
     Dir.mktmpdir do |dir|
       src = File.join(dir, 'jsons')

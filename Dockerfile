@@ -5,6 +5,7 @@
 # Licensed under the BSD 1-Clause License.
 
 FROM ubuntu:24.04
+ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,7 +54,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure Java tooling is fully configured
-ENV JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+RUN JAVA_HOME_RESOLVED="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")" \
+    && ln -sfn "$JAVA_HOME_RESOLVED" /opt/java
+ENV JAVA_HOME="/opt/java"
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 RUN mkdir -p /etc/ssl/certs/java && \
@@ -74,10 +77,20 @@ RUN mkdir -p /etc/ssl/certs/java && \
     fi && \
     dpkg --configure -a || true
 
-# Install Node.js from official tarball
-RUN wget https://download.swift.org/swift-6.1.2-release/ubuntu2204/swift-6.1.2-RELEASE/swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \
-    && tar -xzf swift-6.1.2-RELEASE-ubuntu22.04.tar.gz \
-    && mv swift-6.1.2-RELEASE-ubuntu22.04 /opt/swift
+# Install Swift from official tarball when the pinned toolchain is available.
+RUN set -eux; \
+    arch="${TARGETARCH:-$(uname -m)}"; \
+    case "$arch" in \
+      amd64|x86_64) \
+        wget https://download.swift.org/swift-6.1.2-release/ubuntu2204/swift-6.1.2-RELEASE/swift-6.1.2-RELEASE-ubuntu22.04.tar.gz; \
+        tar -xzf swift-6.1.2-RELEASE-ubuntu22.04.tar.gz; \
+        mv swift-6.1.2-RELEASE-ubuntu22.04 /opt/swift; \
+        rm swift-6.1.2-RELEASE-ubuntu22.04.tar.gz; \
+        ;; \
+      *) \
+        echo "Skipping Swift toolchain on ${arch}; pinned upstream tarball is x86_64"; \
+        ;; \
+    esac
 
 ENV PATH="/opt/swift/usr/bin:$PATH"
 
@@ -92,7 +105,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install AWS CLI v2
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+RUN set -eux; \
+    arch="${TARGETARCH:-$(uname -m)}"; \
+    case "$arch" in \
+      amd64|x86_64) aws_arch="x86_64" ;; \
+      arm64|aarch64) aws_arch="aarch64" ;; \
+      *) echo "Unsupported AWS CLI architecture: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf awscliv2.zip aws
@@ -138,8 +158,14 @@ RUN mkdir -p \
 # copy repo to container
 COPY --chown=${SOFTOBOROS_USER}:${SOFTOBOROS_USER} . .
 
-# Replicate repository setup
-RUN git submodule update --init --recursive
+# Replicate repository setup when the build context includes usable git metadata.
+# Nested submodule contexts may contain a .git file that points outside the
+# Docker build context; in that case the checked-out files are already copied.
+RUN if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+      git submodule update --init --recursive; \
+    else \
+      echo "Skipping submodule update; build context has no usable git metadata"; \
+    fi
 
 # install dependancies
 RUN cd py && pip install -r requirements.txt && cd .. \
@@ -190,7 +216,7 @@ RUN luarocks --local path >> /home/${SOFTOBOROS_USER}/.bashrc
 # build compiled items.
 #RUN cd java && mvn clean install -DskipTests -B && cd .. \
 RUN cd rust && cargo clean && cargo fetch && cargo build -Znext-lockfile-bump --locked && cd .. \
-    && cd swift && swift package resolve && swift build && cd .. \
+    && if command -v swift >/dev/null 2>&1; then cd swift && swift package resolve && swift build && cd ..; else echo "Skipping Swift build; Swift toolchain unavailable"; fi \
     && cd go && go mod verify && go mod download && go build -mod=readonly && cd .. \
     && cd csharp/ScjsonCli && dotnet restore && dotnet build --no-restore && cd ../.. \
     && cd csharp/Scjson.Tests && dotnet restore && cd ../..

@@ -789,7 +789,9 @@ class JinjaGenPydantic(object):
             is_ok = False
         else:
             objekt.model_rebuild()
-            self.schemas[name] = self.schema = objekt.model_json_schema()
+            self.schemas[name] = self.schema = self._patch_json_schema(
+                objekt.model_json_schema()
+            )
             self.interfaces[name] = self.schema
             if "properties" not in self.schema:
                 try:
@@ -799,3 +801,34 @@ class JinjaGenPydantic(object):
                 except KeyError:
                     is_ok = False
         return is_ok
+
+    @staticmethod
+    def _patch_json_schema(schema: dict) -> dict:
+        """Apply scjson schema patches that are not emitted by Pydantic."""
+        finalize = schema.get("$defs", {}).get("Finalize")
+        if isinstance(finalize, dict):
+            # CONV-H: SCXML finalize can contain executable content, but not
+            # send or raise children. The strict XSD carries this as an
+            # assertion that the generated Pydantic schema does not emit.
+            finalize["allOf"] = [
+                {
+                    "not": {
+                        "required": ["send"],
+                        "properties": {
+                            "send": {"type": "array", "minItems": 1}
+                        },
+                    }
+                },
+                {
+                    "not": {
+                        "required": ["raise_value"],
+                        "properties": {
+                            "raise_value": {
+                                "type": "array",
+                                "minItems": 1,
+                            }
+                        },
+                    }
+                },
+            ]
+        return schema

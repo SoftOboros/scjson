@@ -1,0 +1,36 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       datamodel="python"
+       initial="s">
+  <datamodel>
+    <data id="external" src="external.json"/>
+  </datamodel>
+  <script src="logic.py"/>
+  <state id="s">
+    <invoke id="childBySrc" type="scxml" src="child.scxml">
+      <param name="seed" expr="1"/>
+    </invoke>
+    <invoke id="inlineChild" type="scxml">
+      <content>
+        <scxml datamodel="python" initial="inner">
+          <state id="inner"/>
+        </scxml>
+      </content>
+      <finalize>
+        <assign location="done" expr="true"/>
+      </finalize>
+    </invoke>
+    <onentry>
+      <send event="hello" target="#_parent">
+        <param name="payload" expr="42"/>
+        <content expr="payload_expr"/>
+      </send>
+    </onentry>
+    <transition target="f"/>
+  </state>
+  <final id="f">
+    <donedata>
+      <content expr="result"/>
+      <param name="status" expr="'ok'"/>
+    </donedata>
+  </final>
+</scxml>

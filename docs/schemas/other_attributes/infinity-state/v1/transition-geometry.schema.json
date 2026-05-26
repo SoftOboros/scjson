@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://softoboros.com/scjson/schemas/other_attributes/infinity-state/v1/transition-geometry.schema.json",
+  "title": "Infinity State Transition Geometry Metadata (v1)",
+  "description": "Optional visual geometry metadata for transition other_attributes keys arc, skew, base_pos, and arrow_pos. This schema validates the known geometry subset and is not part of core SCJSON validation.",
+
+  "$defs": {
+    "Point": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "Anchor x coordinate in canvas units."
+        },
+        "y": {
+          "type": "number",
+          "description": "Anchor y coordinate in canvas units."
+        }
+      },
+      "required": ["x", "y"],
+      "additionalProperties": false
+    },
+    "LegacyPointString": {
+      "type": "string",
+      "pattern": "^\\s*-?(?:\\d+|\\d*\\.\\d+)\\s*,\\s*-?(?:\\d+|\\d*\\.\\d+)\\s*$",
+      "description": "Legacy coordinate string in the form \"x,y\"."
+    },
+    "AnchorPoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/Point" },
+        { "$ref": "#/$defs/LegacyPointString" }
+      ]
+    }
+  },
+
+  "type": "object",
+  "properties": {
+    "arc": {
+      "type": "number",
+      "default": 0,
+      "description": "Transition curvature hint. 0 means straight; positive values increase curvature."
+    },
+    "skew": {
+      "type": "number",
+      "default": 0,
+      "description": "Transition arc-center offset. 0 means midpoint; positive values shift toward the target end and negative values toward the source end."
+    },
+    "base_pos": {
+      "$ref": "#/$defs/AnchorPoint",
+      "description": "Source endpoint anchor hint."
+    },
+    "arrow_pos": {
+      "$ref": "#/$defs/AnchorPoint",
+      "description": "Target endpoint anchor hint."
+    }
+  },
+  "additionalProperties": false
+}

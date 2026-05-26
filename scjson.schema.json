@@ -36,11 +36,15 @@
                     "title": "Attr"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 },
                 "content": {
                     "items": {},
@@ -120,11 +124,15 @@
                     "title": "Sendidexpr"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Cancel",
@@ -161,11 +169,15 @@
                     "title": "Expr"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Content",
@@ -203,11 +215,15 @@
                     "title": "Expr"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 },
                 "content": {
                     "items": {},
@@ -237,11 +253,15 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Datamodel",
@@ -269,11 +289,15 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Donedata",
@@ -283,11 +307,15 @@
             "description": "fallback branch for `<if>` conditions.",
             "properties": {
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Else",
@@ -301,11 +329,15 @@
                     "type": "string"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -365,11 +397,15 @@
                     "title": "Id"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Final",
@@ -440,15 +476,47 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Finalize",
-            "type": "object"
+            "type": "object",
+            "allOf": [
+                {
+                    "not": {
+                        "required": [
+                            "send"
+                        ],
+                        "properties": {
+                            "send": {
+                                "type": "array",
+                                "minItems": 1
+                            }
+                        }
+                    }
+                },
+                {
+                    "not": {
+                        "required": [
+                            "raise_value"
+                        ],
+                        "properties": {
+                            "raise_value": {
+                                "type": "array",
+                                "minItems": 1
+                            }
+                        }
+                    }
+                }
+            ]
         },
         "Foreach": {
             "description": "iterate over items within executable content.",
@@ -535,11 +603,15 @@
                     "title": "Index"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -584,11 +656,15 @@
                     "default": null
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -697,11 +773,15 @@
                     "type": "string"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -722,11 +802,15 @@
                     "$ref": "#/$defs/Transition"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -846,11 +930,15 @@
                     "default": "false"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Invoke",
@@ -889,11 +977,15 @@
                     "title": "Expr"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Log",
@@ -964,11 +1056,15 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Onentry",
@@ -1039,11 +1135,15 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Onexit",
@@ -1126,11 +1226,15 @@
                     "title": "Id"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Parallel",
@@ -1173,11 +1277,15 @@
                     "title": "Location"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -1194,11 +1302,15 @@
                     "type": "string"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "required": [
@@ -1223,11 +1335,15 @@
                     "title": "Src"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 },
                 "content": {
                     "items": {},
@@ -1340,11 +1456,15 @@
                     "default": null
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Scxml",
@@ -1491,11 +1611,15 @@
                     "title": "Namelist"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Send",
@@ -1599,11 +1723,15 @@
                     "type": "array"
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "State",
@@ -1716,11 +1844,15 @@
                     "default": null
                 },
                 "other_attributes": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
                     "title": "Other Attributes",
                     "type": "object"
+                },
+                "help_text": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Help Text",
+                    "type": "array"
                 }
             },
             "title": "Transition",
@@ -1837,11 +1969,15 @@
             "default": null
         },
         "other_attributes": {
-            "additionalProperties": {
-                "type": "string"
-            },
             "title": "Other Attributes",
             "type": "object"
+        },
+        "help_text": {
+            "items": {
+                "type": "string"
+            },
+            "title": "Help Text",
+            "type": "array"
         }
     }
 }

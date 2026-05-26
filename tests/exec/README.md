@@ -48,4 +48,19 @@ around the [SCION](https://www.npmjs.com/package/scion) Node implementation.
 
 Set `SCJSON_SECONDARY_ENGINE_CMD` or `--secondary` to supply an additional
 engine (e.g., Apache Commons SCXML) for three-way comparisons.
- EOF
+
+## Uber Harness Execution Mode
+
+`py/uber_test.py` can also run event-backed execution fixtures through
+`exec_compare.py`:
+
+```bash
+python py/uber_test.py uber_out/exec \
+    --corpus tests/exec \
+    --subset toggle.scxml \
+    --python-exec-compare
+```
+
+By default this mode compares Python execution against the bundled SCION runner
+when SCION dependencies are available. Use `--exec-reference "<command>"` to
+pin an alternate reference during local debugging or CI isolation.

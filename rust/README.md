@@ -65,8 +65,10 @@ shown below mirror those defined in the SCJSON schema.
 
 ### Common Types
 Several generated classes share generic helper fields:
-- `other_attributes`: `Record<str, str>` capturing additional XML attributes from
-  foreign namespaces.
+- `other_attributes`: `Record<str, JSON value>` capturing additional XML
+  attributes from foreign namespaces and optional authoring metadata. Object and
+  array values are JSON-encoded when emitted as XML attributes and parsed back
+  when read from XML.
 - `other_element`: `list[object]` allowing untyped child nodes from other
   namespaces to be preserved.
 - `content`: `list[object]` used when elements permit mixed or wildcard

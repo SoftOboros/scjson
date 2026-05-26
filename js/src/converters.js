@@ -13,6 +13,14 @@
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const Ajv = require('ajv');
 const schema = require('../scjson.schema.json');
+const {
+  extractHelpTextFromXml,
+  attachHelpTextToModel,
+  injectHelpTextCommentsIntoXml,
+} = require('./comment_promotion.js');
+
+const XINCLUDE_NS = 'http://www.w3.org/2001/XInclude';
+const XINCLUDE_CLARK_INCLUDE = `{${XINCLUDE_NS}}include`;
 
 /**
  * Keys that should always be represented as arrays.
@@ -33,6 +41,7 @@ const ARRAY_KEYS = new Set([
   'final',
   'finalize',
   'foreach',
+  'help_text',
   'history',
   'if_value',
   'initial',
@@ -47,6 +56,19 @@ const ARRAY_KEYS = new Set([
   'script',
   'send',
   'state',
+]);
+
+/**
+ * CONV-E: Set of known structural metadata keys that live alongside the
+ * SCXML child surface but are not themselves SCXML child elements. These
+ * keys MUST round-trip through JSON-side normalization without being folded
+ * into ``other_attributes`` or generic ``content``.
+ *
+ * ``help_text`` is the only member today; future structural metadata keys
+ * (e.g. promoted authoring annotations from CONV-F) should be added here.
+ */
+const STRUCTURAL_METADATA_KEYS = new Set([
+  'help_text',
 ]);
 
 /// Known SCXML structural fields that should be pulled out of `content[]`
@@ -759,6 +781,93 @@ function fixDonedataContent(value) {
   }
 }
 
+function normaliseXmlToJsonOptions(options) {
+  if (typeof options === 'boolean' || options === undefined) {
+    return {
+      omitEmpty: options !== false,
+      xinclude: 'preserve',
+      xincludeLoader: null,
+      xincludeBasePath: null,
+    };
+  }
+  return {
+    omitEmpty: options.omitEmpty !== false,
+    xinclude: options.xinclude || 'preserve',
+    xincludeLoader: options.xincludeLoader || null,
+    xincludeBasePath: options.xincludeBasePath || null,
+  };
+}
+
+function mergeParsedChild(target, key, value) {
+  if (target[key] === undefined) {
+    target[key] = value;
+    return;
+  }
+  if (Array.isArray(target[key])) {
+    Array.isArray(value) ? target[key].push(...value) : target[key].push(value);
+    return;
+  }
+  target[key] = Array.isArray(value)
+    ? [target[key], ...value]
+    : [target[key], value];
+}
+
+function loadXInclude(href, options) {
+  if (typeof options.xincludeLoader === 'function') {
+    return options.xincludeLoader(href);
+  }
+  if (options.xincludeBasePath) {
+    const fs = require('fs');
+    const path = require('path');
+    const base = path.extname(options.xincludeBasePath)
+      ? path.dirname(options.xincludeBasePath)
+      : options.xincludeBasePath;
+    return fs.readFileSync(path.resolve(base, href), 'utf8');
+  }
+  throw new Error(`No XInclude loader configured for ${href}`);
+}
+
+function isXIncludeElementName(name) {
+  return name === 'xi:include' || name === XINCLUDE_CLARK_INCLUDE || name.endsWith(':include');
+}
+
+function parsedDocumentEntries(doc) {
+  return Object.entries(doc).filter(([key]) => key !== '?xml');
+}
+
+function resolveXIncludesInParsed(value, parser, options) {
+  if (Array.isArray(value)) {
+    return value.map(item => resolveXIncludesInParsed(item, parser, options));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isXIncludeElementName(key)) {
+      const includes = Array.isArray(child) ? child : [child];
+      includes.forEach(includeNode => {
+        const href = includeNode && (includeNode['@_href'] || includeNode.href);
+        if (!href) {
+          throw new Error('XInclude element is missing href');
+        }
+        const includedXml = loadXInclude(href, options);
+        const includedDoc = resolveXIncludesInParsed(
+          parser.parse(includedXml),
+          parser,
+          options
+        );
+        parsedDocumentEntries(includedDoc).forEach(([incKey, incValue]) => {
+          mergeParsedChild(out, incKey, incValue);
+        });
+      });
+      continue;
+    }
+    out[key] = resolveXIncludesInParsed(child, parser, options);
+  }
+  return out;
+}
+
 /**
  * Convert arbitrary objects parsed under ``<data>`` elements into
  * canonical content structures.
@@ -816,6 +925,62 @@ function convertDataNode(name, node) {
   return { qname: name, text: String(node) };
 }
 
+function appendOtherElement(target, node) {
+  const nodes = Array.isArray(node) ? node : [node];
+  if (!Array.isArray(target.other_element)) {
+    target.other_element = [];
+  }
+  target.other_element.push(...nodes);
+}
+
+function canonicalExtensionName(name) {
+  if (name === 'xi:include') {
+    return XINCLUDE_CLARK_INCLUDE;
+  }
+  return name;
+}
+
+function ensureExtensionNamespace(name, node) {
+  const nodes = Array.isArray(node) ? node : [node];
+  nodes.forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (name === 'xi:include' || name === XINCLUDE_CLARK_INCLUDE) {
+      item.attributes = item.attributes || {};
+      if (item.attributes['xmlns:xi'] === undefined) {
+        item.attributes['xmlns:xi'] = XINCLUDE_NS;
+      }
+    }
+  });
+  return node;
+}
+
+function preserveExtensionElements(value) {
+  if (Array.isArray(value)) {
+    value.forEach(preserveExtensionElements);
+    return;
+  }
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'other_element') {
+      continue;
+    }
+    if (key.includes(':') && !key.startsWith('xmlns')) {
+      appendOtherElement(
+        value,
+        ensureExtensionNamespace(
+          key,
+          convertDataNode(canonicalExtensionName(key), child)
+        )
+      );
+      delete value[key];
+      continue;
+    }
+    preserveExtensionElements(child);
+  }
+}
+
 /**
  * Recursively normalise ``<data>`` elements that contain inline XML.
  *
@@ -859,10 +1024,17 @@ function fixDataContent(value) {
  * @returns {object} XML builder structure keyed by element name.
  */
 function restoreDataNode(node) {
+  let qname = node.qname;
   const out = {};
   if (node.attributes) {
     for (const [k, v] of Object.entries(node.attributes)) {
       out[`@_${k}`] = v;
+    }
+  }
+  if (qname === XINCLUDE_CLARK_INCLUDE) {
+    qname = 'xi:include';
+    if (out['@_xmlns:xi'] === undefined) {
+      out['@_xmlns:xi'] = XINCLUDE_NS;
     }
   }
   if (node.text !== undefined && node.text !== '') {
@@ -883,10 +1055,10 @@ function restoreDataNode(node) {
       }
     });
   }
-  if (!node.qname.includes(':') && !node.qname.startsWith('{') && node.qname !== 'scxml') {
+  if (!qname.includes(':') && !qname.startsWith('{') && qname !== 'scxml') {
     out['@_xmlns'] = '';
   }
-  return { [node.qname]: out };
+  return { [qname]: out };
 }
 
 /**
@@ -902,7 +1074,9 @@ function stripQnameNs(value) {
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if (k === 'qname' && typeof v === 'string') {
-        value[k] = v.replace(/^\{[^}]+\}/, '');
+        if (v !== XINCLUDE_CLARK_INCLUDE) {
+          value[k] = v.replace(/^\{[^}]+\}/, '');
+        }
         continue;
       }
       stripQnameNs(v);
@@ -1058,18 +1232,60 @@ function stripNestedDataAttrs(value) {
   }
 }
 
-function xmlToJson(xmlStr, omitEmpty = true) {
+/**
+ * @typedef {object} XmlToJsonOptions
+ * @property {boolean} [omitEmpty=true] Drop null and empty containers.
+ * @property {'preserve'|'resolve'} [xinclude='preserve'] Preserve
+ * ``xi:include`` as extension content or resolve includes before conversion.
+ * @property {(href: string) => string} [xincludeLoader] Loader used by
+ * resolved XInclude mode.
+ * @property {string} [xincludeBasePath] File or directory used by the default
+ * Node loader in resolved XInclude mode.
+ */
+
+/**
+ * Convert SCXML to canonical SCJSON.
+ *
+ * @param {string} xmlStr - SCXML source.
+ * @param {boolean|XmlToJsonOptions} [options=true] Backward-compatible boolean
+ * ``omitEmpty`` flag or expanded converter options.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
+ */
+function xmlToJson(xmlStr, options = true) {
+  const xmlOptions = normaliseXmlToJsonOptions(options);
+  if (!['preserve', 'resolve'].includes(xmlOptions.xinclude)) {
+    throw new Error("xinclude must be 'preserve' or 'resolve'");
+  }
+  // CONV-F pre-pass: harvest XML comments into deterministic address ->
+  // help_text lists and continue the rest of the pipeline on a
+  // comment-free XML string. The pre-pass uses local element names so
+  // addresses survive the namespace-attribute insertion below.
+  let promotionAddressMap = null;
+  try {
+    const promo = extractHelpTextFromXml(xmlStr);
+    if (promo && promo.addressMap && promo.addressMap.size > 0) {
+      promotionAddressMap = promo.addressMap;
+      xmlStr = promo.cleanedXml;
+    }
+  } catch (_promotionErr) {
+    // Pre-pass failures fall through to the existing parser, which will
+    // surface a descriptive error if the XML itself is malformed.
+  }
   const parser = new XMLParser({
     ignoreAttributes: false,
     trimValues: false,
     parseTagValue: false,
   });
   let obj = parser.parse(xmlStr);
+  if (xmlOptions.xinclude === 'resolve') {
+    obj = resolveXIncludesInParsed(obj, parser, xmlOptions);
+  }
   if (obj.scxml) {
     obj = obj.scxml;
   }
   obj = normaliseKeys(obj);
   obj = decodeEntities(obj);
+  preserveExtensionElements(obj);
   fixNestedScxml(obj);
   fixEmptyElse(obj);
   obj = collapseWhitespace(obj);
@@ -1087,7 +1303,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
-  if (omitEmpty) {
+  if (xmlOptions.omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
   if (obj.initial_attribute !== undefined && obj.initial === undefined) {
@@ -1126,12 +1342,22 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   stripXmlns(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
-  if (omitEmpty) {
+  if (xmlOptions.omitEmpty) {
     obj = removeEmpty(obj) || {};
     fixDataContent(obj);
     stripQnameNs(obj);
     stripNestedDataAttrs(obj);
     stripXmlns(obj);
+  }
+  // CONV-F: attach promoted help_text after the model surface is stable
+  // and after removeEmpty() so empty arrays from earlier passes do not
+  // clobber what we add here.
+  if (promotionAddressMap !== null) {
+    try {
+      attachHelpTextToModel(obj, promotionAddressMap);
+    } catch (_attachErr) {
+      // Promotion attach is best-effort; converter output remains valid.
+    }
   }
   let out = JSON.stringify(obj, null, 2);
   out = out.replace(/"version": 1(?=[,\n])/g, '"version": 1.0');
@@ -1179,7 +1405,7 @@ function jsonToXml(jsonStr) {
         return restoreDataNode(value);
       }
       if (
-        Object.keys(value).every(k => k === 'content' || k.endsWith('_value') || k === 'location' || k === 'expr' || k === 'src') &&
+        Object.keys(value).every(k => k === 'content' || k === 'help_text' || k.endsWith('_value') || k === 'location' || k === 'expr' || k === 'src') &&
         Array.isArray(value.content) &&
         value.content.length === 1 &&
         value.content[0] &&
@@ -1194,7 +1420,7 @@ function jsonToXml(jsonStr) {
       ) {
         const outObj = {};
         for (const [k, v] of Object.entries(value)) {
-          if (k !== 'content') {
+          if (k !== 'content' && k !== 'help_text') {
             outObj[k.startsWith('@_') ? k : `@_${k}`] = v;
           }
         }
@@ -1217,6 +1443,29 @@ function jsonToXml(jsonStr) {
               out[`@_${ak}`] = av;
             }
           }
+          continue;
+        }
+        if (nk === 'help_text') {
+          // CONV-E: help_text is first-class authoring metadata, not an SCXML
+          // attribute or element. CONV-F injects it as leading XML comments
+          // after XMLBuilder emits the comment-free structural tree.
+          continue;
+        }
+        if (nk === 'other_element') {
+          const elements = Array.isArray(v) ? v : [v];
+          elements.forEach(item => {
+            const r = restoreDataNode(item);
+            const [ck, cv] = Object.entries(r)[0];
+            if (out[ck]) {
+              if (Array.isArray(out[ck])) {
+                out[ck].push(cv);
+              } else {
+                out[ck] = [out[ck], cv];
+              }
+            } else {
+              out[ck] = cv;
+            }
+          });
           continue;
         }
         for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
@@ -1360,7 +1609,17 @@ function jsonToXml(jsonStr) {
   if (cleaned['@_xmlns'] === undefined) {
     cleaned['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
-  return { result: builder.build({ scxml: cleaned }), valid, errors };
+  let xmlOut = builder.build({ scxml: cleaned });
+  // CONV-F post-pass: inject leading XML comments for every model element
+  // with a non-empty help_text array. ``obj`` (the input model) is the
+  // source of truth for help_text; the XMLBuilder above already stripped
+  // it via the ``nk === 'help_text'`` guard.
+  try {
+    xmlOut = injectHelpTextCommentsIntoXml(xmlOut, obj);
+  } catch (_postPassErr) {
+    // Best-effort: emit existing XML if injection fails.
+  }
+  return { result: xmlOut, valid, errors };
 }
 
 module.exports = {
@@ -1375,6 +1634,9 @@ module.exports = {
   fixSendDefaults,
   fixSendContent,
   fixDonedataContent,
+  normaliseXmlToJsonOptions,
+  resolveXIncludesInParsed,
+  preserveExtensionElements,
   fixOtherAttributes,
   decodeEntities,
   restoreDataNode,
@@ -1387,4 +1649,9 @@ module.exports = {
   reorderScxml,
   stripNestedDataAttrs,
   stripXmlns,
+  ARRAY_KEYS,
+  STRUCTURAL_METADATA_KEYS,
+  extractHelpTextFromXml,
+  attachHelpTextToModel,
+  injectHelpTextCommentsIntoXml,
 };

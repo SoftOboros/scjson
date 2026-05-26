@@ -1,7 +1,7 @@
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from typing import Any, List, Optional
+from pydantic import BaseModel, ConfigDict, model_validator
 from xsdata_pydantic.fields import field
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
@@ -82,16 +82,22 @@ class ScxmlCancelType(BaseModel):
     )
     sendid: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     sendidexpr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
 class ScxmlContentType(BaseModel):
     content: Optional[List["Scxml"]] = None
     expr: Optional[str] = None
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, title="Other Attributes"
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
     class Meta:
@@ -109,8 +115,11 @@ class ScxmlDataType(BaseModel):
     id: str = field(metadata={"type": "Attribute", "required": True})
     src: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
     content: list[object] = field(
         default_factory=list,
@@ -124,8 +133,11 @@ class ScxmlElseType(BaseModel):
         name = "scxml.else.type"
 
     model_config = ConfigDict(defer_build=True)
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -136,8 +148,11 @@ class ScxmlElseifType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     cond: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -152,8 +167,11 @@ class ScxmlLogType(BaseModel):
     )
     label: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -169,8 +187,11 @@ class ScxmlParamType(BaseModel):
     name: str = field(metadata={"type": "Attribute", "required": True})
     expr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     location: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -181,8 +202,11 @@ class ScxmlRaiseType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     event: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -193,8 +217,11 @@ class ScxmlScriptType(BaseModel):
 
     model_config = ConfigDict(defer_build=True)
     src: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
     content: list[object] = field(
         default_factory=list,
@@ -305,8 +332,11 @@ class ScxmlAssignType(BaseModel):
         metadata={"name": "type", "type": "Attribute"},
     )
     attr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
     content: list[object] = field(
         default_factory=list,
@@ -337,8 +367,11 @@ class ScxmlDatamodelType(BaseModel):
     other_element: list[object] = field(
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -359,8 +392,11 @@ class ScxmlDonedataType(BaseModel):
     other_element: list[object] = field(
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -400,8 +436,11 @@ class ScxmlSendType(BaseModel):
     )
     delayexpr: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     namelist: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -497,8 +536,11 @@ class ScxmlIfType(BaseModel):
         },
     )
     cond: str = field(metadata={"type": "Attribute", "required": True})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -564,8 +606,11 @@ class ScxmlForeachType(BaseModel):
     array: str = field(metadata={"type": "Attribute", "required": True})
     item: str = field(metadata={"type": "Attribute", "required": True})
     index: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -628,9 +673,22 @@ class ScxmlFinalizeType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
     )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
+    )
+
+
+    @model_validator(mode="after")
+    def _reject_send_raise_in_finalize(self):
+        """Reject non-conformant ``send``/``raise`` children in ``finalize``."""
+        if self.send or self.raise_value:
+            raise ValueError(
+                "SCXML finalize MUST NOT contain send or raise children"
+            )
+        return self
 
 
 class ScxmlOnentryType(BaseModel):
@@ -682,8 +740,11 @@ class ScxmlOnentryType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -736,8 +797,11 @@ class ScxmlOnexitType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -804,8 +868,11 @@ class ScxmlTransitionType(BaseModel):
     type_value: Optional[TransitionTypeDatatype] = field(
         default=None, metadata={"name": "type", "type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -871,8 +938,11 @@ class ScxmlFinalType(BaseModel):
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
     id: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -896,8 +966,11 @@ class ScxmlHistoryType(BaseModel):
     type_value: Optional[HistoryTypeDatatype] = field(
         default=None, metadata={"name": "type", "type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -917,8 +990,11 @@ class ScxmlInitialType(BaseModel):
             "required": True,
         }
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -955,8 +1031,11 @@ class ScxmlInvokeType(BaseModel):
     autoforward: BooleanDatatype = field(
         default=BooleanDatatype.FALSE, metadata={"type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1054,8 +1133,11 @@ class ScxmlStateType(BaseModel):
         default_factory=list,
         metadata={"name": "initial", "type": "Attribute", "tokens": True},
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1111,8 +1193,11 @@ class ScxmlParallelType(BaseModel):
         default_factory=list, metadata={"type": "Wildcard", "namespace": "##other"}
     )
     id: Optional[str] = field(default=None, metadata={"type": "Attribute"})
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 
@@ -1173,8 +1258,11 @@ class ScxmlScxmlType(BaseModel):
     exmode: Optional[ExmodeDatatype] = field(
         default=None, metadata={"type": "Attribute"}
     )
-    other_attributes: dict[str, str] = field(
+    other_attributes: dict[str, Any] = field(
         default_factory=dict, metadata={"type": "Attributes", "namespace": "##other"}
+    )
+    help_text: list[str] = field(
+        default_factory=list, metadata={"type": "Ignore"}
     )
 
 

@@ -1,66 +1,49 @@
 <p align="center"><img src="scjson.png" alt="scjson logo" width="200"/></p>
 
-# SCXML to SCJSON Inference Guide
+# SCXML to SCJSON Converter Guide
 
-This document describes how the JavaScript converter transforms SCXML into the `scjson` format. It captures the *inference logic* encoded in [`js/src/converters.js`](js/src/converters.js) so that other language implementations can reproduce identical behaviour.
+This guide is an informative orientation for SCXML-to-SCJSON conversion. It is
+not the source of truth for converter behavior, schema fields, structural-field
+membership, attribute aliases, or extension surfaces.
 
-## 1. Overview
+Authoritative conversion semantics live in
+[`docs/concepts/SCJSON-CONV-00-CONCEPTS.md`](docs/concepts/SCJSON-CONV-00-CONCEPTS.md)
+and the repository semantic baseline lives in
+[`docs/concepts/SCJSON-00-CONCEPTS.md`](docs/concepts/SCJSON-00-CONCEPTS.md).
+Those documents define Python converter output and `scjson.schema.json` as the
+canonical references. JavaScript, Rust, and other language converters are parity
+implementations, not independent sources of truth.
 
-- **SCJSON** is a structured JSON representation of SCXML.
-- The converter does more than copy element names. Certain SCXML structures are **inferred** and attached directly to their parent objects.
-- Understanding these rules allows developers to implement compatible converters in Rust, Python, or any other language.
+## Current Conversion Model
 
-## 2. Conversion Entry Point
+At a high level, canonical SCJSON preserves SCXML hierarchy, executable ordering,
+schema-compatible field names, tokenized list attributes, and extension content
+that remains representable through supported schema surfaces.
 
-- The root element is `<scxml>`.
-- Each element becomes an object with a `"tag"` field holding the tag name.
-- All XML attributes are copied as string properties at the same level as `tag`.
-- Children are processed recursively.
+Use the concepts docs for details when implementing or auditing a converter:
 
-## 3. Structural Field Extraction
+- Converter reference: Python output under the repo parity harness.
+- Schema reference: `scjson.schema.json` and generated Pydantic models.
+- Structural fields: the generated schema owns the registry; converter constants
+  mirror it.
+- Reserved XML names: schema aliases such as `type_value`, `raise_value`,
+  `if_value`, `else_value`, `initial_attribute`, and `datamodel_attribute`.
+- Token attributes: fields such as transition `target` and state/root `initial`
+  are arrays where the schema marks them as token lists.
+- Unknown or extension content: preserve it through the schema-supported
+  `content`, `other_element`, or `other_attributes` surfaces.
 
-The converter lifts specific child elements out of `content[]` so that they live directly on the parent object. Each of the following tags becomes an array property on its parent:
+## Historical Note
 
-- `state`
-- `parallel`
-- `final`
-- `history`
-- `transition`
-- `onentry`
-- `onexit`
-- `invoke`
-- `datamodel`
-- `data`
-- `initial`
-- `script`
-- `log`
-- `assign`
-- `send`
-- `cancel`
+Earlier versions of this file described the JavaScript converter as the
+inference reference and listed a fixed structural-field set. That guidance is
+superseded by the concepts docs above. Keep examples in this file illustrative;
+do not update them into a competing registry.
 
-When any of these elements are present:
-
-1. Initialise an array for the matching property (e.g. `state: []`).
-2. Place converted child objects in this array.
-3. Do not leave the raw element in `content[]` unless its tag is unknown.
-
-## 4. Content Array Handling
-
-- Children that do **not** match a structural field stay inside `content[]`.
-- Order is preserved, and each child is recursively converted.
-- Attributes are flattened onto each object.
-- An empty tag becomes `{ "tag": "..." }` with no additional fields.
-
-## 5. Other Attributes and Fallbacks
-
-- All XML attributes are retained exactly as strings.
-- Namespacing is not applied unless explicitly added by future versions.
-- Unknown elements and attributes are preserved without raising errors.
-- These points are extension hooks for future schema updates.
-
-## 6. Examples
+## Example
 
 ### SCXML Input
+
 ```xml
 <state id="parent">
   <transition event="go" target="child"/>
@@ -72,7 +55,11 @@ When any of these elements are present:
 </state>
 ```
 
-### Converted SCJSON
+### Informative SCJSON Shape
+
+This example shows common output shape only. The schema and canonical Python
+converter decide the exact field surface.
+
 ```json
 {
   "tag": "state",
@@ -91,17 +78,7 @@ When any of these elements are present:
 }
 ```
 
-The unknown `<foo/>` element remains inside `content[]` of the `onentry` block.
-
-## 7. Notes on Determinism
-
-- Conversions are deterministic: the same SCXML yields identical SCJSON.
-- Whitespace has no structural effect.
-- Attribute order does not influence the output.
-
-## 8. Implementation Hints
-
-- A recursive descent approach is used.
-- Use `element.tagName`, `element.attributes`, and `element.children` when walking the DOM.
-- `STRUCTURAL_FIELDS` is a `Set` controlling whether a child is lifted out of `content[]`.
-
+The unknown `<foo/>` element is shown in `content` as one valid extension
+surface. Current authoritative rules allow extension material to remain
+representable through `content`, `other_element`, or `other_attributes`,
+depending on the schema field and converter path.
