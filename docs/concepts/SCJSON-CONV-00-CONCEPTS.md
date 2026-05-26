@@ -607,13 +607,14 @@ Corpus policy:
   `script.src`, XInclude preserve/resolve behavior, and routing-string
   preservation.
 - Invalid-standard examples, such as `send` under `finalize`, MAY be present
-  only as negative validation fixtures and MUST NOT enter execution sweeps.
+  only as negative validation fixtures under `tests/nonconformant_corpus/` and
+  MUST NOT enter execution sweeps.
 - Every converter fixture SHOULD have one canonical Python-derived SCJSON
   expectation or a test that regenerates the Python expectation and compares
   maintained language output against it.
-- Execution fixtures SHOULD stay in `tests/exec/` or `tests/sweep_corpus/`,
-  with sibling `.events.jsonl` files when deterministic event streams are
-  needed.
+- Conformant execution fixtures SHOULD stay in `tests/exec/` or
+  `tests/sweep_corpus/`, with sibling `.events.jsonl` files when deterministic
+  event streams are needed.
 
 Language propagation expectations:
 

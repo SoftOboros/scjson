@@ -38,6 +38,11 @@ authoring metadata and inclusion behavior:
   `<invoke src="...">`, inline nested `<scxml>` content, `<send>` payloads, and
   `<donedata>` payloads. It also documents XInclude `preserve` and `resolve`
   modes and shows the `scjson json ... --xinclude resolve` CLI form.
+- **CI sweep corpus hygiene.** Nonconformant finalize fixtures that intentionally
+  contain forbidden `<send>` children now live under
+  `tests/nonconformant_corpus/` instead of `tests/sweep_corpus/`, keeping the
+  generated-vector execution sweep limited to conformant runtime charts while
+  preserving negative validator coverage.
 
 ### 2026-05-24 — Python 0.4.0 + JavaScript 0.4.0 (help_text + SCXML comment promotion + extension metadata registry)
 
