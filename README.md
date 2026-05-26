@@ -50,6 +50,34 @@ and
 
 ---
 
+## Authoring Metadata and Inclusion
+
+scjson 0.4.0 adds first-class authoring metadata and stronger inclusion
+coverage for chart documents:
+
+- `help_text` is an optional `list[str]` field on SCJSON element models. It is
+  for human-readable chart documentation and stays separate from
+  `other_attributes`, which remains the extension metadata surface.
+- SCXML comments are promoted into `help_text` during SCXML -> SCJSON
+  conversion, and non-empty `help_text` entries are emitted back as leading
+  SCXML comments during SCJSON -> SCXML conversion. This metadata does not
+  affect validation, execution, transition selection, datamodel evaluation, or
+  trace output.
+- Inclusion and resource surfaces are preserved through conversion, including
+  `<data src="...">`, `<script src="...">`, `<invoke src="...">`, inline nested
+  `<scxml>` content, `<send>` payloads, and `<donedata>` payloads.
+- XInclude is supported in two modes. The default `preserve` mode keeps
+  unresolved `<xi:include>` directives as extension elements. The `resolve`
+  mode expands includes before conversion when a loader or base path is
+  available.
+
+Canonical behavior is specified in
+[`docs/concepts/SCJSON-CONV-00-CONCEPTS.md`](./docs/concepts/SCJSON-CONV-00-CONCEPTS.md);
+the optional extension metadata registry is documented in
+[`docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`](./docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md).
+
+---
+
 ## Directory Structure
 
 Each language implementation lives in its own directory, as a standalone module or library root:
@@ -139,6 +167,9 @@ All converters share the same schema and test suite to ensure compatibility.
 ```bash
 # Convert from SCXML to scjson
 scjson convert --from scxml path/to/file.scxml --to scjson path/to/file.scjson
+
+# Resolve XInclude directives before converting instead of preserving them
+scjson json path/to/root.scxml --xinclude resolve --output path/to/root.scjson
 
 # Validate a scjson file
 scjson validate path/to/file.scjson

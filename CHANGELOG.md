@@ -7,16 +7,37 @@ single version stream.
 | Language | Path                  | Latest version  | Per-package log |
 |----------|-----------------------|-----------------|------------------|
 | Python   | `py/`                 | 0.4.0           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
-| Ruby     | `ruby/`               | 0.3.5           | (in `git log`)   |
+| Ruby     | `ruby/`               | 0.4.0           | (in `git log`)   |
 | JS       | `js/`                 | 0.4.0           | (in `git log`)   |
 | Rust     | `rust/`               | 0.3.3           | (in `git log`)   |
-| Java     | `java/`               | 0.3.3-SNAPSHOT  | (in `git log`)   |
+| Java     | `java/`               | 0.4.0           | (in `git log`)   |
 | Swift    | `swift/`              | (see swift)     | [`swift/CHANGELOG.md`](swift/CHANGELOG.md) |
 | Lua      | `lua/`                | (rockspec)      | (in `git log`)   |
 | Go       | `go/`                 | (`go.mod`)      | (in `git log`)   |
 | C#       | `csharp/`             | (csproj)        | (in `git log`)   |
 
 ## Cross-language entries
+
+### 2026-05-26 — 0.4.0 release prep (help_text docs + inclusion surfaces)
+
+The `release/0.4.0-help-text-comments` branch is prepared for package release
+with aligned touched-package versions and public README coverage for the new
+authoring metadata and inclusion behavior:
+
+- **Package version alignment.** Python, JavaScript, Ruby, and Java release
+  metadata now report `0.4.0` across their package-manager configuration
+  surfaces (`pyproject.toml`, `package.json`, `package-lock.json`, gemspec,
+  Ruby version constant, `Gemfile.lock`, and Maven `pom.xml`).
+- **README feature documentation.** The top-level README now documents
+  `help_text` as first-class authoring metadata, explains SCXML comment
+  promotion and re-emission, and states that `help_text` does not affect
+  validation, execution, datamodel evaluation, transition selection, or trace
+  output.
+- **Inclusion and resource surface documentation.** The README now calls out
+  preservation of `<data src="...">`, `<script src="...">`,
+  `<invoke src="...">`, inline nested `<scxml>` content, `<send>` payloads, and
+  `<donedata>` payloads. It also documents XInclude `preserve` and `resolve`
+  modes and shows the `scjson json ... --xinclude resolve` CLI form.
 
 ### 2026-05-24 — Python 0.4.0 + JavaScript 0.4.0 (help_text + SCXML comment promotion + extension metadata registry)
 
