@@ -268,11 +268,6 @@ jobs:
           python uber_test.py -l ruby
           python uber_test.py -l rust
 
-      - id: determine_pypi
-        name: Determine PyPI publish necessity
-        working-directory: py
-        run: python ../.github/scripts/determine_pypi_publish.py
-
       - id: determine_crates
         name: Determine crates.io publish necessity
         run: python .github/scripts/determine_crates_publish.py
@@ -281,21 +276,6 @@ jobs:
         name: Determine RubyGems publish necessity
         working-directory: ruby
         run: ruby ../.github/scripts/determine_rubygems_publish.rb
-
-      - name: Build Python distribution (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
-        working-directory: py
-        run: |
-          pip install build
-          rm -rf dist
-          python -m build
-
-      - name: Publish to PyPI with Trusted Publishing (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: py/dist/
-          print-hash: true
 
       - name: Publish to crates.io (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
