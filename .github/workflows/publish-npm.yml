@@ -1,0 +1,31 @@
+name: Publish npm
+
+on:
+  push:
+    tags: ["npm-*"]
+  workflow_dispatch:
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Build
+        working-directory: js
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish to npm (OIDC)
+        working-directory: js
+        run: npm publish --access public

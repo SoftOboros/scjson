@@ -5,7 +5,7 @@
   "author": "Softoboros Technology Inc. <ira@softoboros.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SoftOboros/scjson"
+    "url": "git+https://github.com/SoftOboros/scjson.git"
   },
   "license": "BSD-1-Clause",
   "main": "dist/index.js",
