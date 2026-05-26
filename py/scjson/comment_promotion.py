@@ -104,6 +104,12 @@ APPLIES_TO_TAGS: frozenset[str] = frozenset(
 #: rule 5).
 SOURCE_BODY_TAGS: frozenset[str] = frozenset({"script", "data"})
 
+#: SCXML elements whose character data is part of their semantic payload.
+#: Other recognized SCXML elements are element-only for conversion purposes;
+#: stray non-whitespace text there is invalid SCXML and is ignored after it
+#: has served its CONV-F role of severing comment promotion to the next child.
+MIXED_TEXT_TAGS: frozenset[str] = frozenset({"script", "data", "content"})
+
 #: Cached ``class -> {xml_tag: attribute_name}`` map. Lazily populated from
 #: the dataclass models module on first use; the same shape applies to the
 #: pydantic models because both are generated from the same xsdata schema.
@@ -431,6 +437,7 @@ def extract_help_text_from_xml(
 
     # Strip comments from the tree and re-serialize.
     _strip_comments_in_place(root)
+    _strip_unsupported_character_data_in_place(root)
 
     # Also strip pre-root and post-root comments (we already harvested them).
     for sib in pre_chain:
@@ -480,6 +487,27 @@ def _strip_comments_in_place(elem: _ET._Element) -> None:
             elem.remove(child)
         else:
             _strip_comments_in_place(child)
+
+
+def _strip_unsupported_character_data_in_place(elem: _ET._Element) -> None:
+    """Drop invalid character data from recognized element-only SCXML nodes.
+
+    CONV-F uses non-whitespace character data between a pending comment and the
+    next child element to decide comment ownership. After that decision is
+    recorded, the converter should not feed such invalid element-only text to
+    xsdata because xsdata may surface it as a wildcard with no qname. Mixed
+    payload elements and opaque extension subtrees keep their text intact.
+    """
+    local = _local_name(elem.tag)
+    structural_scxml = local in APPLIES_TO_TAGS and local not in MIXED_TEXT_TAGS
+
+    if structural_scxml and elem.text and elem.text.strip():
+        elem.text = ""
+
+    for child in list(elem):
+        _strip_unsupported_character_data_in_place(child)
+        if structural_scxml and child.tail and child.tail.strip():
+            child.tail = ""
 
 
 # ---------------------------------------------------------------------------
