@@ -94,6 +94,9 @@ const KNOWN_SCXML_ATTRS: &[&str] = &[
     "version",
 ];
 
+/// Elements whose body text is source-like and whose comments are not promoted.
+const SOURCE_BODY_TAGS: &[&str] = &["script", "data"];
+
 /// Known SCXML element names used for conversion.
 const SCXML_ELEMS: &[&str] = &[
     "scxml",
@@ -146,6 +149,120 @@ fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
         }
         None => {
             map.insert(key.to_string(), Value::Array(vec![val]));
+        }
+    }
+}
+
+fn repair_comment_text(raw: &str) -> String {
+    let text = raw.replace("\r\n", "\n").replace('\r', "\n");
+    if !text.contains('\n') {
+        return text.trim().to_string();
+    }
+    let mut lines: Vec<String> = text.lines().map(|line| line.to_string()).collect();
+    while lines.first().map(|line| line.trim().is_empty()).unwrap_or(false) {
+        lines.remove(0);
+    }
+    while lines.last().map(|line| line.trim().is_empty()).unwrap_or(false) {
+        lines.pop();
+    }
+    let margin = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.chars().take_while(|ch| ch.is_whitespace()).count())
+        .min()
+        .unwrap_or(0);
+    let continuation_margin = if margin == 0
+        && lines.len() > 1
+        && lines
+            .last()
+            .map(|line| line.ends_with(char::is_whitespace))
+            .unwrap_or(false)
+        && lines
+            .iter()
+            .skip(1)
+            .filter(|line| !line.trim().is_empty())
+            .all(|line| line.chars().next().map(|ch| ch.is_whitespace()).unwrap_or(false))
+    {
+        lines
+            .iter()
+            .skip(1)
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.chars().take_while(|ch| ch.is_whitespace()).count())
+            .filter(|count| *count > 0)
+            .min()
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(idx, line)| {
+            if line.trim().is_empty() {
+                String::new()
+            } else if margin > 0 {
+                line.chars().skip(margin).collect::<String>()
+            } else if continuation_margin > 0 && idx > 0 {
+                let leading = line.chars().take_while(|ch| ch.is_whitespace()).count();
+                if leading >= continuation_margin {
+                    line.chars().skip(continuation_margin).collect::<String>()
+                } else {
+                    line
+                }
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn emit_safe_comment_text(text: &str) -> String {
+    let mut safe = text.replace("--", "- -");
+    if safe.ends_with('-') {
+        safe.push(' ');
+    }
+    if safe.contains('\n') {
+        safe = format!("\n{}\n", safe);
+    }
+    safe
+}
+
+fn append_help_text(map: &mut Map<String, Value>, comments: Vec<String>, prepend: bool) {
+    let repaired: Vec<Value> = comments
+        .into_iter()
+        .filter(|item| !item.is_empty())
+        .map(Value::String)
+        .collect();
+    if repaired.is_empty() {
+        return;
+    }
+    match map.get_mut("help_text") {
+        Some(Value::Array(arr)) => {
+            if prepend {
+                let mut next = repaired;
+                next.append(arr);
+                *arr = next;
+            } else {
+                arr.extend(repaired);
+            }
+        }
+        Some(other) => {
+            let old = other.take();
+            let mut arr = Vec::new();
+            if prepend {
+                arr.extend(repaired);
+                arr.push(old);
+            } else {
+                arr.push(old);
+                arr.extend(repaired);
+            }
+            *other = Value::Array(arr);
+        }
+        None => {
+            map.insert("help_text".to_string(), Value::Array(repaired));
         }
     }
 }
@@ -207,7 +324,7 @@ fn other_attribute_to_xml_value(value: &Value) -> Option<String> {
     }
 }
 
-fn element_to_map(elem: &Element) -> Map<String, Value> {
+fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value> {
     let mut map = Map::new();
     for (k, v) in &elem.attributes {
         match (elem.name.as_str(), k.as_str()) {
@@ -283,8 +400,21 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
     }
 
     let mut text_items = Vec::new();
+    let mut pending_comments: Vec<String> = Vec::new();
+    let mut saw_non_ws_text_since_comment = false;
+    let current_can_own_help = SCXML_ELEMS.contains(&elem.name.as_str()) && !suppress_help_text;
+    let child_suppresses_help =
+        suppress_help_text
+            || SOURCE_BODY_TAGS.contains(&elem.name.as_str())
+            || elem.name == "content";
     for child in &elem.children {
         match child {
+            XMLNode::Comment(text) => {
+                if current_can_own_help {
+                    pending_comments.push(repair_comment_text(text));
+                    saw_non_ws_text_since_comment = false;
+                }
+            }
             XMLNode::Element(e) => {
                 if SCXML_ELEMS.contains(&e.name.as_str()) {
                     let key = match e.name.as_str() {
@@ -293,7 +423,7 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                         "raise" => "raise_value",
                         name => name,
                     };
-                    let child_map = element_to_map(e);
+                    let mut child_map = element_to_map(e, child_suppresses_help);
                     let target_key = if e.name == "scxml" && elem.name != "scxml" {
                         "content"
                     } else if elem.name == "content" && e.name == "scxml" {
@@ -301,6 +431,19 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                     } else {
                         key
                     };
+                    if !pending_comments.is_empty()
+                        && elem.name == "content"
+                        && e.name == "scxml"
+                    {
+                        // Comments inside inline <content> payloads are not
+                        // promoted onto the nested state machine.
+                    } else if !pending_comments.is_empty() && !saw_non_ws_text_since_comment {
+                        append_help_text(&mut child_map, pending_comments, true);
+                    } else if !pending_comments.is_empty() && current_can_own_help {
+                        append_help_text(&mut map, pending_comments, false);
+                    }
+                    pending_comments = Vec::new();
+                    saw_non_ws_text_since_comment = false;
                     if (elem.name == "initial" || elem.name == "history") && e.name == "transition" {
                         map.insert(target_key.to_string(), Value::Object(child_map));
                     } else {
@@ -313,11 +456,19 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
             }
             XMLNode::Text(t) => {
                 if !t.trim().is_empty() {
+                    if !pending_comments.is_empty() && current_can_own_help {
+                        append_help_text(&mut map, pending_comments, false);
+                        pending_comments = Vec::new();
+                    }
+                    saw_non_ws_text_since_comment = true;
                     text_items.push(Value::String(t.to_string()));
                 }
             }
             _ => {}
         }
+    }
+    if !pending_comments.is_empty() && current_can_own_help {
+        append_help_text(&mut map, pending_comments, false);
     }
     if !text_items.is_empty() {
         for item in text_items {
@@ -401,7 +552,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
         }
     }
     for (k, v) in map {
-        if ["qname", "text", "attributes"].contains(&k.as_str()) {
+        if ["qname", "text", "attributes", "help_text"].contains(&k.as_str()) {
             continue;
         }
         if k == "other_attributes" {
@@ -435,8 +586,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                                     } else {
                                         "content"
                                     };
-                                    let child = map_to_element(child_name, obj);
-                                    elem.children.push(XMLNode::Element(child));
+                                    append_element_with_help_text(&mut elem, child_name, obj);
                                 }
                                 _ => {}
                             }
@@ -461,8 +611,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                                     } else {
                                         "content"
                                     };
-                                    let child = map_to_element(child_name, obj);
-                                    elem.children.push(XMLNode::Element(child));
+                                    append_element_with_help_text(&mut elem, child_name, obj);
                                 }
                                 _ => {}
                             }
@@ -479,8 +628,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                     } else {
                         "content"
                     };
-                    let child = map_to_element(child_name, obj);
-                    elem.children.push(XMLNode::Element(child));
+                    append_element_with_help_text(&mut elem, child_name, obj);
                 }
                 Value::String(s) => {
                     if name == "script" {
@@ -546,8 +694,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                 };
                 for item in arr {
                     if let Value::Object(obj) = item {
-                        let child = map_to_element(child_name, obj);
-                        elem.children.push(XMLNode::Element(child));
+                        append_element_with_help_text(&mut elem, child_name, obj);
                     } else if let Value::String(text) = item {
                         elem.children
                             .push(XMLNode::Element(map_to_element(child_name, &Map::new())));
@@ -562,8 +709,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                     "raise_value" => "raise",
                     other => other,
                 };
-                let child = map_to_element(child_name, obj);
-                elem.children.push(XMLNode::Element(child));
+                append_element_with_help_text(&mut elem, child_name, obj);
             }
             Value::String(s) => {
                 if k == "version" {
@@ -583,6 +729,27 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
         }
     }
     elem
+}
+
+fn help_text_comments(map: &Map<String, Value>) -> Vec<XMLNode> {
+    let mut nodes = Vec::new();
+    if let Some(Value::Array(entries)) = map.get("help_text") {
+        for entry in entries {
+            if let Some(text) = entry.as_str() {
+                nodes.push(XMLNode::Comment(emit_safe_comment_text(text)));
+            }
+        }
+    }
+    nodes
+}
+
+fn append_element_with_help_text(parent: &mut Element, child_name: &str, obj: &Map<String, Value>) {
+    for comment in help_text_comments(obj) {
+        parent.children.push(comment);
+    }
+    parent
+        .children
+        .push(XMLNode::Element(map_to_element(child_name, obj)));
 }
 
 /// Collapse newlines and tabs in attribute values recursively.
@@ -652,12 +819,23 @@ fn remove_empty(value: &mut Value) -> bool {
 /// # Returns
 /// JSON string representing the document.
 pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
-    let root = Element::parse(xml.as_bytes())?;
+    let nodes = Element::parse_all(xml.as_bytes())?;
+    let mut root: Option<Element> = None;
+    let mut root_comments: Vec<String> = Vec::new();
+    for node in nodes {
+        match node {
+            XMLNode::Element(elem) => root = Some(elem),
+            XMLNode::Comment(text) => root_comments.push(repair_comment_text(&text)),
+            _ => {}
+        }
+    }
+    let root = root.ok_or(ScjsonError::Unsupported)?;
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
     // let mut map = element_to_map(&root); // retained for potential future mutations
-    let map = element_to_map(&root);
+    let mut map = element_to_map(&root, false);
+    append_help_text(&mut map, root_comments, false);
     let mut value = Value::Object(map);
     collapse_whitespace(&mut value);
     if omit_empty {
@@ -683,7 +861,24 @@ pub fn json_to_xml_opts(json_str: &str, omit_empty: bool) -> Result<String, Scjs
     let elem = map_to_element("scxml", obj);
     let mut out = Vec::new();
     elem.write(&mut out)?;
-    Ok(String::from_utf8(out).unwrap())
+    let mut xml = String::from_utf8(out).unwrap();
+    let root_comments = help_text_comments(obj)
+        .into_iter()
+        .filter_map(|node| match node {
+            XMLNode::Comment(text) => Some(format!("<!--{}-->", text)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if !root_comments.is_empty() {
+        let prefix = root_comments.join("");
+        if let Some(idx) = xml.find("?>") {
+            let insert_at = idx + 2;
+            xml.insert_str(insert_at, &prefix);
+        } else {
+            xml = format!("{}{}", prefix, xml);
+        }
+    }
+    Ok(xml)
 }
 
 /// Convert a scjson string to SCXML.

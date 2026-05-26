@@ -1405,7 +1405,7 @@ function jsonToXml(jsonStr) {
         return restoreDataNode(value);
       }
       if (
-        Object.keys(value).every(k => k === 'content' || k.endsWith('_value') || k === 'location' || k === 'expr' || k === 'src') &&
+        Object.keys(value).every(k => k === 'content' || k === 'help_text' || k.endsWith('_value') || k === 'location' || k === 'expr' || k === 'src') &&
         Array.isArray(value.content) &&
         value.content.length === 1 &&
         value.content[0] &&
@@ -1420,7 +1420,7 @@ function jsonToXml(jsonStr) {
       ) {
         const outObj = {};
         for (const [k, v] of Object.entries(value)) {
-          if (k !== 'content') {
+          if (k !== 'content' && k !== 'help_text') {
             outObj[k.startsWith('@_') ? k : `@_${k}`] = v;
           }
         }

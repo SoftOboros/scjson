@@ -47,6 +47,17 @@ authoring metadata and inclusion behavior:
   JSON-typed `other_attributes` metadata during JSON -> XML -> JSON conversion
   by serializing object/array metadata as XML attribute JSON and parsing it back
   into `other_attributes`.
+- **Release-language converter parity.** JavaScript, Ruby, and Rust now align
+  with the Python reference for CONV-F `help_text` comment promotion and
+  re-emission across inline `<content>` payloads, nested `<scxml>` content,
+  parent-leading comments, and multiline comment text repair. The Rust
+  converter now promotes and emits `help_text` comments directly; Ruby keeps
+  compatibility with its older supported runtime while matching the canonical
+  comment ordering.
+- **Full release-language sweep.** The Python, JavaScript, Ruby, and Rust
+  `uber_test.py` XML/JSON comparison runs are clean for the release branch after
+  marker scanning for mismatches and write failures. The CI sweep also keeps
+  known nonconformant finalize fixtures outside the conformant execution corpus.
 
 ### 2026-05-24 — Python 0.4.0 + JavaScript 0.4.0 (help_text + SCXML comment promotion + extension metadata registry)
 

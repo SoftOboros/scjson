@@ -212,7 +212,7 @@ module Scjson
     indents = lines.map do |line|
       next if line.strip.empty?
 
-      line.length - line.lstrip(" \t").length
+      line.length - line.sub(/\A[ \t]+/, '').length
     end.compact
     common = indents.empty? ? 0 : indents.min
     lines = lines.map { |line| line.length >= common ? line[common, line.length] : line } if common.positive?
@@ -227,12 +227,17 @@ module Scjson
   end
   private_class_method :emit_safe_comment_text
 
-  def append_help_text(map, comments)
+  def append_help_text(map, comments, prepend: false)
     repaired = comments.map(&:to_s)
     return if repaired.empty?
 
     existing = map['help_text']
-    map['help_text'] = existing ? wrap_list(existing) + repaired : repaired
+    if existing
+      existing = wrap_list(existing)
+      map['help_text'] = prepend ? repaired + existing : existing + repaired
+    else
+      map['help_text'] = repaired
+    end
   end
   private_class_method :append_help_text
 
@@ -360,10 +365,13 @@ module Scjson
                 when 'raise' then 'raise_value'
                 else child_local
                 end
-          child_map = element_to_hash(child, elem_in_source, elem_in_extension)
+          child_map = element_to_hash(child, elem_in_source || local == 'content', elem_in_extension)
           target_eligible = SCXML_ELEMENTS.include?(child_local) && !elem_in_source && !elem_in_extension
-          if !pending_comments.empty? && target_eligible
-            append_help_text(child_map, pending_comments)
+          if !pending_comments.empty? && local == 'content' && child_local == 'scxml'
+            # Comments inside an inline <content> payload are payload-local,
+            # not authoring metadata for the nested machine.
+          elsif !pending_comments.empty? && target_eligible
+            append_help_text(child_map, pending_comments, prepend: true)
           elsif !pending_comments.empty? && SCXML_ELEMENTS.include?(local) && !elem_in_source && !elem_in_extension
             append_help_text(map, pending_comments)
           end
@@ -626,7 +634,10 @@ module Scjson
 
       next unless item.is_a?(Hash)
 
-      if parent_name == 'send' && item.keys == ['content']
+      if parent_name == 'send' && (item.keys - ['help_text']) == ['content']
+        wrap_list(item['help_text']).each do |text|
+          element.add_child(Nokogiri::XML::Comment.new(doc, emit_safe_comment_text(text)))
+        end
         wrap_list(item['content']).each do |inner|
           content_element = Nokogiri::XML::Element.new('content', doc)
           if inner.is_a?(String)
@@ -639,7 +650,10 @@ module Scjson
         next
       end
 
-      if parent_name == 'donedata' && item.keys == ['content']
+      if parent_name == 'donedata' && (item.keys - ['help_text']) == ['content']
+        wrap_list(item['help_text']).each do |text|
+          element.add_child(Nokogiri::XML::Comment.new(doc, emit_safe_comment_text(text)))
+        end
         content_element = Nokogiri::XML::Element.new('content', doc)
         wrap_list(item['content']).each do |inner|
           if inner.is_a?(String)
