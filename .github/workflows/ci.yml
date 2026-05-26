@@ -282,21 +282,20 @@ jobs:
         working-directory: ruby
         run: ruby ../.github/scripts/determine_rubygems_publish.rb
 
-      - name: Publish to PyPI (if version changed)
+      - name: Build Python distribution (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
         working-directory: py
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_KEY }}
         run: |
-          if [ -z "$TWINE_PASSWORD" ]; then
-            echo "No PYPI_API_KEY provided; skipping publish."
-            exit 0
-          fi
-          pip install build twine
+          pip install build
           rm -rf dist
           python -m build
-          twine upload --non-interactive dist/*
+
+      - name: Publish to PyPI with Trusted Publishing (if version changed)
+        if: github.ref == 'refs/heads/main' && steps.determine_pypi.outputs.should_publish == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: py/dist/
+          print-hash: true
 
       - name: Publish to crates.io (if version changed)
         if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
