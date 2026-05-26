@@ -9,7 +9,7 @@ single version stream.
 | Python   | `py/`                 | 0.4.0           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
 | Ruby     | `ruby/`               | 0.4.0           | (in `git log`)   |
 | JS       | `js/`                 | 0.4.0           | (in `git log`)   |
-| Rust     | `rust/`               | 0.3.3           | (in `git log`)   |
+| Rust     | `rust/`               | 0.4.0           | (in `git log`)   |
 | Java     | `java/`               | 0.4.0           | (in `git log`)   |
 | Swift    | `swift/`              | (see swift)     | [`swift/CHANGELOG.md`](swift/CHANGELOG.md) |
 | Lua      | `lua/`                | (rockspec)      | (in `git log`)   |
@@ -43,6 +43,10 @@ authoring metadata and inclusion behavior:
   `tests/nonconformant_corpus/` instead of `tests/sweep_corpus/`, keeping the
   generated-vector execution sweep limited to conformant runtime charts while
   preserving negative validator coverage.
+- **Rust package alignment.** The Rust package is now `0.4.0` and preserves
+  JSON-typed `other_attributes` metadata during JSON -> XML -> JSON conversion
+  by serializing object/array metadata as XML attribute JSON and parsing it back
+  into `other_attributes`.
 
 ### 2026-05-24 — Python 0.4.0 + JavaScript 0.4.0 (help_text + SCXML comment promotion + extension metadata registry)
 

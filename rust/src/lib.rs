@@ -59,6 +59,41 @@ const COLLAPSE_ATTRS: &[&str] = &[
     "expr", "cond", "event", "target", "delay", "location", "name", "src", "id",
 ];
 
+/// SCXML attribute names that are represented as first-class SCJSON fields.
+const KNOWN_SCXML_ATTRS: &[&str] = &[
+    "array",
+    "attr",
+    "autoforward",
+    "binding",
+    "cond",
+    "datamodel",
+    "delay",
+    "delayexpr",
+    "event",
+    "eventexpr",
+    "exmode",
+    "expr",
+    "id",
+    "idlocation",
+    "index",
+    "initial",
+    "item",
+    "label",
+    "location",
+    "name",
+    "namelist",
+    "profile",
+    "sendid",
+    "sendidexpr",
+    "src",
+    "srcexpr",
+    "target",
+    "targetexpr",
+    "type",
+    "typeexpr",
+    "version",
+];
+
 /// Known SCXML element names used for conversion.
 const SCXML_ELEMS: &[&str] = &[
     "scxml",
@@ -141,6 +176,37 @@ fn any_element_to_value(elem: &Element) -> Value {
     Value::Object(map)
 }
 
+fn parse_extension_attr_value(value: &str) -> Value {
+    let trimmed = value.trim();
+    if (trimmed.starts_with('{') || trimmed.starts_with('['))
+        && (trimmed.ends_with('}') || trimmed.ends_with(']'))
+    {
+        if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+            return parsed;
+        }
+    }
+    Value::String(value.to_string())
+}
+
+fn append_other_attribute(map: &mut Map<String, Value>, key: &str, value: &str) {
+    let attrs = map
+        .entry("other_attributes".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if let Value::Object(obj) = attrs {
+        obj.insert(key.to_string(), parse_extension_attr_value(value));
+    }
+}
+
+fn other_attribute_to_xml_value(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(s) => Some(s.clone()),
+        Value::Bool(b) => Some(if *b { "true" } else { "false" }.to_string()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(value).ok(),
+    }
+}
+
 fn element_to_map(elem: &Element) -> Map<String, Value> {
     let mut map = Map::new();
     for (k, v) in &elem.attributes {
@@ -188,6 +254,9 @@ fn element_to_map(elem: &Element) -> Map<String, Value> {
                 map.insert("event".into(), Value::String(v.clone()));
             }
             (_, "xmlns") => {}
+            (_, attr) if !KNOWN_SCXML_ATTRS.contains(&attr) => {
+                append_other_attribute(&mut map, k, v);
+            }
             _ => {
                 map.insert(k.clone(), Value::String(v.clone()));
             }
@@ -333,6 +402,16 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
     }
     for (k, v) in map {
         if ["qname", "text", "attributes"].contains(&k.as_str()) {
+            continue;
+        }
+        if k == "other_attributes" {
+            if let Value::Object(attrs) = v {
+                for (attr, attr_value) in attrs {
+                    if let Some(serialized) = other_attribute_to_xml_value(attr_value) {
+                        elem.attributes.insert(attr.clone(), serialized);
+                    }
+                }
+            }
             continue;
         }
         if k == "content" {
