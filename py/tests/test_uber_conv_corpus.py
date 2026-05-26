@@ -12,9 +12,12 @@ selection added by CONV-I.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 def _env(root: Path) -> dict[str, str]:
@@ -79,3 +82,33 @@ def test_uber_test_python_exec_compare_mode_accepts_reference(tmp_path: Path) ->
 
     assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
     assert "exec_compare toggle.scxml ... OK" in result.stdout
+
+
+@pytest.mark.skipif(shutil.which("ruby") is None, reason="Ruby CLI unavailable")
+def test_uber_test_ruby_preserves_xinclude_extension(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    corpus = root / "tests" / "conv_corpus"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(root / "py" / "uber_test.py"),
+            str(tmp_path / "ruby-uber"),
+            "--language",
+            "ruby",
+            "--corpus",
+            str(corpus),
+            "--subset",
+            "xinclude_preserve.scxml",
+            "--consensus-warn",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=_env(root),
+        cwd=str(root),
+    )
+
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    combined = f"{result.stdout}\n{result.stderr}".lower()
+    assert "mismatch" not in combined

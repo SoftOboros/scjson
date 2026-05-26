@@ -21,6 +21,8 @@ require_relative 'scjson/types'
 # Canonical SCXML <-> scjson conversion for the Ruby agent.
 module Scjson
   XMLNS = 'http://www.w3.org/2005/07/scxml'.freeze
+  XINCLUDE_NS = 'http://www.w3.org/2001/XInclude'.freeze
+  XINCLUDE_CLARK_INCLUDE = "{#{XINCLUDE_NS}}include".freeze
 
   ATTRIBUTE_MAP = {
     'datamodel' => 'datamodel_attribute',
@@ -144,6 +146,26 @@ module Scjson
   end
   private_class_method :local_name
 
+  def scxml_element?(node)
+    ns = node.namespace&.href
+    SCXML_ELEMENTS.include?(local_name(node)) && (ns.nil? || ns.empty? || ns == XMLNS)
+  end
+  private_class_method :scxml_element?
+
+  def extension_element?(node)
+    ns = node.namespace&.href
+    !ns.nil? && !ns.empty? && ns != XMLNS
+  end
+  private_class_method :extension_element?
+
+  def clark_name(node)
+    ns = node.namespace&.href
+    return node.name if ns.nil? || ns.empty?
+
+    "{#{ns}}#{local_name(node)}"
+  end
+  private_class_method :clark_name
+
   def append_child(hash, key, value)
     if hash.key?(key)
       existing = hash[key]
@@ -165,7 +187,7 @@ module Scjson
   private_class_method :wrap_list
 
   def any_element_to_hash(node)
-    result = { 'qname' => node.name }
+    result = { 'qname' => clark_name(node) }
     text = node.text
     result['text'] = text.to_s if text
     unless node.attribute_nodes.empty?
@@ -242,7 +264,7 @@ module Scjson
     node.children.each do |child|
       if child.element?
         child_local = local_name(child)
-        if SCXML_ELEMENTS.include?(child_local)
+        if scxml_element?(child)
           key = case child_local
                 when 'if' then 'if_value'
                 when 'else' then 'else_value'
@@ -263,7 +285,8 @@ module Scjson
             append_child(map, target_key, child_map)
           end
         else
-          append_child(map, 'content', any_element_to_hash(child))
+          target_key = extension_element?(child) ? 'other_element' : 'content'
+          append_child(map, target_key, any_element_to_hash(child))
         end
       elsif child.text?
         value = child.text
@@ -378,6 +401,11 @@ module Scjson
     raise ArgumentError, 'Expected object for element construction' unless map.is_a?(Hash)
 
     element_name = map['qname'] || name
+    attrs = map['attributes'].is_a?(Hash) ? map['attributes'].dup : {}
+    if element_name == XINCLUDE_CLARK_INCLUDE
+      element_name = 'xi:include'
+      attrs['xmlns:xi'] ||= XINCLUDE_NS
+    end
     element = Nokogiri::XML::Element.new(element_name, doc)
 
     if name == 'scxml'
@@ -390,10 +418,8 @@ module Scjson
       element.add_child(Nokogiri::XML::Text.new(map['text'], doc))
     end
 
-    if map['attributes'].is_a?(Hash)
-      map['attributes'].each do |attr_name, attr_value|
-        element[attr_name] = attr_value if attr_value
-      end
+    attrs.each do |attr_name, attr_value|
+      element[attr_name] = attr_value if attr_value
     end
 
     map.each do |key, value|
@@ -402,6 +428,13 @@ module Scjson
       case key
       when 'content'
         handle_content_nodes(doc, element, value, element_name)
+      when 'other_element'
+        wrap_list(value).each do |child_map|
+          next unless child_map.is_a?(Hash)
+
+          child_name = child_map['qname'] || 'content'
+          element.add_child(build_element(doc, child_name, child_map))
+        end
       when 'children'
         wrap_list(value).each do |child_map|
           next unless child_map.is_a?(Hash)
