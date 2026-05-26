@@ -140,8 +140,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -267,40 +265,3 @@ jobs:
           python uber_test.py -l javascript
           python uber_test.py -l ruby
           python uber_test.py -l rust
-
-      - id: determine_crates
-        name: Determine crates.io publish necessity
-        run: python .github/scripts/determine_crates_publish.py
-
-      - id: determine_rubygems
-        name: Determine RubyGems publish necessity
-        working-directory: ruby
-        run: ruby ../.github/scripts/determine_rubygems_publish.rb
-
-      - name: Publish to crates.io (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_crates.outputs.should_publish == 'true'
-        working-directory: rust
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
-            echo "No CARGO_REGISTRY_TOKEN provided; skipping crates.io publish."
-            exit 0
-          fi
-          cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"
-
-      - name: Publish to RubyGems (if version changed)
-        if: github.ref == 'refs/heads/main' && steps.determine_rubygems.outputs.should_publish == 'true'
-        working-directory: ruby
-        env:
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-        run: |
-          if [ -z "${RUBYGEMS_API_KEY:-}" ]; then
-            echo "No RubyGems API key provided; skipping publish." && exit 0
-          fi
-          mkdir -p ~/.gem
-          umask 077
-          # Prevent printf from interpreting leading dashes as options
-          printf -- '---\n:rubygems_api_key: %s\n' "$RUBYGEMS_API_KEY" > ~/.gem/credentials
-          chmod 600 ~/.gem/credentials
-          gem push scjson-*.gem
