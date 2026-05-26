@@ -72,6 +72,7 @@ workstream can proceed in parallel if write scopes are disjoint.
 | CONV-00 | `SCJSON-CONV-00-CONCEPTS.md` | Partly 0.3.7 | converter docs, schema audit docs, typed metadata tests | `SCJSON-00` | EXEC-A/B, PYREL changelog |
 | EXEC-00 | `SCJSON-EXEC-00-CONCEPTS.md` | Partly 0.3.7 | engine docs/tests, unsupported corpus policy | `SCJSON-00` | CONV-B/D |
 | HARNESS-00 | future doc | Post-gate or release validation | test harness, submodule policy, CI docs | PYREL-037, EXEC-00 | Ruby inventory if no CI files overlap |
+| CONV-I | `SCJSON-CONV-00-CONCEPTS.md` | Post-CONV-H | focused conversion corpus, `py/uber_test.py`, converter parity tests, docs | CONV-E/F/H | EXEC docs if execution fixtures stay separate |
 | VEC-00 | future doc | Deferred | vector generator, vector tests, corpus expansion | EXEC-D | CONV docs after field audit |
 | RUBY-EXEC-00 | future doc | Deferred | Ruby engine docs/tests/gemspec | EXEC-D | converter docs if no README overlap |
 | DOCARCH-00 | future doc | Deferred | archive headers, doc moves, README links | CONV-00, EXEC-00, HARNESS-00 | none touching docs index |
@@ -159,6 +160,8 @@ docs are accepted:
 
 - CONV-A registry audit.
 - CONV-C inference guide replacement.
+- CONV-I language propagation, focused conversion corpus, and SCION-supported
+  reference gates.
 - EXEC-D invoke/finalize ordering concepts.
 - VEC-00 vector minimization and corpus expansion.
 - RUBY-EXEC-00 Ruby conformance.
@@ -197,3 +200,6 @@ changed files in their final report.
   root-reachable chart inclusion and communication coverage.
 - 2026-05-26: Removed CONV-H from the deferred manager cut after its
   converter/schema, XInclude, and binding-audit checklist items landed.
+- 2026-05-26: Added CONV-I as the follow-on propagation workstream for
+  maintained language converters, focused checked-in corpus coverage, and
+  SCION-supported Python reference gates.

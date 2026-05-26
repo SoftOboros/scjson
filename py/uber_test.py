@@ -17,8 +17,6 @@ cross-language comparisons actionable.
 
 from __future__ import annotations
 
-from deepdiff import DeepDiff
-
 import argparse
 import difflib
 import html
@@ -35,6 +33,31 @@ import pytest
 
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from scjson.context import DocumentContext, ExecutionMode
+
+try:
+    from deepdiff import DeepDiff
+except ModuleNotFoundError:
+    class DeepDiff:  # type: ignore[no-redef]
+        """Small fallback diff used when the optional deepdiff package is absent."""
+
+        def __init__(self, expected, actual, **_kwargs) -> None:
+            self.expected = expected
+            self.actual = actual
+
+        def pretty(self) -> str:
+            if self.expected == self.actual:
+                return ""
+            expected = json.dumps(self.expected, indent=2, sort_keys=True)
+            actual = json.dumps(self.actual, indent=2, sort_keys=True)
+            return "\n".join(
+                difflib.unified_diff(
+                    expected.splitlines(),
+                    actual.splitlines(),
+                    fromfile="expected",
+                    tofile="actual",
+                    lineterm="",
+                )
+            )
 
 ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = ROOT / "tutorial"
@@ -192,6 +215,82 @@ def _python_smoke_chart(chart: Path) -> tuple[bool, str]:
         return True, ""
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)
+
+
+def _iter_event_charts(root: Path) -> Iterable[Path]:
+    """Yield SCXML charts with sibling JSONL event streams."""
+    for scxml in sorted(root.rglob("*.scxml")):
+        if scxml.with_suffix(".events.jsonl").exists():
+            yield scxml
+
+
+def _run_python_exec_compare(
+    corpus_root: Path,
+    out_root: Path,
+    reference: str | None = None,
+    subset: str | None = None,
+) -> int:
+    """Compare Python execution against SCION or an explicit reference."""
+    charts = list(_iter_event_charts(corpus_root))
+    if subset:
+        import fnmatch
+
+        charts = [
+            chart
+            for chart in charts
+            if fnmatch.fnmatch(str(chart.relative_to(corpus_root)), subset)
+        ]
+    if not charts:
+        print(f"No event-backed SCXML charts found under {corpus_root}.")
+        return 0
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "py")
+    if reference is None:
+        from scion_support import SCION_NPM_URL, augment_node_path, ensure_scion_runner
+
+        if not ensure_scion_runner(ROOT):
+            print(f"Skipping Python execution compare: SCION ({SCION_NPM_URL}) not available.")
+            return 0
+        reference = f"node {ROOT / 'tools' / 'scion-runner' / 'scion-trace.cjs'}"
+        env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), ROOT)
+
+    failures = 0
+    for chart in charts:
+        events = chart.with_suffix(".events.jsonl")
+        rel = chart.relative_to(corpus_root)
+        workdir = out_root / "exec" / rel.with_suffix("")
+        workdir.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            sys.executable,
+            str(ROOT / "py" / "exec_compare.py"),
+            str(chart),
+            "--events",
+            str(events),
+            "--reference",
+            reference,
+            "--norm",
+            "scion",
+            "--workdir",
+            str(workdir),
+        ]
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            cwd=str(ROOT),
+        )
+        status = "OK" if result.returncode == 0 else "FAIL"
+        print(f"exec_compare {rel} ... {status}")
+        if result.returncode != 0:
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
+            failures += 1
+    return failures
 
 
 class MismatchInvestigator:
@@ -473,17 +572,21 @@ def main(
     *,
     subset: str | None = None,
     consensus_warn: bool = False,
+    corpus_root: str | Path = TUTORIAL,
 ) -> None:
     """Run the uber test suite with optional subset and consensus-warn."""
     handler = SCXMLDocumentHandler()
-    scxml_files = sorted(TUTORIAL.rglob("*.scxml"))
+    corpus = Path(corpus_root)
+    scxml_files = sorted(corpus.rglob("*.scxml"))
     if subset:
         import fnmatch
-        scxml_files = [p for p in scxml_files if fnmatch.fnmatch(str(p.relative_to(TUTORIAL)), subset)]
+        scxml_files = [
+            p for p in scxml_files if fnmatch.fnmatch(str(p.relative_to(corpus)), subset)
+        ]
     canonical = _canonical_json(scxml_files, handler)
     scxml_files = list(canonical.keys())
     out_root = Path(out_dir)
-    investigator = MismatchInvestigator(canonical, TUTORIAL, out_root)
+    investigator = MismatchInvestigator(canonical, corpus, out_root)
     if language:
         lang_key = _resolve_language(language)
         if not lang_key:
@@ -513,7 +616,7 @@ def main(
         try:
             if lang in {"swift", "go"}:
                 for src in scxml_files:
-                    rel = src.relative_to(TUTORIAL)
+                    rel = src.relative_to(corpus)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     jpath.parent.mkdir(parents=True, exist_ok=True)
                     if lang == "go":
@@ -522,9 +625,9 @@ def main(
                         subprocess.run(cmd + ["json", str(src), "-o", str(jpath)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             else:
                 if lang == "go":
-                    json_args = ["json", "-o", str(json_dir), "-r", str(TUTORIAL)]
+                    json_args = ["json", "-o", str(json_dir), "-r", str(corpus)]
                 else:
-                    json_args = ["json", str(TUTORIAL), "-o", str(json_dir), "-r"]
+                    json_args = ["json", str(corpus), "-o", str(json_dir), "-r"]
                 if lang == "python":
                     json_args.append("--skip-unknown")
                 subprocess.run(cmd + json_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
@@ -533,7 +636,7 @@ def main(
             scjson_errors = 0
             scjson_mismatch_items = 0
             for src in scxml_files:
-                rel = src.relative_to(TUTORIAL)
+                rel = src.relative_to(corpus)
                 jpath = json_dir / rel.with_suffix(".scjson")
                 if not jpath.exists():
                     print(f"{lang} failed to write {jpath}")
@@ -567,7 +670,7 @@ def main(
                 print(f"{lang} encountered {scjson_errors} mismatching scjson files and {scjson_mismatch_items} mismatched scjson items.")
             if lang in {"swift", "go"}:
                 for src in scxml_files:
-                    rel = src.relative_to(TUTORIAL)
+                    rel = src.relative_to(corpus)
                     jpath = (json_dir / rel).with_suffix(".scjson")
                     xpath = xml_dir / rel
                     xpath.parent.mkdir(parents=True, exist_ok=True)
@@ -583,7 +686,7 @@ def main(
                     xml_args = ["xml", str(json_dir), "-o", str(xml_dir), "-r"]
                 subprocess.run(cmd + xml_args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
             for src in scxml_files:
-                rel = src.relative_to(TUTORIAL)
+                rel = src.relative_to(corpus)
                 xpath = xml_dir / rel
                 if not xpath.exists():
                     print(f"{lang} failed to write {xpath}")
@@ -639,15 +742,26 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out_dir", nargs="?", default="uber_out", help="directory for intermediate files")
     parser.add_argument("-l", "--language", dest="language", help="limit testing to a single language")
-    parser.add_argument("-s", "--subset", dest="subset", help="limit to SCXML files matching a glob (relative to tutorial)")
+    parser.add_argument("--corpus", type=Path, default=TUTORIAL, help="SCXML corpus root (default: tutorial)")
+    parser.add_argument("-s", "--subset", dest="subset", help="limit to SCXML files matching a glob (relative to corpus)")
     parser.add_argument("--consensus-warn", action="store_true", help="warn-only when reference languages match canonical")
     parser.add_argument("--python-smoke", action="store_true", help="run Python engine smoke over charts with per-chart progress")
+    parser.add_argument("--python-exec-compare", action="store_true", help="compare event-backed corpus charts with Python vs SCION")
+    parser.add_argument("--exec-reference", help="reference command for --python-exec-compare (default: SCION)")
     parser.add_argument("--chart", type=Path, help="run only a single chart for Python smoke mode")
     opts = parser.parse_args()
-    if opts.python_smoke:
+    if opts.python_exec_compare:
+        failures = _run_python_exec_compare(
+            opts.corpus,
+            Path(opts.out_dir),
+            reference=opts.exec_reference,
+            subset=opts.subset,
+        )
+        sys.exit(1 if failures else 0)
+    elif opts.python_smoke:
         import sys
 
-        charts = [opts.chart] if opts.chart else list(_iter_python_datamodel_charts(TUTORIAL))
+        charts = [opts.chart] if opts.chart else list(_iter_python_datamodel_charts(opts.corpus))
         if not charts:
             print("No charts found for smoke run.")
             sys.exit(0)
@@ -655,7 +769,7 @@ if __name__ == "__main__":
         failures = 0
         for idx, chart in enumerate(charts, 1):
             ok, msg = _python_smoke_chart(chart)
-            rel = chart.relative_to(TUTORIAL) if chart.is_absolute() and TUTORIAL in chart.parents else chart
+            rel = chart.relative_to(opts.corpus) if chart.is_absolute() and opts.corpus in chart.parents else chart
             status = "OK" if ok else "FAIL"
             print(f"[{idx}/{total}] {rel} ... {status}")
             if not ok and msg:
@@ -664,4 +778,10 @@ if __name__ == "__main__":
                 failures += 1
         sys.exit(1 if failures else 0)
     else:
-        main(Path(opts.out_dir), opts.language, subset=opts.subset, consensus_warn=opts.consensus_warn)
+        main(
+            Path(opts.out_dir),
+            opts.language,
+            subset=opts.subset,
+            consensus_warn=opts.consensus_warn,
+            corpus_root=opts.corpus,
+        )

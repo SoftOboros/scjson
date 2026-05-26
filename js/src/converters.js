@@ -19,6 +19,9 @@ const {
   injectHelpTextCommentsIntoXml,
 } = require('./comment_promotion.js');
 
+const XINCLUDE_NS = 'http://www.w3.org/2001/XInclude';
+const XINCLUDE_CLARK_INCLUDE = `{${XINCLUDE_NS}}include`;
+
 /**
  * Keys that should always be represented as arrays.
  *
@@ -825,7 +828,7 @@ function loadXInclude(href, options) {
 }
 
 function isXIncludeElementName(name) {
-  return name === 'xi:include' || name.endsWith(':include');
+  return name === 'xi:include' || name === XINCLUDE_CLARK_INCLUDE || name.endsWith(':include');
 }
 
 function parsedDocumentEntries(doc) {
@@ -930,14 +933,21 @@ function appendOtherElement(target, node) {
   target.other_element.push(...nodes);
 }
 
+function canonicalExtensionName(name) {
+  if (name === 'xi:include') {
+    return XINCLUDE_CLARK_INCLUDE;
+  }
+  return name;
+}
+
 function ensureExtensionNamespace(name, node) {
   const nodes = Array.isArray(node) ? node : [node];
   nodes.forEach(item => {
     if (!item || typeof item !== 'object') return;
-    if (name === 'xi:include') {
+    if (name === 'xi:include' || name === XINCLUDE_CLARK_INCLUDE) {
       item.attributes = item.attributes || {};
       if (item.attributes['xmlns:xi'] === undefined) {
-        item.attributes['xmlns:xi'] = 'http://www.w3.org/2001/XInclude';
+        item.attributes['xmlns:xi'] = XINCLUDE_NS;
       }
     }
   });
@@ -959,7 +969,10 @@ function preserveExtensionElements(value) {
     if (key.includes(':') && !key.startsWith('xmlns')) {
       appendOtherElement(
         value,
-        ensureExtensionNamespace(key, convertDataNode(key, child))
+        ensureExtensionNamespace(
+          key,
+          convertDataNode(canonicalExtensionName(key), child)
+        )
       );
       delete value[key];
       continue;
@@ -1011,10 +1024,17 @@ function fixDataContent(value) {
  * @returns {object} XML builder structure keyed by element name.
  */
 function restoreDataNode(node) {
+  let qname = node.qname;
   const out = {};
   if (node.attributes) {
     for (const [k, v] of Object.entries(node.attributes)) {
       out[`@_${k}`] = v;
+    }
+  }
+  if (qname === XINCLUDE_CLARK_INCLUDE) {
+    qname = 'xi:include';
+    if (out['@_xmlns:xi'] === undefined) {
+      out['@_xmlns:xi'] = XINCLUDE_NS;
     }
   }
   if (node.text !== undefined && node.text !== '') {
@@ -1035,10 +1055,10 @@ function restoreDataNode(node) {
       }
     });
   }
-  if (!node.qname.includes(':') && !node.qname.startsWith('{') && node.qname !== 'scxml') {
+  if (!qname.includes(':') && !qname.startsWith('{') && qname !== 'scxml') {
     out['@_xmlns'] = '';
   }
-  return { [node.qname]: out };
+  return { [qname]: out };
 }
 
 /**
@@ -1054,7 +1074,9 @@ function stripQnameNs(value) {
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if (k === 'qname' && typeof v === 'string') {
-        value[k] = v.replace(/^\{[^}]+\}/, '');
+        if (v !== XINCLUDE_CLARK_INCLUDE) {
+          value[k] = v.replace(/^\{[^}]+\}/, '');
+        }
         continue;
       }
       stripQnameNs(v);

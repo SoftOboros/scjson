@@ -576,6 +576,105 @@ Dependencies: CONV-A for the schema field registry audit.
 Independent from: runtime execution semantics, external I/O processor support,
 and iState UI behavior.
 
+### CONV-I: Language Propagation, Corpus, and Reference Gates
+
+Goal: propagate the CONV-E/F/H converter surface through maintained language
+implementations, expand the checked-in corpus with focused documents that cover
+the new surfaces, and add reference comparison gates where execution semantics
+are supported by SCION and the Python engine.
+
+Problem statement:
+
+- CONV-E/F/H now define the canonical schema and Python/JavaScript converter
+  behavior, but a multi-language repository can still drift if TypeScript,
+  Rust, Swift, Java, Ruby, Go, Lua, or C# conversion CLIs do not consume the
+  same fixtures.
+- Binding-surface audits prove that generated types exist; they do not prove
+  that each maintained conversion command preserves the same JSON shape through
+  SCXML -> SCJSON -> SCXML.
+- Execution comparison is only meaningful for charts whose semantics are in
+  the Python engine and SCION supported subset. Corpus entries that exercise
+  converter-only surfaces, such as unresolved XInclude preservation, MUST NOT
+  be misclassified as execution-conformance failures.
+
+Corpus policy:
+
+- Focused converter fixtures SHOULD live in a dedicated checked-in corpus under
+  `tests/conv_corpus/`. Each fixture SHOULD be small, single-purpose, and named
+  for the surface it covers.
+- The corpus MUST include valid SCXML examples for help text/comment promotion,
+  nested `invoke.content` charts, `send.content`, `donedata`, `data.src`,
+  `script.src`, XInclude preserve/resolve behavior, and routing-string
+  preservation.
+- Invalid-standard examples, such as `send` under `finalize`, MAY be present
+  only as negative validation fixtures and MUST NOT enter execution sweeps.
+- Every converter fixture SHOULD have one canonical Python-derived SCJSON
+  expectation or a test that regenerates the Python expectation and compares
+  maintained language output against it.
+- Execution fixtures SHOULD stay in `tests/exec/` or `tests/sweep_corpus/`,
+  with sibling `.events.jsonl` files when deterministic event streams are
+  needed.
+
+Language propagation expectations:
+
+- Python remains the canonical converter for expected SCJSON shape.
+- JavaScript MUST remain in lockstep for all CONV-E/F/H surfaces because its
+  converter is maintained in this repository and is used by browser/Node
+  consumers.
+- Rust, Swift, Java, Ruby, Go, Lua, and C# conversion commands SHOULD be wired
+  into `py/uber_test.py` for any surface they claim to support. When a language
+  intentionally delegates conversion to Python, the plan and test output MUST
+  say so explicitly.
+- `py/uber_test.py` SHOULD accept a focused checked-in corpus path in addition
+  to the tutorial submodule so new converter fixtures can run even when the
+  external tutorial corpus is absent.
+- Language comparison failures SHOULD report whether Python/JavaScript/Rust
+  references agree, so propagation work is actionable rather than just a raw
+  diff.
+
+SCION and execution comparison expectations:
+
+- Python execution comparison SHOULD use `py/exec_compare.py` and
+  `py/exec_sweep.py` against SCION where SCION can execute the chart and the
+  chart is within the supported semantics.
+- `py/uber_test.py` SHOULD grow an optional execution phase for Python charts
+  in checked-in corpora. That phase MAY call `exec_compare`/`exec_sweep`; it
+  MUST skip converter-only fixtures and SCION-unsupported charts with an
+  explicit reason.
+- Execution gates MUST use the accepted SCION normalization profile when the
+  comparison target is behavior, not converter shape.
+- Non-conformant SCXML used for negative converter/schema tests MUST fail
+  before execution and MUST be documented as such.
+
+Focused test matrix:
+
+- `uber_test` can run a focused checked-in converter corpus without requiring
+  the tutorial submodule.
+- Python and JavaScript converter output matches for each CONV-E/F/H corpus
+  fixture after canonical normalization.
+- `uber_test` preserves unresolved XInclude directives and resolved XInclude
+  output according to the selected mode.
+- `exec_compare` or `exec_sweep` compares SCION-supported execution fixtures
+  against SCION when available and skips or falls back clearly when SCION is
+  unavailable.
+- Negative finalize fixtures assert validation failure and are excluded from
+  execution comparison.
+
+Output:
+
+- A dedicated conversion corpus with focused CONV-E/F/H documents.
+- `py/uber_test.py` updates so corpus location and optional execution
+  comparison can be selected from the CLI/API.
+- Focused tests proving the new corpus and harness paths work without the
+  tutorial submodule.
+- Documentation that names which language conversion commands are expected to
+  support each fixture family and which execution fixtures are SCION-supported.
+
+Dependencies: CONV-E, CONV-F, and CONV-H.
+
+Independent from: new runtime features, external I/O processors, and UI
+rendering behavior.
+
 ## Section 7. Acceptance Checklist
 
 - [ ] CONV-A schema field registry audit lands.
@@ -618,6 +717,8 @@ and iState UI behavior.
   `finalize`; pydantic and pydantic_strict validation enforce the same
   finalize rule. Maintained TypeScript, Rust, and Swift binding surfaces are
   audited for the CONV-H element families, defaults, and collection shapes.
+- [ ] CONV-I language propagation, corpus expansion, and SCION-supported
+  reference gates land.
 
 ## Section 8. Manager Notes
 
@@ -641,6 +742,10 @@ Recommended worker boundaries:
   disjoint from converter code.
 - Worker 7: root-reachable inclusion/communication reachability audit and
   fixtures; no runtime engine behavior changes.
+- Worker 8: focused conversion corpus plus `uber_test.py` corpus selection and
+  maintained-language comparison gates.
+- Worker 9: SCION-supported Python execution comparison gates for checked-in
+  execution fixtures; no converter-shape changes.
 
 ## Section 9. Rejections
 
@@ -655,6 +760,8 @@ It remains rejected for Python 0.3.7 and is not a dependency.
 - `docs/concepts/SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md`
 - `js/src/converters.js`
 - `py/uber_test.py`
+- `py/exec_compare.py`
+- `py/exec_sweep.py`
 - `py/scjson/pydantic/generated.py`
 - `py/scjson/pydantic_strict/generated.py`
 - `scjson.schema.json`
@@ -757,3 +864,7 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   unresolved `xi:include` directives remain extension content and resolved mode
   converts the assembled SCXML tree. Added maintained TypeScript, Rust, and
   Swift binding-surface audits for CONV-H families.
+- 2026-05-26: Added CONV-I to plan propagation of CONV-E/F/H through
+  maintained language converters, a focused checked-in conversion corpus, and
+  SCION-supported Python execution comparison gates in `uber_test`/sweep
+  tooling.

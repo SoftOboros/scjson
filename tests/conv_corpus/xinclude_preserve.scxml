@@ -1,0 +1,6 @@
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:xi="http://www.w3.org/2001/XInclude"
+       datamodel="python"
+       initial="included">
+  <xi:include href="xinclude_child.xml"/>
+</scxml>

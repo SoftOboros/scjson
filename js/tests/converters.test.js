@@ -369,7 +369,9 @@ describe('CONV-H root-reachable inclusion and communication surface', () => {
     expect(valid).toBe(true);
     const obj = JSON.parse(result);
 
-    expect(obj.other_element[0].qname).toBe('xi:include');
+    expect(obj.other_element[0].qname).toBe(
+      '{http://www.w3.org/2001/XInclude}include'
+    );
     expect(obj.other_element[0].attributes.href).toBe('child.scxml');
     expect(obj.state[0].id).toBe('s');
 
