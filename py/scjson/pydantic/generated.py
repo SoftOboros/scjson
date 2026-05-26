@@ -1,7 +1,7 @@
 from decimal import Decimal
 from enum import Enum
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from xsdata_pydantic.fields import field
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
@@ -676,6 +676,16 @@ class ScxmlFinalizeType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+
+    @model_validator(mode="after")
+    def _reject_send_raise_in_finalize(self):
+        """Reject non-conformant ``send``/``raise`` children in ``finalize``."""
+        if self.send or self.raise_value:
+            raise ValueError(
+                "SCXML finalize MUST NOT contain send or raise children"
+            )
+        return self
 
 
 class ScxmlOnentryType(BaseModel):

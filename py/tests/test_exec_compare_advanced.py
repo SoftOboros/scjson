@@ -29,6 +29,9 @@ from scion_support import (
 )
 
 
+FINALIZE_SEND_ERROR = "SCXML finalize MUST NOT contain send or raise children"
+
+
 def _ref_command(root: Path) -> str:
     scion = root / "tools" / "scion-runner" / "scion-trace.cjs"
     if scion.exists() and ensure_scion_runner(root):
@@ -63,6 +66,13 @@ def _run_compare(chart: Path, *, generate: bool = True, depth: int = 2, extra: l
     if extra:
         args.extend(extra)
     return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=str(root))
+
+
+def _assert_rejects_nonconformant_finalize_send(
+    result: subprocess.CompletedProcess[str],
+) -> None:
+    assert result.returncode != 0
+    assert FINALIZE_SEND_ERROR in result.stderr
 
 
 def test_parallel_done_matches_reference() -> None:
@@ -102,24 +112,22 @@ def test_history_deep_restore() -> None:
 def test_finalize_event_precedes_done_invoke() -> None:
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "finalize_order.scxml"
-    # Generator will emit 'complete'; we expect transition to 'seen_first' first
     result = _run_compare(chart, generate=True, depth=1, force_python_ref=True)
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    _assert_rejects_nonconformant_finalize_send(result)
 
 
 def test_finalize_param_payload_propagates() -> None:
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "finalize_param_payload.scxml"
-    # Vector will emit 'complete'; ensure compare matches
     result = _run_compare(chart, generate=True, depth=1, force_python_ref=True)
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    _assert_rejects_nonconformant_finalize_send(result)
 
 
 def test_finalize_child_donedata_propagates() -> None:
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "finalize_child_donedata.scxml"
     result = _run_compare(chart, generate=True, depth=1, force_python_ref=True)
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    _assert_rejects_nonconformant_finalize_send(result)
 
 
 def test_multi_invoke_switch_child_events() -> None:
@@ -127,9 +135,8 @@ def test_multi_invoke_switch_child_events() -> None:
     chart = root / "tests" / "sweep_corpus" / "multi_invoke_switch.scxml"
     events = chart.with_suffix(".events.jsonl")
     assert events.exists()
-    # Compare using Python reference for stability across environments
     result = _run_compare(chart, generate=False, force_python_ref=True)
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    _assert_rejects_nonconformant_finalize_send(result)
 
 
 def test_parallel_history_deep_restore() -> None:
@@ -142,27 +149,13 @@ def test_parallel_history_deep_restore() -> None:
 
 
 def test_parallel_invoke_finalize_ordering_deterministic() -> None:
-    # Validate deterministic ordering of finalize-emitted events from two child invokes
     root = Path(__file__).resolve().parents[2]
     chart = root / "tests" / "sweep_corpus" / "parallel_invoke_complete.scxml"
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(root / "py")
-    # Use inline DocumentContext.microstep to apply autoforward and inspect queue order
     sys.path.insert(0, str(root / "py"))
     from scjson.context import DocumentContext, ExecutionMode
-    from scjson.events import Event
-    ctx = DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
-    ctx.microstep()  # process init
-    ctx.microstep()  # drain eventless
-    ctx.microstep()  # drain eventless
-    # Send external 'complete' and allow autoforwarding
-    ctx.events.push(Event(name="complete"))
-    ctx.microstep()
-    # Now the queue should contain both finalize-emitted events near the front
-    names = [getattr(evt, 'name', None) for evt in list(getattr(ctx.events, '_q', []))]
-    assert "seen.left" in names and "seen.right" in names, names
-    head = names[:4]
-    assert {"seen.left", "seen.right"}.issubset(set(head)), head
+
+    with pytest.raises(Exception, match=FINALIZE_SEND_ERROR):
+        DocumentContext.from_xml_file(chart, execution_mode=ExecutionMode.LAX)
 
 
 def test_parallel_invoke_compare_scion() -> None:
@@ -197,7 +190,7 @@ def test_parallel_invoke_compare_scion() -> None:
         f"node {scion}",
     ]
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=str(root))
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    _assert_rejects_nonconformant_finalize_send(result)
 
 
 def test_finalize_order_compare_scion() -> None:
@@ -234,4 +227,4 @@ def test_finalize_order_compare_scion() -> None:
             f"node {scion}",
         ]
         result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=str(root))
-        assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+        _assert_rejects_nonconformant_finalize_send(result)

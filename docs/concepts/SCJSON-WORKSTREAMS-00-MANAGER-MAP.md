@@ -193,3 +193,7 @@ changed files in their final report.
 ## Section 9. Change Log
 
 - 2026-05-14: Initial manager workstream map.
+- 2026-05-26: Added CONV-H as a deferred converter/schema workstream for
+  root-reachable chart inclusion and communication coverage.
+- 2026-05-26: Removed CONV-H from the deferred manager cut after its
+  converter/schema, XInclude, and binding-audit checklist items landed.

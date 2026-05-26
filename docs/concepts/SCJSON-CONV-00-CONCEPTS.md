@@ -129,6 +129,7 @@ surface to audit and align is:
 | executable actions | `assign`, `log`, `raise_value`, `if_value`, `foreach`, `send`, `cancel`, `script` | XML names may differ from SCJSON field names. |
 | payloads | `content`, `param`, `donedata`, `datamodel`, `data` | Mixed content and typed JSON payload behavior needs explicit tests. |
 | invokes | `invoke`, `finalize`, `content`, `param` | Invoke semantics are owned by execution docs, but representation is owned here. |
+| chart inclusion and communication | `invoke`, `send`, `content`, `param`, `donedata`, `data.src`, `script.src`, XInclude extension nodes, `src`, `srcexpr`, `target`, `targetexpr`, `type_value`, `typeexpr`, `event`, `eventexpr`, `namelist`, `autoforward` | CONV-H owns root-reachable representation coverage. |
 | extensions | `other_element`, `other_attributes` | Preserve unknowns within schema-supported surfaces. |
 | authoring metadata | `help_text` | Proposed public schema field for chart documentation and promoted SCXML comments. |
 
@@ -438,6 +439,143 @@ Dependencies: CONV-E for the `help_text` distinction.
 
 Independent from: comment promotion mechanics.
 
+### CONV-H: Root-Reachable Chart Inclusion and Communication Surface
+
+Goal: make every SCXML chart inclusion and inter-chart communication construct
+first-class in the SCJSON representation, generated schema/type graph, language
+bindings, and converter parity tests when starting from the root `Scxml`
+document type.
+
+Problem statement:
+
+- Downstream iState work exercises the root SCJSON document as the authoring
+  and validation entry point. If generated bindings only expose the direct
+  children of `Scxml`, tools can miss legal nested constructs such as `send`,
+  `invoke`, `param`, `content`, `donedata`, and nested `Scxml` payloads.
+- "Support from the top" means root-reachable coverage through the schema/type
+  graph. It does not mean that the root `<scxml>` element directly accepts
+  executable children that W3C SCXML does not permit.
+
+Canonical definitions:
+
+- A chart inclusion surface is any SCXML representation path that lets one
+  chart contain, reference, start, communicate with, or return data from another
+  chart/session.
+- An external resource inclusion surface is any SCXML representation path that
+  fetches non-chart document content into the chart, including `data.src`,
+  `script.src`, and optional XML XInclude preprocessing.
+- Root-reachable means the construct is discoverable by walking schema/model
+  references from `Scxml`, including nested executable-content and payload
+  references. Generators MUST NOT prune the construct merely because it is not a
+  direct root child.
+- Direct-root legality remains the W3C SCXML grammar. `Scxml` may contain the
+  root-supported structural fields (`state`, `parallel`, `final`, `datamodel`,
+  `script`, metadata, and extension surfaces) but MUST NOT gain direct root
+  `send`, `invoke`, `onentry`, `onexit`, `transition`, or `finalize` fields
+  unless a future SCXML authority relationship explicitly permits them.
+
+Representation coverage:
+
+- Optional XInclude preprocessing MUST be treated as a standard SCXML document
+  assembly path. Converters MAY expose a resolved mode, where XInclude is
+  processed before SCJSON conversion and only the resulting SCXML tree is
+  represented, and an unresolved mode, where `xi:include` extension nodes are
+  preserved through `other_element` or generic content. The chosen mode MUST be
+  explicit in tests and user-facing converter docs.
+- `invoke` MUST remain represented on state-like containers where SCXML permits
+  it, including all child chart reference mechanisms: `src`, `srcexpr`,
+  `type_value`, `typeexpr`, `id`, `idlocation`, `namelist`, `autoforward`,
+  `param`, `content`, and `finalize`.
+- Inline chart inclusion through `invoke.content` MUST preserve a nested
+  `Scxml` document when the payload is an SCXML chart. `Content.content` MUST
+  remain able to hold nested `Scxml` values in the generated schema and
+  language bindings.
+- `send` MUST remain represented wherever SCXML permits event-sending
+  executable content: `onentry`, `onexit`, transition actions, `if_value`, and
+  `foreach`. Its communication fields MUST include `event`, `eventexpr`,
+  `target`, `targetexpr`, `type_value`, `typeexpr`, `id`, `idlocation`,
+  `delay`, `delayexpr`, `namelist`, `param`, `content`, and `other_element`.
+- `send.content` MUST preserve payload content, including nested chart payloads
+  when they are parsed as supported SCJSON content, without collapsing them into
+  strings or unknown extensions.
+- Completion data MUST remain represented through `donedata.content` and
+  `donedata.param` so included/invoked charts can return payloads without
+  losing schema-visible structure.
+- `finalize` MUST remain represented as the invoked-session completion handler,
+  but its content MUST follow the SCXML finalize restrictions. In conformant
+  SCXML, `send` and `raise_value` MUST NOT occur under `finalize`; converters
+  may preserve non-conformant input for diagnostics, but validation and
+  conformance tests MUST treat those children as invalid.
+- `data.src` MUST be represented as external data inclusion into the data
+  model, with the standard mutual exclusion among `data.src`, `data.expr`, and
+  inline `data.content`.
+- `script.src` MUST be represented as external script inclusion. It is an
+  external resource surface, not child-chart invocation, and its execution
+  semantics remain owned by data-model/runtime support.
+- Parent/child routing identifiers such as `#_parent`, `#_child`,
+  `#_invokedChild`, and `#_<invokeId>` are execution semantics owned by engine
+  docs. CONV-H only requires that the string-valued `target` and
+  `targetexpr` representation can preserve them.
+
+Generator and binding expectations:
+
+- Schema generation MUST emit all chart inclusion and communication types even
+  when a target language derives exported types by walking from `Scxml`.
+- Generated language bindings SHOULD expose default constructors/helpers for
+  `Send`, `Invoke`, `Content`, `Param`, `Donedata`, and `Finalize` if that
+  language's binding style exposes defaults for other element models.
+- Language bindings MUST preserve array-typed fields as arrays under the
+  existing CONV-INV-2 rule. This includes `send`, `invoke`, `content`, `param`,
+  and `donedata` list surfaces.
+- Converter cleanup/pruning rules MUST NOT drop an otherwise valid
+  inclusion/communication object solely because it is nested below `content`,
+  `if_value`, or `foreach`.
+
+Focused test matrix:
+
+- Schema/model reachability: walking references from `Scxml` reaches `Send`,
+  `Invoke`, `Content`, `Param`, `Donedata`, `Finalize`, and nested `Scxml`.
+- Root legality: direct root `send`, `invoke`, `onentry`, `onexit`,
+  `transition`, and `finalize` remain invalid unless represented through a
+  legal SCXML parent.
+- XInclude: resolved conversion produces the assembled SCXML tree, while
+  unresolved conversion preserves `xi:include` as extension content; both modes
+  are explicit and do not silently discard the include directive.
+- Round trip: `<invoke src="child.scxml">`, `<invoke srcexpr="...">`, inline
+  `<invoke><content><scxml>...</scxml></content></invoke>`, and
+  `<send ...><param .../></send>` preserve their fields through
+  SCXML -> SCJSON -> SCXML.
+- External resource round trip: `data.src`, inline `data` children,
+  `script.src`, and inline `script` content preserve their mutually exclusive
+  shape and do not collapse into unrelated generic content.
+- Payload shape: textual, expression, parameter, generic XML, and nested
+  `Scxml` payloads inside `send.content`, `invoke.content`, and
+  `donedata.content` remain distinguishable after canonical normalization.
+- Finalize conformance: `finalize` preserves valid executable content used to
+  process completion data, but `send` and `raise_value` under `finalize` fail
+  conformance validation or are surfaced as diagnostics.
+- Generated binding surface: each maintained language package exposes the
+  inclusion/communication element types and array aliases expected by its
+  binding conventions.
+- Engine independence: CONV-H tests validate representation and conversion
+  only. Runtime delivery, external processors, scheduling, and parent/child
+  routing behavior remain owned by execution concepts and engine tests.
+
+Output:
+
+- A schema/type reachability audit that starts at `Scxml` and reports whether
+  all inclusion/communication constructs are discoverable.
+- Focused converter fixtures for external invoke references, inline nested
+  charts, send payloads, completion data, XInclude, external data, and external
+  scripts.
+- Generator updates, if needed, so language packages expose the complete
+  root-reachable chart inclusion and communication surface.
+
+Dependencies: CONV-A for the schema field registry audit.
+
+Independent from: runtime execution semantics, external I/O processor support,
+and iState UI behavior.
+
 ## Section 7. Acceptance Checklist
 
 - [ ] CONV-A schema field registry audit lands.
@@ -470,6 +608,16 @@ Independent from: comment promotion mechanics.
   `SCJSON-OTHER-ATTRIBUTES-00-CONCEPTS.md` §2 boundary, §3 definitions, §5
   invariants, §6 entry shape, §7 seed registry, §10 inventory backlog; draft
   optional schemas under `docs/schemas/other_attributes/infinity-state/v1/`.)
+- [x] CONV-H root-reachable chart inclusion and communication surface lands.
+  The root `Scxml` schema/type graph is tested for `send`, `invoke`, nested
+  `Scxml` content, payload, parameter, external data/script, and
+  completion-data reachability without adding invalid direct root executable
+  fields. Python and JavaScript round-trip fixtures preserve these fields.
+  XInclude preserve/resolve modes are explicit in Python and JavaScript tests.
+  Checked-in schema mirrors reject non-empty `send` and `raise_value` under
+  `finalize`; pydantic and pydantic_strict validation enforce the same
+  finalize rule. Maintained TypeScript, Rust, and Swift binding surfaces are
+  audited for the CONV-H element families, defaults, and collection shapes.
 
 ## Section 8. Manager Notes
 
@@ -478,6 +626,9 @@ Safe parallelism:
 - CONV-A and CONV-B can run independently.
 - CONV-C should wait for CONV-A.
 - CONV-D can run with CONV-B but should not rewrite generated models.
+- CONV-H may proceed in narrow converter/schema slices after ratification.
+  Broader binding-surface audits should consume the CONV-A registry output when
+  that audit lands.
 
 Recommended worker boundaries:
 
@@ -488,6 +639,8 @@ Recommended worker boundaries:
 - Worker 5: comment promotion tests and converter changes, after Worker 4.
 - Worker 6: extension metadata registry and optional schema-catalog docs,
   disjoint from converter code.
+- Worker 7: root-reachable inclusion/communication reachability audit and
+  fixtures; no runtime engine behavior changes.
 
 ## Section 9. Rejections
 
@@ -504,6 +657,7 @@ It remains rejected for Python 0.3.7 and is not a dependency.
 - `py/uber_test.py`
 - `py/scjson/pydantic/generated.py`
 - `py/scjson/pydantic_strict/generated.py`
+- `scjson.schema.json`
 - Downstream input: SoftOboros Infinity Stack
   `docs/SCJSON-OTHER-ATTRIBUTES.md`
 
@@ -577,3 +731,25 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   engine-trace invariance (canonical JSON minus `help_text` identical
   with/without comments). All 78 JS tests pass (was 33). No schema or
   Python changes; `package-lock.json` untouched.
+- 2026-05-26: Added CONV-H to freeze the root-reachable chart inclusion and
+  communication surface before schema/generator changes. CONV-H covers
+  `send`, `invoke`, nested `Scxml` payloads, `content`, `param`, `donedata`,
+  external reference fields, and routing-string preservation as representation
+  concerns while keeping direct root executable children invalid unless W3C
+  SCXML permits them.
+- 2026-05-26: Amended CONV-H after a standard-surface review. Added optional
+  XInclude preprocessing, `data.src`, and `script.src` as external document
+  inclusion/resource surfaces; clarified that `send` is communication, not
+  chart inclusion; and corrected finalize coverage so `send` and `raise_value`
+  under `finalize` are invalid for conformant SCXML.
+- 2026-05-26: Landed CONV-H initial converter/schema slice. Added
+  root-reachability and round-trip fixtures for invoke/send/content/param,
+  nested charts, completion data, external data, and external scripts; added
+  pydantic and JSON Schema enforcement for the SCXML `finalize` restriction
+  against `send` and `raise_value`; left XInclude mode coverage and binding
+  audits open.
+- 2026-05-26: Completed CONV-H XInclude and binding-audit slice. Python and
+  JavaScript now expose explicit XInclude preserve/resolve conversion modes;
+  unresolved `xi:include` directives remain extension content and resolved mode
+  converts the assembled SCXML tree. Added maintained TypeScript, Rust, and
+  Swift binding-surface audits for CONV-H families.

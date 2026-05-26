@@ -778,6 +778,93 @@ function fixDonedataContent(value) {
   }
 }
 
+function normaliseXmlToJsonOptions(options) {
+  if (typeof options === 'boolean' || options === undefined) {
+    return {
+      omitEmpty: options !== false,
+      xinclude: 'preserve',
+      xincludeLoader: null,
+      xincludeBasePath: null,
+    };
+  }
+  return {
+    omitEmpty: options.omitEmpty !== false,
+    xinclude: options.xinclude || 'preserve',
+    xincludeLoader: options.xincludeLoader || null,
+    xincludeBasePath: options.xincludeBasePath || null,
+  };
+}
+
+function mergeParsedChild(target, key, value) {
+  if (target[key] === undefined) {
+    target[key] = value;
+    return;
+  }
+  if (Array.isArray(target[key])) {
+    Array.isArray(value) ? target[key].push(...value) : target[key].push(value);
+    return;
+  }
+  target[key] = Array.isArray(value)
+    ? [target[key], ...value]
+    : [target[key], value];
+}
+
+function loadXInclude(href, options) {
+  if (typeof options.xincludeLoader === 'function') {
+    return options.xincludeLoader(href);
+  }
+  if (options.xincludeBasePath) {
+    const fs = require('fs');
+    const path = require('path');
+    const base = path.extname(options.xincludeBasePath)
+      ? path.dirname(options.xincludeBasePath)
+      : options.xincludeBasePath;
+    return fs.readFileSync(path.resolve(base, href), 'utf8');
+  }
+  throw new Error(`No XInclude loader configured for ${href}`);
+}
+
+function isXIncludeElementName(name) {
+  return name === 'xi:include' || name.endsWith(':include');
+}
+
+function parsedDocumentEntries(doc) {
+  return Object.entries(doc).filter(([key]) => key !== '?xml');
+}
+
+function resolveXIncludesInParsed(value, parser, options) {
+  if (Array.isArray(value)) {
+    return value.map(item => resolveXIncludesInParsed(item, parser, options));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const out = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (isXIncludeElementName(key)) {
+      const includes = Array.isArray(child) ? child : [child];
+      includes.forEach(includeNode => {
+        const href = includeNode && (includeNode['@_href'] || includeNode.href);
+        if (!href) {
+          throw new Error('XInclude element is missing href');
+        }
+        const includedXml = loadXInclude(href, options);
+        const includedDoc = resolveXIncludesInParsed(
+          parser.parse(includedXml),
+          parser,
+          options
+        );
+        parsedDocumentEntries(includedDoc).forEach(([incKey, incValue]) => {
+          mergeParsedChild(out, incKey, incValue);
+        });
+      });
+      continue;
+    }
+    out[key] = resolveXIncludesInParsed(child, parser, options);
+  }
+  return out;
+}
+
 /**
  * Convert arbitrary objects parsed under ``<data>`` elements into
  * canonical content structures.
@@ -833,6 +920,52 @@ function convertDataNode(name, node) {
     return out;
   }
   return { qname: name, text: String(node) };
+}
+
+function appendOtherElement(target, node) {
+  const nodes = Array.isArray(node) ? node : [node];
+  if (!Array.isArray(target.other_element)) {
+    target.other_element = [];
+  }
+  target.other_element.push(...nodes);
+}
+
+function ensureExtensionNamespace(name, node) {
+  const nodes = Array.isArray(node) ? node : [node];
+  nodes.forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (name === 'xi:include') {
+      item.attributes = item.attributes || {};
+      if (item.attributes['xmlns:xi'] === undefined) {
+        item.attributes['xmlns:xi'] = 'http://www.w3.org/2001/XInclude';
+      }
+    }
+  });
+  return node;
+}
+
+function preserveExtensionElements(value) {
+  if (Array.isArray(value)) {
+    value.forEach(preserveExtensionElements);
+    return;
+  }
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'other_element') {
+      continue;
+    }
+    if (key.includes(':') && !key.startsWith('xmlns')) {
+      appendOtherElement(
+        value,
+        ensureExtensionNamespace(key, convertDataNode(key, child))
+      );
+      delete value[key];
+      continue;
+    }
+    preserveExtensionElements(child);
+  }
 }
 
 /**
@@ -1077,7 +1210,30 @@ function stripNestedDataAttrs(value) {
   }
 }
 
-function xmlToJson(xmlStr, omitEmpty = true) {
+/**
+ * @typedef {object} XmlToJsonOptions
+ * @property {boolean} [omitEmpty=true] Drop null and empty containers.
+ * @property {'preserve'|'resolve'} [xinclude='preserve'] Preserve
+ * ``xi:include`` as extension content or resolve includes before conversion.
+ * @property {(href: string) => string} [xincludeLoader] Loader used by
+ * resolved XInclude mode.
+ * @property {string} [xincludeBasePath] File or directory used by the default
+ * Node loader in resolved XInclude mode.
+ */
+
+/**
+ * Convert SCXML to canonical SCJSON.
+ *
+ * @param {string} xmlStr - SCXML source.
+ * @param {boolean|XmlToJsonOptions} [options=true] Backward-compatible boolean
+ * ``omitEmpty`` flag or expanded converter options.
+ * @returns {{result: string, valid: boolean, errors: object[]|null}} Conversion outcome.
+ */
+function xmlToJson(xmlStr, options = true) {
+  const xmlOptions = normaliseXmlToJsonOptions(options);
+  if (!['preserve', 'resolve'].includes(xmlOptions.xinclude)) {
+    throw new Error("xinclude must be 'preserve' or 'resolve'");
+  }
   // CONV-F pre-pass: harvest XML comments into deterministic address ->
   // help_text lists and continue the rest of the pipeline on a
   // comment-free XML string. The pre-pass uses local element names so
@@ -1099,11 +1255,15 @@ function xmlToJson(xmlStr, omitEmpty = true) {
     parseTagValue: false,
   });
   let obj = parser.parse(xmlStr);
+  if (xmlOptions.xinclude === 'resolve') {
+    obj = resolveXIncludesInParsed(obj, parser, xmlOptions);
+  }
   if (obj.scxml) {
     obj = obj.scxml;
   }
   obj = normaliseKeys(obj);
   obj = decodeEntities(obj);
+  preserveExtensionElements(obj);
   fixNestedScxml(obj);
   fixEmptyElse(obj);
   obj = collapseWhitespace(obj);
@@ -1121,7 +1281,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   flattenContent(obj);
   stripRootTransitions(obj);
   obj = collapseWhitespace(obj);
-  if (omitEmpty) {
+  if (xmlOptions.omitEmpty) {
     obj = removeEmpty(obj) || {};
   }
   if (obj.initial_attribute !== undefined && obj.initial === undefined) {
@@ -1160,7 +1320,7 @@ function xmlToJson(xmlStr, omitEmpty = true) {
   stripXmlns(obj);
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
-  if (omitEmpty) {
+  if (xmlOptions.omitEmpty) {
     obj = removeEmpty(obj) || {};
     fixDataContent(obj);
     stripQnameNs(obj);
@@ -1270,6 +1430,23 @@ function jsonToXml(jsonStr) {
           // the XML output rather than smashing it into an attribute or
           // generic content. JSON-side round-trip preservation is covered by
           // the structural-metadata helpers above.
+          continue;
+        }
+        if (nk === 'other_element') {
+          const elements = Array.isArray(v) ? v : [v];
+          elements.forEach(item => {
+            const r = restoreDataNode(item);
+            const [ck, cv] = Object.entries(r)[0];
+            if (out[ck]) {
+              if (Array.isArray(out[ck])) {
+                out[ck].push(cv);
+              } else {
+                out[ck] = [out[ck], cv];
+              }
+            } else {
+              out[ck] = cv;
+            }
+          });
           continue;
         }
         for (const [attr, prop] of Object.entries(ATTRIBUTE_MAP)) {
@@ -1438,6 +1615,9 @@ module.exports = {
   fixSendDefaults,
   fixSendContent,
   fixDonedataContent,
+  normaliseXmlToJsonOptions,
+  resolveXIncludesInParsed,
+  preserveExtensionElements,
   fixOtherAttributes,
   decodeEntities,
   restoreDataNode,

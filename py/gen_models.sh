@@ -78,3 +78,10 @@ python patch_help_text.py --file ./scjson/pydantic/generated.py
 python patch_help_text.py --file ./scjson/pydantic_strict/generated.py
 python patch_help_text.py --file ./scjson/dataclasses/generated.py
 python patch_help_text.py --file ./scjson/dataclasses_strict/generated.py
+# Project the SCXML strict XSD finalize assertion into generated pydantic
+# validation. xsdata currently does not emit XSD 1.1 assertions into the
+# pydantic or JSON Schema surfaces, so CONV-H keeps this as a post-generation
+# patch.
+python patch_finalize_restrictions.py \
+        --pydantic-file ./scjson/pydantic/generated.py \
+        --pydantic-file ./scjson/pydantic_strict/generated.py

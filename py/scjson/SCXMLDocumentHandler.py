@@ -27,6 +27,7 @@ from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
 from xml.etree import ElementTree as ET
+from xml.etree import ElementInclude
 from .comment_promotion import (
     attach_help_text_to_model,
     extract_help_text_from_xml,
@@ -41,6 +42,8 @@ class SCXMLDocumentHandler:
         pretty: bool = True,
         omit_empty: bool = True,
         fail_on_unknown_properties: bool = True,
+        xinclude: str = "preserve",
+        xinclude_base_url: Optional[str] = None,
     ) -> None:
         """Create a new document handler.
 
@@ -57,6 +60,13 @@ class SCXMLDocumentHandler:
         fail_on_unknown_properties: bool, optional
             When ``True`` (default) unexpected XML elements raise an exception
             during parsing.  Set ``False`` to ignore them.
+        xinclude: str, optional
+            ``"preserve"`` keeps unresolved ``xi:include`` extension elements
+            in ``other_element``. ``"resolve"`` applies XML XInclude before
+            model parsing.
+        xinclude_base_url: str | None, optional
+            Base URL or source file path used to resolve relative XInclude
+            ``href`` values when ``xinclude`` is ``"resolve"``.
 
         Returns
         -------
@@ -74,6 +84,10 @@ class SCXMLDocumentHandler:
         )
         self.schema = xmlschema.XMLSchema(schema_path) if schema_path else None
         self.omit_empty = omit_empty
+        if xinclude not in {"preserve", "resolve"}:
+            raise ValueError("xinclude must be 'preserve' or 'resolve'")
+        self.xinclude = xinclude
+        self.xinclude_base_url = xinclude_base_url
 
     @staticmethod
     def _resolve(cls: type) -> type:
@@ -131,7 +145,13 @@ class SCXMLDocumentHandler:
             ]
         return obj
 
-    def xml_to_json(self, xml_str: str) -> str:
+    def xml_to_json(
+        self,
+        xml_str: str,
+        *,
+        xinclude: Optional[str] = None,
+        xinclude_base_url: Optional[str] = None,
+    ) -> str:
         """Convert SCXML string to canonical JSON.
 
         This method tolerates documents that omit the default SCXML namespace by
@@ -143,6 +163,9 @@ class SCXMLDocumentHandler:
         pre-pass strips comments from the XML; the resulting model receives
         ``help_text`` entries via :func:`attach_help_text_to_model`.
         """
+        xinclude_mode = self.xinclude if xinclude is None else xinclude
+        if xinclude_mode not in {"preserve", "resolve"}:
+            raise ValueError("xinclude must be 'preserve' or 'resolve'")
         # CONV-F pre-pass: extract comments and rewrite ``xml_str`` to be
         # comment-free. We do this BEFORE default-namespace insertion so the
         # local-name-based addresses we compute aren't affected by namespace
@@ -155,6 +178,14 @@ class SCXMLDocumentHandler:
             root = None
         if root is not None and root.tag == "scxml" and "xmlns" not in root.attrib:
             root.attrib["xmlns"] = "http://www.w3.org/2005/07/scxml"
+            xml_str = ET.tostring(root, encoding="unicode")
+        if xinclude_mode == "resolve" and root is not None:
+            base_url = (
+                xinclude_base_url
+                if xinclude_base_url is not None
+                else self.xinclude_base_url
+            )
+            ElementInclude.include(root, base_url=base_url)
             xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
         # Attach help_text to the model nodes addressed by the pre-pass.
@@ -264,4 +295,3 @@ class SCXMLDocumentHandler:
             model = self._to_dataclass(self.model_class, data)
         xml_str = self.to_string(model)
         return inject_help_text_comments_into_xml(xml_str, model)
-

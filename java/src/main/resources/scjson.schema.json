@@ -488,7 +488,35 @@
                 }
             },
             "title": "Finalize",
-            "type": "object"
+            "type": "object",
+            "allOf": [
+                {
+                    "not": {
+                        "required": [
+                            "send"
+                        ],
+                        "properties": {
+                            "send": {
+                                "type": "array",
+                                "minItems": 1
+                            }
+                        }
+                    }
+                },
+                {
+                    "not": {
+                        "required": [
+                            "raise_value"
+                        ],
+                        "properties": {
+                            "raise_value": {
+                                "type": "array",
+                                "minItems": 1
+                            }
+                        }
+                    }
+                }
+            ]
         },
         "Foreach": {
             "description": "iterate over items within executable content.",

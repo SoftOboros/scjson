@@ -282,6 +282,129 @@ describe('CONV-E JSON normalization round-trip', () => {
   });
 });
 
+describe('CONV-H root-reachable inclusion and communication surface', () => {
+  test('xmlToJson preserves invoke, send, external data, script, and donedata fields', () => {
+    const xml = `
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="python" initial="s">
+        <datamodel><data id="external" src="external.json"/></datamodel>
+        <script src="logic.js"/>
+        <state id="s">
+          <invoke id="childBySrc" type="scxml" src="child.scxml">
+            <param name="seed" expr="1"/>
+          </invoke>
+          <invoke type="scxml">
+            <content>
+              <scxml datamodel="python" initial="inner"><state id="inner"/></scxml>
+            </content>
+            <finalize><assign location="done" expr="true"/></finalize>
+          </invoke>
+          <onentry>
+            <send event="hello" target="#_parent">
+              <param name="payload" expr="42"/>
+              <content expr="payload_expr"/>
+            </send>
+          </onentry>
+          <transition target="f"/>
+        </state>
+        <final id="f">
+          <donedata>
+            <content expr="result"/>
+            <param name="status" expr="'ok'"/>
+          </donedata>
+        </final>
+      </scxml>`;
+
+    const { result, valid } = xmlToJson(xml);
+    expect(valid).toBe(true);
+    const obj = JSON.parse(result);
+
+    expect(obj.datamodel[0].data[0].src).toBe('external.json');
+    expect(obj.script[0].src).toBe('logic.js');
+    expect(obj.state[0].invoke[0].src).toBe('child.scxml');
+    expect(obj.state[0].invoke[0].param[0].name).toBe('seed');
+    expect(
+      obj.state[0].invoke[1].content[0].content[0].state[0].id
+    ).toBe('inner');
+    expect(obj.state[0].invoke[1].finalize[0].assign[0].location).toBe('done');
+    expect(obj.state[0].onentry[0].send[0].target).toBe('#_parent');
+    expect(obj.state[0].onentry[0].send[0].param[0].name).toBe('payload');
+    expect(obj.final[0].donedata[0].content.expr).toBe('result');
+    expect(obj.final[0].donedata[0].param[0].name).toBe('status');
+  });
+
+  test('schema validation rejects non-empty send and raise under finalize', () => {
+    const withSend = {
+      version: 1.0,
+      datamodel_attribute: 'null',
+      state: [
+        {
+          id: 's',
+          invoke: [{ finalize: [{ send: [{ event: 'bad' }] }] }],
+        },
+      ],
+    };
+    const withRaise = {
+      version: 1.0,
+      datamodel_attribute: 'null',
+      state: [
+        {
+          id: 's',
+          invoke: [{ finalize: [{ raise_value: [{ event: 'bad' }] }] }],
+        },
+      ],
+    };
+
+    expect(jsonToXml(JSON.stringify(withSend)).valid).toBe(false);
+    expect(jsonToXml(JSON.stringify(withRaise)).valid).toBe(false);
+  });
+
+  test('XInclude preserve mode keeps include directive as extension content', () => {
+    const xml = `
+      <scxml xmlns="http://www.w3.org/2005/07/scxml"
+             xmlns:xi="http://www.w3.org/2001/XInclude"
+             initial="s">
+        <xi:include href="child.scxml"/>
+        <state id="s"/>
+      </scxml>`;
+
+    const { result, valid } = xmlToJson(xml);
+    expect(valid).toBe(true);
+    const obj = JSON.parse(result);
+
+    expect(obj.other_element[0].qname).toBe('xi:include');
+    expect(obj.other_element[0].attributes.href).toBe('child.scxml');
+    expect(obj.state[0].id).toBe('s');
+
+    const xmlOut = jsonToXml(result).result;
+    expect(xmlOut).toContain('<xi:include');
+    expect(xmlOut).toContain('href="child.scxml"');
+    expect(xmlOut).not.toContain('<other_element>');
+  });
+
+  test('XInclude resolve mode converts the assembled SCXML tree', () => {
+    const xml = `
+      <scxml xmlns="http://www.w3.org/2005/07/scxml"
+             xmlns:xi="http://www.w3.org/2001/XInclude"
+             initial="included">
+        <xi:include href="child.scxml"/>
+      </scxml>`;
+
+    const { result, valid } = xmlToJson(xml, {
+      xinclude: 'resolve',
+      xincludeLoader: href => {
+        expect(href).toBe('child.scxml');
+        return '<state xmlns="http://www.w3.org/2005/07/scxml" id="included"/>';
+      },
+    });
+    expect(valid).toBe(true);
+    const obj = JSON.parse(result);
+
+    expect(obj.other_element).toBeUndefined();
+    expect(obj.state[0].id).toBe('included');
+    expect(obj.initial).toEqual(['included']);
+  });
+});
+
 describe('CONV-E help_text distinct from other_attributes', () => {
   test('round-trip keeps both fields separate (no cross-pollination)', () => {
     const input = {

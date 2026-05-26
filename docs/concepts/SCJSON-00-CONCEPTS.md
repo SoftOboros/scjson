@@ -397,6 +397,12 @@ unknown extension keys still round-trip. The planning registry starts in
 ignore those fields for execution semantics unless a future execution concepts
 doc explicitly promotes a field.
 
+R-10: Root-reachable chart inclusion and communication coverage belongs to
+`SCJSON-CONV-00-CONCEPTS.md` CONV-H. The converter/schema contract MUST expose
+`send`, `invoke`, nested `Scxml` payloads, `content`, `param`, `donedata`, and
+external reference fields through the root schema/type graph without admitting
+invalid direct root executable children.
+
 ## Section 11. Non-Goals
 
 - This baseline does not prove that every implementation currently conforms.
@@ -467,3 +473,5 @@ Initial archive candidates after reconciliation:
 - 2026-05-24: Clarified that documented `other_attributes` conventions should
   become optional/suggested schemas outside the core SCJSON schema and linked
   the planning registry stub.
+- 2026-05-26: Added R-10 to delegate root-reachable chart inclusion and
+  communication coverage to `SCJSON-CONV-00-CONCEPTS.md` CONV-H.
