@@ -152,3 +152,27 @@ generated schema, or public trace output.
   model definitions.
 - `roundtrip-test`: checks `SCXML -> SCJSON -> SCXML` fidelity.
 - `schema-dump`: reports SCJSON structure and metadata for inspection.
+
+## Worktree Hygiene Between Waves
+
+Per parent `softoboros.com/CLAUDE.md` §(J): when fanning out parallel agents
+on this submodule (engine-parity work splitting across `docs/TODO-ENGINE-PY.md`
+/ `docs/TODO-ENGINE-RUBY.md` / `docs/TODO-ENGINE-RUST.md` lanes in their own
+worktrees), clean leftover harness-allocated worktrees and their
+`worktree-agent-*` branches between waves so the harness allocates fresh
+against current HEAD:
+
+```sh
+# from the parent repo root (/Users/iraabbott/softoboros), BEFORE the next wave
+for wt in $(git worktree list | awk '$3 ~ /^\[worktree-agent-/ {print $1}'); do
+  git worktree remove --force "$wt"
+done
+git branch | awk '/worktree-agent-/ {print $1}' | xargs -r git branch -D
+```
+
+The harness can't allocate a stale-base worktree from one that doesn't exist.
+This eliminates the `git checkout webslinger -- . && git reset webslinger`
+recovery dance — error-prone because dropping the `-- .` silently switches the
+worktree's branch onto `webslinger` and breaks isolation. Cost is a one-time
+per-agent target-dir rebuild (~30–60s for Rust crate work, negligible for
+Python / Ruby package work).
