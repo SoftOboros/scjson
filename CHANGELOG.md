@@ -6,17 +6,49 @@ single version stream.
 
 | Language | Path                  | Latest version  | Per-package log |
 |----------|-----------------------|-----------------|------------------|
-| Python   | `py/`                 | 0.4.0           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
-| Ruby     | `ruby/`               | 0.4.0           | (in `git log`)   |
-| JS       | `js/`                 | 0.4.0           | (in `git log`)   |
-| Rust     | `rust/`               | 0.4.0           | (in `git log`)   |
-| Java     | `java/`               | 0.4.0           | (in `git log`)   |
+| Python   | `py/`                 | 0.4.1           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
+| Ruby     | `ruby/`               | 0.4.1           | (in `git log`)   |
+| JS       | `js/`                 | 0.4.1           | (in `git log`)   |
+| Rust     | `rust/`               | 0.4.1           | (in `git log`)   |
+| Java     | `java/`               | 0.4.1           | (in `git log`)   |
 | Swift    | `swift/`              | (see swift)     | [`swift/CHANGELOG.md`](swift/CHANGELOG.md) |
 | Lua      | `lua/`                | (rockspec)      | (in `git log`)   |
 | Go       | `go/`                 | (`go.mod`)      | (in `git log`)   |
 | C#       | `csharp/`             | (csproj)        | (in `git log`)   |
 
 ## Cross-language entries
+
+### 2026-05-28 — 0.4.1 release (TypeScript helpText surface)
+
+scjson 0.4.1 closes a v0.4.0 gap on the JavaScript / TypeScript surface:
+
+- **TypeScript interfaces.** `helpText: string[]` is now declared on
+  every applies-to interface in `dist/scjsonProps.d.ts` (Scxml,
+  State, Parallel, Final, History, Initial, Transition, Onentry,
+  Onexit, Invoke, Finalize, Datamodel, Data, Donedata, Content,
+  Param, Assign, Log, Raise, If, Elseif, Else, Foreach, Send,
+  Cancel, Script). Scalar / enum types (AssignTypeDatatype, etc.)
+  are unchanged.
+- **Defaults factories.** Each `defaultXxx()` factory in
+  `dist/scjsonProps.js` now initializes `helpText: []`.
+- **Converter behavior.** JSON <-> JSON round-trip of `help_text` is
+  unchanged from v0.4.0; this release is type-surface-only on the
+  JS / TS side and does not modify converter semantics.
+- **Python.** No behavior change. Version bumps to 0.4.1 for
+  cross-language parity (same as the 0.4.0 cut).
+- **Engine, schema, CLI.** No changes.
+
+Root cause: `js/src/scjsonProps.ts` was last regenerated before
+CONV-E (Help Text Schema Surface) landed; the Jinja generator at
+`py/scjson/templates/scjson_props.ts.jinja2` already supports
+`help_text` correctly via JSON-schema introspection, so the fix is
+a re-run of `python -m scjson typescript --output js/src` plus
+`npm run build`. See `docs/concepts/ERRATA.md` ERRATA-001 and
+`docs/concepts/SCJSON-CONV-00-CONCEPTS.md` §11 (2026-05-28).
+
+This unblocks downstream consumers (notably the Infinity Stack
+iState frontend) that consume `scjson@^0.4.x` and need typed
+`helpText` access without local shims.
 
 ### 2026-05-26 — 0.4.0 release prep (help_text docs + inclusion surfaces)
 

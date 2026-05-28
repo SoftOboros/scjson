@@ -6,6 +6,15 @@ The Python package version is independent of the JS, Ruby, Rust, Java, Swift,
 Lua, Go, and C# package versions; cross-language work is coordinated through
 the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
+## 0.4.1 — 2026-05-28
+
+### Changed
+
+- Version bump for cross-language parity with the 0.4.1 JS / TS
+  type-surface release. No Python behavior or API change. See
+  top-level `CHANGELOG.md` and `docs/concepts/ERRATA.md` ERRATA-001
+  for details.
+
 ## 0.4.0 — 2026-05-24
 
 ### Added
