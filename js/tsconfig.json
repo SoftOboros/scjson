@@ -3,6 +3,7 @@
     "allowJs": true,
     "moduleResolution": "nodenext",
     "outDir": "./dist",
+    "rootDir": "./src",
     "declaration": true,
     "module": "nodenext",
     "target": "ES2019",

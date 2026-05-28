@@ -1,10 +1,10 @@
 /**
- * Agent Name: ts-props
+ * scjsonProps.ts : Properties runtime file for scjson types
  *
  * Part of the scjson project.
  * Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
-*/
+ */
 
 /**
  * update a datamodel location with an expression or value.
@@ -15,6 +15,7 @@ export interface AssignProps {
     typeValue: AssignTypeDatatypeProps;
     attr: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
     content: Record<string, object>[];
 }
 
@@ -25,6 +26,7 @@ export const defaultAssign = (): AssignProps => ({
     typeValue: AssignTypeDatatypeProps.Replacechildren,
     attr: null,
     otherAttributes: {},
+    helpText: [],
     content: [],
 });
 
@@ -85,6 +87,7 @@ export interface CancelProps {
     sendid: string | null;
     sendidexpr: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type CancelProps */
@@ -93,6 +96,7 @@ export const defaultCancel = (): CancelProps => ({
     sendid: null,
     sendidexpr: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -108,6 +112,7 @@ export interface ContentProps {
     content: ScxmlProps[] | null;
     expr: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ContentProps */
@@ -115,6 +120,7 @@ export const defaultContent = (): ContentProps => ({
     content: null,
     expr: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -131,6 +137,7 @@ export interface DataProps {
     src: string | null;
     expr: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
     content: Record<string, object>[];
 }
 
@@ -140,6 +147,7 @@ export const defaultData = (): DataProps => ({
     src: null,
     expr: null,
     otherAttributes: {},
+    helpText: [],
     content: [],
 });
 
@@ -156,6 +164,7 @@ export interface DatamodelProps {
     data: DataProps[];
     otherElement: Record<string, object>[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type DatamodelProps */
@@ -163,6 +172,7 @@ export const defaultDatamodel = (): DatamodelProps => ({
     data: [],
     otherElement: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -178,6 +188,7 @@ export interface DonedataProps {
     content: ContentProps | null;
     param: ParamProps[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type DonedataProps */
@@ -185,6 +196,7 @@ export const defaultDonedata = (): DonedataProps => ({
     content: null,
     param: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -198,11 +210,13 @@ export type DonedataArray = DonedataProps[];
 */
 export interface ElseProps {
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ElseProps */
 export const defaultElse = (): ElseProps => ({
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -211,12 +225,14 @@ export const defaultElse = (): ElseProps => ({
 export interface ElseifProps {
     cond: string;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ElseifProps */
 export const defaultElseif = (): ElseifProps => ({
     cond: "",
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -241,6 +257,7 @@ export interface FinalProps {
     otherElement: Record<string, object>[];
     id: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type FinalProps */
@@ -251,6 +268,7 @@ export const defaultFinal = (): FinalProps => ({
     otherElement: [],
     id: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -273,6 +291,7 @@ export interface FinalizeProps {
     log: LogProps[];
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type FinalizeProps */
@@ -287,6 +306,7 @@ export const defaultFinalize = (): FinalizeProps => ({
     log: [],
     cancel: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -312,6 +332,7 @@ export interface ForeachProps {
     item: string;
     index: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ForeachProps */
@@ -329,6 +350,7 @@ export const defaultForeach = (): ForeachProps => ({
     item: "",
     index: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -346,6 +368,7 @@ export interface HistoryProps {
     id: string | null;
     typeValue: HistoryTypeDatatypeProps | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type HistoryProps */
@@ -355,6 +378,7 @@ export const defaultHistory = (): HistoryProps => ({
     id: null,
     typeValue: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -390,6 +414,7 @@ export interface IfProps {
     elseValue: ElseProps | null;
     cond: string;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type IfProps */
@@ -407,6 +432,7 @@ export const defaultIf = (): IfProps => ({
     elseValue: null,
     cond: "",
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -422,6 +448,7 @@ export interface InitialProps {
     otherElement: Record<string, object>[];
     transition: TransitionProps;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type InitialProps */
@@ -429,6 +456,7 @@ export const defaultInitial = (): InitialProps => ({
     otherElement: [],
     transition: defaultTransition(),
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -454,6 +482,7 @@ export interface InvokeProps {
     namelist: string | null;
     autoforward: BooleanDatatypeProps;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type InvokeProps */
@@ -471,6 +500,7 @@ export const defaultInvoke = (): InvokeProps => ({
     namelist: null,
     autoforward: BooleanDatatypeProps.False,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -487,6 +517,7 @@ export interface LogProps {
     label: string | null;
     expr: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type LogProps */
@@ -495,6 +526,7 @@ export const defaultLog = (): LogProps => ({
     label: null,
     expr: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -517,6 +549,7 @@ export interface OnentryProps {
     log: LogProps[];
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type OnentryProps */
@@ -531,6 +564,7 @@ export const defaultOnentry = (): OnentryProps => ({
     log: [],
     cancel: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -553,6 +587,7 @@ export interface OnexitProps {
     log: LogProps[];
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type OnexitProps */
@@ -567,6 +602,7 @@ export const defaultOnexit = (): OnexitProps => ({
     log: [],
     cancel: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -590,6 +626,7 @@ export interface ParallelProps {
     otherElement: Record<string, object>[];
     id: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ParallelProps */
@@ -605,6 +642,7 @@ export const defaultParallel = (): ParallelProps => ({
     otherElement: [],
     id: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -622,6 +660,7 @@ export interface ParamProps {
     expr: string | null;
     location: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ParamProps */
@@ -631,6 +670,7 @@ export const defaultParam = (): ParamProps => ({
     expr: null,
     location: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -645,12 +685,14 @@ export type ParamArray = ParamProps[];
 export interface RaiseProps {
     event: string;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type RaiseProps */
 export const defaultRaise = (): RaiseProps => ({
     event: "",
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -665,6 +707,7 @@ export type RaiseArray = RaiseProps[];
 export interface ScriptProps {
     src: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
     content: Record<string, object>[];
 }
 
@@ -672,6 +715,7 @@ export interface ScriptProps {
 export const defaultScript = (): ScriptProps => ({
     src: null,
     otherAttributes: {},
+    helpText: [],
     content: [],
 });
 
@@ -698,6 +742,7 @@ export interface ScxmlProps {
     binding: BindingDatatypeProps | null;
     exmode: ExmodeDatatypeProps | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type ScxmlProps */
@@ -715,6 +760,7 @@ export const defaultScxml = (): ScxmlProps => ({
     binding: null,
     exmode: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -736,6 +782,7 @@ export interface SendProps {
     delayexpr: string | null;
     namelist: string | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type SendProps */
@@ -755,6 +802,7 @@ export const defaultSend = (): SendProps => ({
     delayexpr: null,
     namelist: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -781,6 +829,7 @@ export interface StateProps {
     id: string | null;
     initialAttribute: string[];
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type StateProps */
@@ -799,6 +848,7 @@ export const defaultState = (): StateProps => ({
     id: null,
     initialAttribute: [],
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
@@ -825,6 +875,7 @@ export interface TransitionProps {
     target: string[];
     typeValue: TransitionTypeDatatypeProps | null;
     otherAttributes: Record<string, object>;
+    helpText: string[];
 }
 
 /** Instantiate a default object of type TransitionProps */
@@ -843,6 +894,7 @@ export const defaultTransition = (): TransitionProps => ({
     target: [],
     typeValue: null,
     otherAttributes: {},
+    helpText: [],
 });
 
 /**
