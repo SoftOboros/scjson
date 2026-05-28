@@ -32,13 +32,14 @@ stay as historical record. Status icons:
 
 | ID         | Status | Title                                           | First seen | Owning phase |
 |------------|--------|-------------------------------------------------|------------|--------------|
-| ERRATA-001 | ⚪     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
+| ERRATA-001 | 🟢     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
 
 ---
 
 ## ERRATA-001 — scjson@0.4.0 TypeScript surface missing `helpText`
 
-- **Status**: ⚪ deviation-pending-ratification
+- **Status**: 🟢 resolved (v0.4.1 release; resolving commits 7476dea +
+  65c1af6 + 976eedd; verification 2026-05-28)
 - **First seen**: 2026-05-28
 - **Owning phase**: CONV-E (`docs/concepts/SCJSON-CONV-00-CONCEPTS.md` §6
   "CONV-E: Help Text Schema Surface")
@@ -137,15 +138,33 @@ scjson internals to regenerate).
 
 ### Verification
 
-(pending — fill in resolving commit SHA + `grep -c` outputs + `npm run
-build` exit code + `cd js && npx jest` summary + `PYTHONPATH=py pytest -q
-py/tests` summary after the fix lands)
+Verified on `main` at HEAD = `976eedd` (2026-05-28):
+
+```
+$ grep -c "helpText: string\[\]" js/src/scjsonProps.ts       → 26
+$ grep -c "helpText: \[\]"        js/src/scjsonProps.ts       → 26
+$ grep -c "helpText: string\[\]" js/dist/scjsonProps.d.ts    → 26
+$ grep -c "helpText: \[\]"        js/dist/scjsonProps.js      → 26
+$ cd js && npm run build                                     → exit 0
+$ cd js && npx jest                                          → 112 passed / 112 total
+$ cd js && npx tsc --noEmit tests/help_text_consumer.test.ts → exit 0
+$ PYTHONPATH=py python3 -m pytest -q py/tests -p no:django   → 404 passed, 1 skipped
+$ diff -q scjson.schema.json js/scjson.schema.json           → (no diff)
+$ diff -q scjson.schema.json java/src/main/resources/scjson.schema.json → (no diff)
+$ python3 py/uber_test.py                                    → exit 0 (Python + JS
+  clean; lua/go/swift/java/csharp skipped for missing local executables)
+$ grep -n "0\.4\.0" js/package.json py/pyproject.toml rust/Cargo.toml \
+  java/pom.xml ruby/scjson.gemspec ruby/lib/scjson/version.rb           → (no match)
+```
 
 ### Tracking
 
 - Ratification: `docs/concepts/SCJSON-CONV-00-CONCEPTS.md` §11 entry dated
   2026-05-28.
-- Resolving commit: (pending — TBD when v0.4.1 implementation lands).
+- Resolving commits:
+  - `7476dea` — docs(concepts): file ERRATA-001 + ratify v0.4.1 fix path
+  - `65c1af6` — release(0.4.1): cross-language version bump + CHANGELOG entries
+  - `976eedd` — release(0.4.1): regenerate TypeScript helpText surface
 - Downstream: `softoboros/docs/todo/istate/TODO-ISTATE-08-HELP-TEXT-ADOPTION.md`
   §16 "ISTATE08b backend half landed; frontend half deferred to scjson
   v0.4.1" (2026-05-27 entry).
