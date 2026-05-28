@@ -869,3 +869,20 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   maintained language converters, a focused checked-in conversion corpus, and
   SCION-supported Python execution comparison gates in `uber_test`/sweep
   tooling.
+- 2026-05-28: scjson v0.4.1 release closes a release-process gap on the CONV-E
+  TypeScript binding surface. The pydantic models, JSON schema, and JS
+  converter round-trip all expose `help_text` correctly as of v0.4.0 — but
+  `js/src/scjsonProps.ts` (and therefore the published
+  `scjson@0.4.0` `dist/scjsonProps.{d.ts,js}`) was last regenerated before
+  CONV-E landed, so the 26 applies-to TS interfaces shipped without
+  `helpText: string[]`. v0.4.1 re-runs `python -m scjson typescript --output
+  js/src` against the current pydantic models, refreshes the `js/dist/`
+  artifacts, and bumps cross-language version metadata to 0.4.1 for parity
+  (`js`, `py`, `ruby`, `rust`, `java`); non-JS packages have no behavior
+  change. Tracked by `docs/concepts/ERRATA.md` ERRATA-001. No CONV-E normative
+  text changes — the applies-to set, conversion/output rules, and Python /
+  JavaScript plumbing expectations are unchanged. The CONV-E checklist
+  acceptance item already requires "language bindings expose the field
+  idiomatically without requiring consumers to parse `other_attributes`";
+  v0.4.1 is the action that satisfies that requirement on the published
+  TypeScript surface.
