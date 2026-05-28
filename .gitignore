@@ -29,3 +29,5 @@ uber_out/
 java/lib/*.jar
 ruby/vendor/
 ruby/.bundle/
+.claude/
+.codex/
