@@ -37,6 +37,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 |------------|--------|-------------------------------------------------|------------|--------------|
 | ERRATA-001 | 🟢     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
 | ERRATA-002 | 🟢     | Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines | 2026-06-19 | EXEC-E (`SCJSON-EXEC-00-CONCEPTS.md`) |
+| ERRATA-003 | 🟡     | `In()` cross-region predicate not in the admitted ECMAScript subset — blocks real infotainment control cores | 2026-06-20 | M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2) |
 
 ---
 
@@ -290,6 +291,37 @@ a TODO per spec (optional for first landing).
 - Reciprocal istate entry: `softoboros/docs/todo/istate/ERRATA.md` ERRATA-006.
 - Downstream demo: `ops/packer/submodules/rlvgl/docs/concepts/SCTD-00-CONCEPTS.md`
   §8 (iState MCP generation boundary).
+
+---
+
+## ERRATA-003 — `In()` cross-region predicate not in the admitted ECMAScript subset
+
+- **Status**: 🟡 diagnosed 2026-06-20 (workaround prescribed; admitted-subset extension is a future generator phase). Surfaced during the SCTD Media Player feasibility assessment of the Skoda Bolero infotainment machine.
+- **First seen**: 2026-06-20, lowering `tutorial/Examples/Qt/SkodaBoleroInfotainment/Model/bolero.scxml` through `exec_ir.lower_document`.
+- **Owning phase**: M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` §"Admitted ECMAScript Subset", D-M1P6-2).
+
+### Symptom
+
+`bolero.scxml` (a Qt compound document — the `_virtual*.scxml` siblings are editor artifacts already merged inline; the machine has **0** `<invoke>` and 203 states) lowers 87% admitted, but its **media-transport control core is a structural dead end**: `mediaPlayerSourceCheck` decides play-vs-pause via `cond="In('muteOn')"` / `cond="In('muteOff')"`, and `mediaStopped`/`mediaPlaying` onentry choose repeat-vs-next via `In("mediaRepeatTrack")`. `In(...)` is an SCXML **runtime cross-region active-state predicate**, not an ECMAScript expression, so the constrained front-end (D-M1P6-2) lowers each `In()` to `UnsupportedExpr` → falsey at runtime. Net: neither play nor pause ever fires; the control loop cannot run. 10 of the machine's 25 `reject` diagnostics are `In()` calls (plus 9 `parse-error` from radio helper functions stored as `<data expr="function(x){...}">`, which JS-`function` syntax also outside the subset).
+
+### Root cause
+
+D-M1P6-2 admits expressions/statements but not the SCXML `In(<stateid>)` predicate (it needs the runtime to answer "is state X in the active configuration" — which the IR/runtime *does* track, but the front-end has no admitted form for it). Real infotainment/automotive charts (Bolero, likely Morse and others) lean on `In()` for orthogonal-region-aware dispatch, so this gap blocks faithful lowering of that class of machine.
+
+### Fix prescription
+
+- **Now (workaround, used for SCTD):** normalize the machine — replace `In(<region-state>)` checks with explicit datamodel state variables that mirror the orthogonal-region intent (e.g. `s_mute`/`s_repeat`/`s_source`), an admitted D-M1P6-2 form. This is the SCTD-00 §5.3 normalized-form path with provenance back to the upstream source; it is how the SCTD "Media Player" machine is produced (a normalized media-player derived from Bolero, lowering with 0 diagnostics).
+- **Future (real fix):** extend the admitted subset to support `In(<stateid>)` as a `cond`-context predicate, lowered to a runtime configuration-membership check (the runtime already tracks the active set). This is the path to lowering the **real** Bolero control core. It is an admitted-subset change → a M1P6 D-M1P6-2 amendment (Specification Required) + a new scjson generator phase; out of scope for v0.4.2.
+
+### Verification
+
+Pending the future extension. The workaround is verified: the normalized media-player derived from Bolero lowers with 0 diagnostics, emits, and `cargo check` passes (SCTD demo, 2026-06-20).
+
+### Tracking
+
+- Admitted-subset owner: `docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2 (a reciprocal note records the `In()` gap + the normalized-media-player conformance decision).
+- SCTD consumer: rlvgl `docs/concepts/SCTD-00-CONCEPTS.md` §5.1/§5.3 (Media Player = normalized, provenance to bolero).
+- Also surfaced: radio helper functions stored as `<data expr="function(){…}">` (JS function-literals) are likewise outside D-M1P6-2; same normalize-or-extend disposition.
 
 ---
 

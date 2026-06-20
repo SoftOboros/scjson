@@ -6,6 +6,45 @@ The Python package version is independent of the JS, Ruby, Rust, Java, Swift,
 Lua, Go, and C# package versions; cross-language work is coordinated through
 the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
+## 0.4.2 — 2026-06-20
+
+Python-only release; no cross-language (JS/Ruby/Rust/Java) changes. Adds the
+constrained-ECMAScript execution + codegen surface used by the Infinity Stack
+iState Rust generator (parent `docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md`).
+
+### Added
+
+- **Constrained ECMAScript datamodel (`datamodel="ecmascript"`).** New
+  `scjson.ecmascript_normalizer` lowers the admitted JS subset (per M1P6
+  D-M1P6-2: `&&`/`||`/`!`, `===`/`!==`, `parseInt`/`String`/`Number`,
+  `<str>.replace`, object/array literals, computed member access, dynamic
+  map keys, `if`/assignment statement bodies) to Python-evaluable forms; the
+  engine gate in `context.py` now admits `ecmascript` through this path.
+  Unadmitted forms emit an `unsupported-ecmascript` diagnostic — never a
+  silent mis-eval. `null`/`python` datamodels are byte-for-byte unchanged.
+- **M1 Executable IR (`scjson.exec_ir`).** Concrete IR + `lower_document`:
+  the M1P6 value model, 7 ExpressionNode + 7 ActionNode families, `<foreach>`,
+  inline-`<content>` `<invoke>` → nested machine IR (depth-bounded), dynamic
+  `<send>` slots, recursive state tree. Admitted multi-statement `<script>`
+  bodies lower to `AssignNode`/`IfNode` sequences (else blocked whole as a
+  capability call). Additive layer; does not change engine execution.
+
+### Changed
+
+- **Vector-generation coverage search is bounded** (`vector_lib/search.py`,
+  `vector_gen.py`): `max_candidates` + `time_budget_ms` budgets +
+  construct-aware depth reduction for `<parallel>`/`<invoke>`; budget
+  exhaustion yields a terminal `limited` result (`truncated: true`) instead
+  of an unbounded hang. See `docs/concepts/SCJSON-EXEC-00-CONCEPTS.md`
+  §EXEC-E and `docs/concepts/ERRATA.md` ERRATA-002.
+
+### Known gaps
+
+- `In(<stateid>)` SCXML cross-region predicates are not yet in the admitted
+  subset (`docs/concepts/ERRATA.md` ERRATA-003); real infotainment control
+  cores (Skoda Bolero) require the normalized-form workaround until a future
+  release admits `In()`.
+
 ## 0.4.1 — 2026-05-28
 
 ### Changed
