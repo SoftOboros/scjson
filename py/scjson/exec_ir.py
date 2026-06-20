@@ -50,8 +50,15 @@ Deviations from M1-EXECUTABLE-IR spec (none; full compliance):
   - M1P2 seven ActionNode families are all implemented.
   - M1P6 ForeachNode, inline-invoke nested MachineIR, dynamic Send slots
     are implemented per D-M1P6-4, D-M1P6-5, D-M1P6-6.
-  - CapabilityCallNode: script elements map to CapabilityCallNode per M1P3;
-    name synthesis follows the frozen pattern.
+  - CapabilityCallNode: script elements whose bodies contain any unadmitted
+    ECMAScript form map to CapabilityCallNode per M0-D10; name synthesis
+    follows the frozen pattern.  Script elements whose bodies consist entirely
+    of admitted assign / if statements are lowered directly to AssignNode /
+    IfNode sequences per D-M1P6-2 (Fix 1).
+  - Inline invoke child-machine detection now recognizes both
+    scjson.pydantic.Scxml and scjson.dataclasses.Scxml (plus a duck-type
+    fallback) so that SCXMLDocumentHandler-parsed documents populate
+    InvokeIR.child_machine correctly (Fix 2).
   - Diagnostics are collected (never raised) per D-M1P6-8.
 """
 
@@ -1332,24 +1339,248 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str) -> IfNode:
     return IfNode(branches=branches, origin=OriginRef(type="if", state=origin))
 
 
-def _lower_script(
-    script: Any, ctx: _LoweringContext, origin: str, state: str, idx: int
-) -> CapabilityCallNode:
-    """Lower a ``<script>`` element to a CapabilityCallNode (M1P3).
+def _lower_script_body(
+    body_text: str, ctx: _LoweringContext, origin: str, state: str, idx: int
+) -> Optional[List["ActionNode"]]:
+    """Attempt to lower a ``<script>`` body as a sequence of admitted statements.
 
-    :param script: Pydantic Script model instance.
+    D-M1P6-2 admits inside ``<script>``:
+    - Assignment to a datamodel location (incl. computed-member ``t[k] = v``).
+    - ``if (cond) { ... }`` whose body is itself admitted (recursively).
+
+    If every top-level statement in *body_text* is admitted, returns the
+    equivalent ``ActionNode`` sequence (``AssignNode`` and/or ``IfNode`` items
+    in document order).  If ANY statement is unadmitted, returns ``None``
+    (callers must fall through to the ``CapabilityCallNode`` path — do NOT
+    partially-lower a mixed block per D-M1P6-2).
+
+    :param body_text: Raw JS ``<script>`` body text.
+    :param ctx: Lowering context (diagnostics collected here).
+    :param origin: Source origin label for diagnostics.
+    :param state: Owning state id for ``OriginRef``.
+    :param idx: Block index within the parent executable content block.
+    :returns: List of ``ActionNode`` when the body is fully admitted, else
+        ``None``.
+    """
+    from .ecmascript_normalizer import (
+        ECMAScriptNormalizationError,
+        normalize_script as _normalize_script,
+    )
+
+    # Step 1: Normalize the JS body to Python statement text.
+    try:
+        py_text = _normalize_script(body_text)
+    except ECMAScriptNormalizationError:
+        return None
+
+    # Step 2: Parse as an exec-mode module.
+    try:
+        module = ast.parse(py_text, mode="exec")
+    except SyntaxError:
+        return None
+
+    # Step 3: Try to lower each top-level statement to an ActionNode.
+    # If any statement is not admitted, abort the whole sequence.
+    result: List[ActionNode] = []
+    origin_ref = OriginRef(type="script", state=state, idx=idx)
+
+    def _lower_stmt(stmt: ast.stmt) -> Optional[ActionNode]:
+        """Lower one admitted statement to an ActionNode, or return None."""
+        if isinstance(stmt, ast.Assign):
+            return _lower_ast_assign(stmt, ctx, origin, state)
+        if isinstance(stmt, ast.If):
+            return _lower_ast_if(stmt, ctx, origin, state, origin_ref)
+        # Any other statement type is not admitted.
+        return None
+
+    for stmt in module.body:
+        node = _lower_stmt(stmt)
+        if node is None:
+            return None  # Entire block is unadmitted; caller emits CapabilityCallNode.
+        result.append(node)
+
+    return result
+
+
+def _lower_ast_assign(
+    stmt: ast.Assign, ctx: _LoweringContext, origin: str, state: str
+) -> Optional["AssignNode"]:
+    """Lower a Python ``ast.Assign`` node from a script body to an AssignNode.
+
+    Supports simple name assignments (``x = expr``) and computed-member
+    assignments (``t[k] = expr``, ``obj.attr = expr``).
+
+    :param stmt: Python AST Assign statement.
+    :param ctx: Lowering context.
+    :param origin: Source origin label for sub-expression diagnostics.
+    :param state: Owning state id for the OriginRef.
+    :returns: AssignNode, or ``None`` when the target form is not admitted.
+    """
+    if len(stmt.targets) != 1:
+        return None  # Multiple assignment targets are not admitted.
+    target = stmt.targets[0]
+
+    # Compute the location string for AssignNode.loc.
+    if isinstance(target, ast.Name):
+        loc = target.id
+    elif isinstance(target, ast.Subscript):
+        # Represent as "obj[key]" using unparse so the emitter can reconstruct it.
+        loc = ast.unparse(target) if hasattr(ast, "unparse") else repr(target)
+    elif isinstance(target, ast.Attribute):
+        loc = ast.unparse(target) if hasattr(ast, "unparse") else repr(target)
+    else:
+        return None  # Complex destructuring is not admitted.
+
+    # Lower the right-hand side expression.
+    rhs_source = ast.unparse(stmt.value) if hasattr(ast, "unparse") else repr(stmt.value)
+    rhs_ir = _ast_to_expr(stmt.value, origin + ":script:assign")
+
+    return AssignNode(
+        loc=loc,
+        expr=rhs_ir,
+        op="set",
+        origin=OriginRef(type="assign", state=state),
+    )
+
+
+def _lower_ast_if(
+    stmt: ast.If,
+    ctx: _LoweringContext,
+    origin: str,
+    state: str,
+    parent_ref: "OriginRef",
+) -> Optional["IfNode"]:
+    """Lower a Python ``ast.If`` node from a script body to an IfNode.
+
+    The condition and all body statements must be admitted (D-M1P6-2).
+    Else branches are supported when their body statements are also admitted.
+
+    :param stmt: Python AST If statement.
     :param ctx: Lowering context.
     :param origin: Source origin label.
-    :param state: Owning state id for name synthesis.
+    :param state: Owning state id.
+    :param parent_ref: OriginRef of the enclosing script block.
+    :returns: IfNode, or ``None`` when any sub-expression/statement is
+        unadmitted.
+    """
+    guard_ir = _ast_to_expr(stmt.test, origin + ":script:if.cond")
+    if isinstance(guard_ir, UnsupportedExpr):
+        return None
+
+    body_actions: List[ActionNode] = []
+    for s in stmt.body:
+        if isinstance(s, ast.Assign):
+            node = _lower_ast_assign(s, ctx, origin, state)
+        elif isinstance(s, ast.If):
+            node = _lower_ast_if(s, ctx, origin, state, parent_ref)
+        else:
+            return None  # Unadmitted body statement.
+        if node is None:
+            return None
+        body_actions.append(node)
+
+    branches = [IfBranch(guard=guard_ir, body=body_actions)]
+
+    # Lower orelse (else / elif) when present.
+    if stmt.orelse:
+        if len(stmt.orelse) == 1 and isinstance(stmt.orelse[0], ast.If):
+            # elif branch
+            elif_node = _lower_ast_if(stmt.orelse[0], ctx, origin, state, parent_ref)
+            if elif_node is None:
+                return None
+            branches.extend(elif_node.branches)
+        else:
+            # else branch
+            else_actions: List[ActionNode] = []
+            for s in stmt.orelse:
+                if isinstance(s, ast.Assign):
+                    node = _lower_ast_assign(s, ctx, origin, state)
+                elif isinstance(s, ast.If):
+                    node = _lower_ast_if(s, ctx, origin, state, parent_ref)
+                else:
+                    return None
+                if node is None:
+                    return None
+                else_actions.append(node)
+            branches.append(IfBranch(guard=None, body=else_actions))
+
+    return IfNode(
+        branches=branches,
+        origin=OriginRef(type="if", state=state),
+    )
+
+
+def _lower_script(
+    script: Any, ctx: _LoweringContext, origin: str, state: str, idx: int
+) -> Union[List["ActionNode"], "CapabilityCallNode"]:
+    """Lower a ``<script>`` element.
+
+    First attempts to parse the script body as a sequence of admitted
+    statements per D-M1P6-2 (assignments and ``if`` blocks).  If every
+    statement is admitted the function returns the resulting ``ActionNode``
+    list (an ``AssignNode`` / ``IfNode`` sequence in document order).
+
+    If any statement is not admitted — or when the body cannot be normalized
+    at all — falls back to the M0-D10 ``CapabilityCallNode`` path with the
+    appropriate diagnostic (D-M1P6-8).  A mixed block is never partially
+    lowered.
+
+    :param script: Pydantic/dataclass Script model instance.
+    :param ctx: Lowering context (diagnostics appended here on fallback).
+    :param origin: Source origin label.
+    :param state: Owning state id for name synthesis and ``OriginRef``.
     :param idx: Index within the parent block.
-    :returns: CapabilityCallNode.
+    :returns: Either a list of ``ActionNode`` (all-admitted path) or a single
+        ``CapabilityCallNode`` (fallback path).
     """
     script_name = getattr(script, "name", None)
     block_type = origin.split(":")[-1] if ":" in origin else origin
+
+    # Gather the raw body text.  Script body storage varies by representation:
+    # - pydantic model: ``value`` (str) or ``content`` (str)
+    # - dataclasses model (from SCXMLDocumentHandler): ``content`` is a list
+    #   of text segments (one element per text node in the SCXML).  Join them.
+    body_text: Optional[str] = None
+    for attr in ("value", "content", "_value"):
+        v = getattr(script, attr, None)
+        if v is None:
+            continue
+        if isinstance(v, str):
+            body_text = v.strip()
+            break
+        if isinstance(v, (list, tuple)):
+            # SCXMLDocumentHandler stores text content as a list of strings.
+            joined = "".join(str(s) for s in v).strip()
+            if joined:
+                body_text = joined
+                break
+
+    # If the machine is in ECMAScript mode and we have body text, attempt
+    # to lower as an admitted statement sequence (D-M1P6-2).
+    if ctx.ecmascript_mode and body_text:
+        admitted = _lower_script_body(body_text, ctx, origin, state, idx)
+        if admitted is not None:
+            # Fully admitted: return the sequence directly.
+            return admitted
+
+    # Fallback: emit a CapabilityCallNode (M0-D10 / D-M1P6-8).
     name = ctx.synth_cap_name(
         script_name=script_name, block_type=block_type, state=state, idx=idx
     )
     origin_ref = OriginRef(type="script", state=state, idx=idx)
+    if ctx.ecmascript_mode and body_text:
+        # The body was present but not admitted; emit a diagnostic.
+        diag = ExecutableDiagnostic(
+            code="unsupported-ecmascript",
+            outcome="capability-only",
+            tier="restricted",
+            source_origin=origin,
+            message=(
+                "script body contains unadmitted ECMAScript forms; "
+                "lowered to CapabilityCallNode '{}' (M0-D10 / D-M1P6-8)".format(name)
+            ),
+        )
+        ctx.push_diag(diag)
     return CapabilityCallNode(
         name=name,
         origin=origin_ref,
@@ -1449,7 +1680,11 @@ def _lower_action_block(
     def _push_script(item: Any) -> None:
         idx = script_counter[0]
         script_counter[0] += 1
-        actions.append(_lower_script(item, ctx, origin, state_id, idx))
+        result = _lower_script(item, ctx, origin, state_id, idx)
+        if isinstance(result, list):
+            actions.extend(result)
+        else:
+            actions.append(result)
 
     # Map attribute names on the pydantic model to action kinds
     # We visit in a fixed order but the important thing is we visit all items.
@@ -1600,7 +1835,11 @@ def _collect_actions_ordered(
             elif attr_name == "script":
                 sc_idx = script_counter[0]
                 script_counter[0] += 1
-                all_actions.append(_lower_script(item, ctx, origin, state_id, sc_idx))
+                result = _lower_script(item, ctx, origin, state_id, sc_idx)
+                if isinstance(result, list):
+                    all_actions.extend(result)
+                else:
+                    all_actions.append(result)
 
         return all_actions
 
@@ -1611,7 +1850,11 @@ def _collect_actions_ordered(
             if attr_name == "script":
                 sc_idx = script_counter[0]
                 script_counter[0] += 1
-                all_actions.append(_lower_script(item, ctx, origin, state_id, sc_idx))
+                result = _lower_script(item, ctx, origin, state_id, sc_idx)
+                if isinstance(result, list):
+                    all_actions.extend(result)
+                else:
+                    all_actions.append(result)
             else:
                 # Call the appropriate inline logic
                 if attr_name == "raise_value":
@@ -1692,11 +1935,26 @@ def _lower_invoke(
     child_machine: Optional[MachineIR] = None
     content_items = getattr(inv, "content", []) or []
     for content in content_items:
-        # Look for inline <scxml> inside <content>
+        # Look for inline <scxml> inside <content>.
+        # SCXMLDocumentHandler yields scjson.dataclasses.Scxml (not pydantic.Scxml),
+        # so we recognise either concrete class and also duck-type on the
+        # presence of ``state`` / ``datamodel`` / ``initial`` to catch any
+        # future representation that has the SCXML root interface (Fix 2).
         inner_list = getattr(content, "content", []) or []
         for inner in inner_list:
             from .pydantic import Scxml as _PydScxml
-            if isinstance(inner, _PydScxml):
+            from . import dataclasses as _dc_module
+            _DcScxml = getattr(_dc_module, "Scxml", None)
+            _is_inline_scxml = (
+                isinstance(inner, _PydScxml)
+                or (_DcScxml is not None and isinstance(inner, _DcScxml))
+                or (
+                    hasattr(inner, "state")
+                    and hasattr(inner, "datamodel")
+                    and hasattr(inner, "initial")
+                )
+            )
+            if _is_inline_scxml:
                 if ctx.invoke_depth >= _MAX_INVOKE_DEPTH:
                     diag = ExecutableDiagnostic(
                         code="invoke-depth-exceeded",

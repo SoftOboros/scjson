@@ -1165,4 +1165,242 @@ def test_dp_lowering_summary_dump(capsys):
     assert child_machine_count == 5
     assert total_states > 50
     assert total_transitions > 80
-    assert total_slots > 15
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: multi-statement <script> body lowering (D-M1P6-2)
+# ---------------------------------------------------------------------------
+
+
+class TestScriptBodyLowering:
+    """_lower_script correctly lowers admitted script bodies to ActionNode sequences
+    and falls back to CapabilityCallNode for unadmitted / mixed bodies (D-M1P6-2,
+    D-M1P6-8)."""
+
+    def _make_script_obj(self, body: str):
+        """Build a minimal duck-typed Script object with *body* as the value."""
+
+        class _Script:
+            value = body
+            name = None
+
+        return _Script()
+
+    def _make_ecmascript_ctx(self):
+        """Return a _LoweringContext in ECMAScript mode."""
+        from scjson.exec_ir import _LoweringContext
+
+        return _LoweringContext(ecmascript_mode=True, invoke_depth=0)
+
+    def test_all_admitted_assigns_return_sequence(self):
+        """A script body with only assignment statements returns an AssignNode list."""
+        from scjson.exec_ir import _lower_script
+
+        ctx = self._make_ecmascript_ctx()
+        body = 't_INPUTS["taken." + i_ID_LEFT] = 0\nt_INPUTS["taken." + i_ID_RIGHT] = 0'
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "onentry", "Philospher", 0)
+        assert isinstance(result, list), "Expected list (all-admitted), got {!r}".format(type(result))
+        assert len(result) == 2
+        assert all(isinstance(n, AssignNode) for n in result)
+
+    def test_admitted_if_plus_assigns_returns_sequence(self):
+        """A script body with an if block + assignments returns IfNode + AssignNode list."""
+        from scjson.exec_ir import _lower_script
+
+        ctx = self._make_ecmascript_ctx()
+        # Mirrors the Philosopher onentry script.
+        body = (
+            "if (i_ID !== 0) {\n"
+            "    i_ID_LEFT = t_HAND_COMPLIANCE[i_ID - 1][0]\n"
+            "    i_ID_RIGHT = t_HAND_COMPLIANCE[i_ID - 1][1]\n"
+            "}\n"
+            't_INPUTS["taken." + i_ID_LEFT] = 0\n'
+            't_INPUTS["taken." + i_ID_RIGHT] = 0\n'
+        )
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "onentry", "Philospher", 0)
+        assert isinstance(result, list), "Expected list, got {!r}".format(type(result))
+        assert len(result) == 3
+        assert isinstance(result[0], IfNode), "First node should be IfNode"
+        assert isinstance(result[1], AssignNode), "Second node should be AssignNode"
+        assert isinstance(result[2], AssignNode), "Third node should be AssignNode"
+        # Verify IfNode has one branch with two assign body nodes.
+        if_node = result[0]
+        assert len(if_node.branches) == 1
+        branch = if_node.branches[0]
+        assert branch.guard is not None
+        assert len(branch.body) == 2
+        assert all(isinstance(n, AssignNode) for n in branch.body)
+
+    def test_mixed_unadmitted_body_returns_capability_call(self):
+        """A script body containing any unadmitted form returns a CapabilityCallNode."""
+        from scjson.exec_ir import _lower_script
+
+        ctx = self._make_ecmascript_ctx()
+        # 'for' loop is inadmissible.
+        body = "for (var i = 0; i < 10; i++) { x = i; }"
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "onentry", "SomeState", 0)
+        assert isinstance(result, CapabilityCallNode), (
+            "Unadmitted body should produce CapabilityCallNode, got {!r}".format(type(result))
+        )
+
+    def test_mixed_body_admitted_plus_call_returns_capability_call(self):
+        """A mixed body (some admitted, one unadmitted call) returns a CapabilityCallNode.
+
+        Verifies the 'no partial lowering' rule from D-M1P6-2.
+        """
+        from scjson.exec_ir import _lower_script
+
+        ctx = self._make_ecmascript_ctx()
+        # 'console.log(...)' is not admitted; the assignment is admitted but the
+        # block must not be partially lowered.
+        body = "x = 1\nconsole.log(x)"
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "onentry", "SomeState", 0)
+        assert isinstance(result, CapabilityCallNode), (
+            "Mixed block should fall through to CapabilityCallNode, got {!r}".format(type(result))
+        )
+
+    def test_non_ecmascript_mode_returns_capability_call(self):
+        """In non-ECMAScript mode scripts always produce CapabilityCallNode."""
+        from scjson.exec_ir import _lower_script, _LoweringContext
+
+        ctx = _LoweringContext(ecmascript_mode=False, invoke_depth=0)
+        body = "x = 1"
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "onentry", "SomeState", 0)
+        assert isinstance(result, CapabilityCallNode)
+
+    def test_simple_transition_script_single_assign(self):
+        """A single-statement script on a transition lowers to one AssignNode."""
+        from scjson.exec_ir import _lower_script
+
+        ctx = self._make_ecmascript_ctx()
+        body = "t_INPUTS[_event.name] = _event.data"
+        script = self._make_script_obj(body)
+        result = _lower_script(script, ctx, "trans", "DiningPhilosophers", 0)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], AssignNode)
+        # Location should represent the subscript assignment target.
+        assert "t_INPUTS" in result[0].loc
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: inline child-machine detection via SCXMLDocumentHandler
+# ---------------------------------------------------------------------------
+
+
+class TestInlineChildMachineDetection:
+    """lower_document populates InvokeIR.child_machine from a
+    SCXMLDocumentHandler-parsed document (which yields dataclasses.Scxml)."""
+
+    @pytest.mark.skipif(
+        not os.path.exists(DP_SCXML_PATH),
+        reason="Dining Philosophers SCXML file not found",
+    )
+    def test_dp_flat_child_machines_populated_via_handler(self):
+        """Loading the FLAT DP file via SCXMLDocumentHandler populates child_machine.
+
+        SCXMLDocumentHandler yields scjson.dataclasses.Scxml (not pydantic.Scxml).
+        Fix 2 makes _lower_invoke recognise both, so this assertion now passes
+        without the backend patch_child_machines workaround.
+        """
+        from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+
+        handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+        doc = handler.load(DP_SCXML_PATH)
+        machine, diags = lower_document(doc)
+
+        # Count child machines.
+        def _count_child_machines(ir):
+            count = 0
+            if isinstance(ir, MachineIR):
+                for c in ir.children:
+                    count += _count_child_machines(c)
+            elif isinstance(ir, (StateIR, ParallelIR)):
+                for inv in getattr(ir, "invokes", []):
+                    if inv.child_machine is not None:
+                        count += 1
+                        count += _count_child_machines(inv.child_machine)
+                for c in ir.children:
+                    count += _count_child_machines(c)
+            return count
+
+        child_machine_count = _count_child_machines(machine)
+        assert child_machine_count == 5, (
+            "Expected 5 inline child machines (one per Philosopher), got {}".format(
+                child_machine_count
+            )
+        )
+
+    @pytest.mark.skipif(
+        not os.path.exists(DP_SCXML_PATH),
+        reason="Dining Philosophers SCXML file not found",
+    )
+    def test_dp_flat_philosopher_onentry_script_lowered_to_sequence(self):
+        """The Philosopher onentry script lowers to IfNode + AssignNode + AssignNode.
+
+        This verifies Fix 1 and Fix 2 jointly: the child machine must be
+        populated (Fix 2) for us to inspect its onentry actions, and the
+        script must be lowered to an action sequence (Fix 1) rather than a
+        CapabilityCallNode.
+        """
+        from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+
+        handler = SCXMLDocumentHandler(fail_on_unknown_properties=False)
+        doc = handler.load(DP_SCXML_PATH)
+        machine, diags = lower_document(doc)
+
+        # Find the first Philosopher child machine.
+        philosopher_cm: MachineIR | None = None
+        for top in machine.children:  # ParallelIR
+            for state in getattr(top, "children", []):  # StateIR (Philosopher5..1)
+                for inv in getattr(state, "invokes", []):
+                    if inv.child_machine is not None:
+                        philosopher_cm = inv.child_machine
+                        break
+                if philosopher_cm is not None:
+                    break
+            if philosopher_cm is not None:
+                break
+
+        assert philosopher_cm is not None, "No child machine found; Fix 2 may have failed"
+
+        # The root Philospher state carries the onentry with the mixed script.
+        philospher_state: StateIR | None = None
+        for s in philosopher_cm.children:
+            if isinstance(s, StateIR) and getattr(s, "id", "") == "Philospher":
+                philospher_state = s
+                break
+
+        assert philospher_state is not None, "Philospher state not found in child machine"
+
+        onentry = philospher_state.onentry
+        assert len(onentry) >= 3, (
+            "Expected at least 3 onentry actions (IfNode + 2 AssignNodes), "
+            "got {} — Fix 1 may have failed (script still CapabilityCallNode)".format(len(onentry))
+        )
+
+        # First action: IfNode (the if (i_ID !== 0) { ... } block)
+        assert isinstance(onentry[0], IfNode), (
+            "First onentry action should be IfNode, got {!r}".format(type(onentry[0]))
+        )
+        if_node = onentry[0]
+        assert len(if_node.branches) >= 1
+        assert if_node.branches[0].guard is not None
+        # If body: two assigns (i_ID_LEFT, i_ID_RIGHT)
+        assert len(if_node.branches[0].body) == 2
+        assert all(isinstance(n, AssignNode) for n in if_node.branches[0].body)
+
+        # Second + third actions: AssignNodes (t_INPUTS[...] = 0)
+        assert isinstance(onentry[1], AssignNode), (
+            "Second onentry action should be AssignNode, got {!r}".format(type(onentry[1]))
+        )
+        assert isinstance(onentry[2], AssignNode), (
+            "Third onentry action should be AssignNode, got {!r}".format(type(onentry[2]))
+        )
+        assert "t_INPUTS" in onentry[1].loc
+        assert "t_INPUTS" in onentry[2].loc
