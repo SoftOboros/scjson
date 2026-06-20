@@ -124,6 +124,8 @@ def generate_vectors(
     limit: int = 1,
     auto_advance: bool = True,
     variants_per_event: int = 3,
+    max_candidates: int = 2000,
+    time_budget_ms: int = 30000,
 ) -> Path:
     """Generate minimal vectors for ``chart`` and write to ``out_dir``.
 
@@ -142,6 +144,13 @@ def generate_vectors(
         sends scheduled during init).
     limit : int
         Maximum number of vectors to emit; Phase 1 uses a single vector.
+    max_candidates : int
+        Maximum BFS candidates to evaluate before stopping with a partial
+        (``limited``) result.  Threaded through to ``generate_sequences``
+        (EXEC-E-D1).  Default: 2000.
+    time_budget_ms : int
+        Wall-clock budget in milliseconds for the BFS search.  Threaded
+        through to ``generate_sequences`` (EXEC-E-D1).  Default: 30000 (30 s).
 
     Returns
     -------
@@ -204,12 +213,18 @@ def generate_vectors(
     ):
         stimuli.append({"event": "complete"})
 
-    sequences = generate_sequences(
+    search_result = generate_sequences(
         _ctx_factory(chart, treat_as_xml, used_advance),
         stimuli,
         max_depth=max_depth,
         limit=limit,
+        max_candidates=max_candidates,
+        time_budget_ms=time_budget_ms,
     )
+    sequences = search_result.sequences
+    # EXEC-E-D4: propagate truncated flag so callers can surface a ``limited``
+    # terminal outcome rather than treating partial results as full-coverage success.
+    search_truncated = search_result.truncated
 
     dest = out_dir / f"{chart.stem}.events.jsonl"
     # Emit only the top sequence for now (aligns with exec_compare consumption)
@@ -289,6 +304,11 @@ def generate_vectors(
             "alphabet": alphabet,
             "payloadHints": {k: len(v) for k, v in payload_hints.items()},
             "sequenceLength": len(top),
+            # EXEC-E-D4: truncated=True signals a ``limited`` outcome to callers
+            # (e.g. iState codegen path at backend/istate/codegen/vectors.py).
+            "truncated": search_truncated,
+            "candidatesEvaluated": search_result.candidates_evaluated,
+            "searchElapsedMs": round(search_result.elapsed_ms, 1),
         }
         (out_dir / f"{chart.stem}.vector.json").write_text(json.dumps(meta, indent=2))
     except Exception:
@@ -311,6 +331,18 @@ def main() -> None:
     ap.add_argument("--no-auto-advance", action="store_true", help="Disable auto-detection of delayed sends during init")
     ap.add_argument("--variants-per-event", type=int, default=3, help="Max fused payload variants to consider per event")
     ap.add_argument("--limit", type=int, default=1, help="Maximum vectors to emit")
+    ap.add_argument(
+        "--max-candidates",
+        type=int,
+        default=2000,
+        help="BFS candidate-count cap (EXEC-E-D1); default 2000",
+    )
+    ap.add_argument(
+        "--time-budget-ms",
+        type=int,
+        default=30000,
+        help="Wall-clock budget in milliseconds for BFS search (EXEC-E-D1); default 30000",
+    )
     args = ap.parse_args()
 
     path = generate_vectors(
@@ -322,6 +354,8 @@ def main() -> None:
         limit=args.limit,
         auto_advance=not args.no_auto_advance,
         variants_per_event=args.variants_per_event,
+        max_candidates=args.max_candidates,
+        time_budget_ms=args.time_budget_ms,
     )
     print(str(path))
 

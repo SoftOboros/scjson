@@ -26,13 +26,17 @@ stay as historical record. Status icons:
 
 ## Open Questions
 
-(none — ERRATA-001 fix path is fully prescribed below)
+(none — EOQ-001-ERRATA-002 resolved 2026-06-20: EXEC-E §EXEC-E-D1..D5 ratified the
+bound — `max_candidates=2000` + `time_budget_ms=30000` defaults, construct-aware
+depth reduction, terminal `limited` (partial vectors + `truncated:true`) on budget
+exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 
 ## Index
 
 | ID         | Status | Title                                           | First seen | Owning phase |
 |------------|--------|-------------------------------------------------|------------|--------------|
 | ERRATA-001 | 🟢     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
+| ERRATA-002 | 🟢     | Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines | 2026-06-19 | EXEC-E (`SCJSON-EXEC-00-CONCEPTS.md`) |
 
 ---
 
@@ -168,6 +172,124 @@ $ grep -n "0\.4\.0" js/package.json py/pyproject.toml rust/Cargo.toml \
 - Downstream: `softoboros/docs/todo/istate/TODO-ISTATE-08-HELP-TEXT-ADOPTION.md`
   §16 "ISTATE08b backend half landed; frontend half deferred to scjson
   v0.4.1" (2026-05-27 entry).
+
+---
+
+## ERRATA-002 — Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines
+
+- **Status**: 🟢 resolved 2026-06-20 (EXEC-E §EXEC-E-D1..D5 ratified the bound;
+  fix landed in the EXEC-E vector-search-bound commit on this branch). EOQ-001-ERRATA-002
+  resolved.
+- **First seen**: 2026-06-19, during the iState-over-MCP codegen probe for the
+  rlvgl SCTD-01 tutorial-demo effort (a faithful Dining Philosophers machine
+  submitted to `istate_codegen_create target_langs=["rust"]`).
+- **Owning phase**: EXEC-E — Vector Generation Phase 3
+  (`docs/concepts/SCJSON-EXEC-00-CONCEPTS.md` §EXEC-E, currently open; acceptance
+  item "EXEC-E vector-generation Phase 3 plan drafted before implementation" is
+  unchecked).
+
+### Symptom
+
+A codegen job over the Alex Z tutorial Dining Philosophers machine
+(`tutorial/Examples/StateCharts/DiningPhilosphersProblem/machine_dining_philosphers.flat.scxml`
+— `datamodel="ecmascript"`, root `<parallel>` with ten children, five nested
+`<invoke>` blocks each carrying an inline `<content><scxml>…</scxml></content>`
+child machine, `<foreach>`, dynamic `<send eventexpr= targetexpr= delayexpr=>`)
+sits in `STARTED` indefinitely — observed 30+ minutes with no `error`, no
+`warnings`, no `artifacts`, no terminal transition. A trivial 4-state
+`datamodel="null"` machine through the identical path SUCCEEDED in ≤14 s,
+isolating the hang to machine complexity, not a generator outage.
+
+The hang is in vector generation, before any Rust template is rendered. Pinned
+against scjson `HEAD = 25c79d7` (2026-06-19):
+
+- `py/vector_lib/search.py:82` — the `while frontier:` BFS loop. It is
+  depth-capped (`py/vector_lib/search.py:84`, `if len(seq) >= max_depth`) but
+  has **no candidate-count cap and no wall-clock budget**; every candidate that
+  increases coverage is appended to the frontier (`search.py:100-101`), so
+  breadth grows ~`|alphabet|^depth`.
+- `py/vector_gen.py` — each evaluated candidate calls a `ctx_factory()` that
+  re-instantiates a fresh `DocumentContext.from_json_file(...)`. For this chart
+  that means re-entering all parallel regions and starting five
+  `SCXMLChildHandler` instances from inline `<content>` SCXML on **every** node
+  visited.
+
+The combination — large event alphabet × `max_depth=4` (the value the iState
+caller passes, `backend/istate/codegen/vectors.py:60`) × an O(parallel × inline-
+invoke child-machine init) per-node cost — makes the search effectively
+non-terminating in practical wall-clock. (Runner-up, not yet excluded: a single
+`ctx_factory()` blocking inside the child-invoke `_pump()` for a machine whose
+inline children never quiesce.)
+
+### Root cause
+
+`generate_sequences` bounds only search *depth*, never *breadth* or *time*, and
+the per-candidate context construction is unexpectedly expensive for machines
+that combine a root `<parallel>` with inline-`<content>` `<invoke>` children.
+EXEC-E (parallel/invoke corpus expansion + vector minimization) was never
+drafted, so no committed bound exists; the defaults in
+`generate_sequences(... max_depth=2, limit=1)` are the only guard, and the
+iState caller overrides `max_depth` to 4. There is no terminal "search exhausted
+the budget" outcome, so the only signal a too-complex machine produces is an
+indefinite `STARTED`.
+
+### Downstream impact
+
+- iState codegen (`istate.codegen.generate`) inherits the hang and never
+  reaches a terminal job state — see the reciprocal istate-side entry
+  `softoboros/docs/todo/istate/ERRATA.md` ERRATA-006 (missing codegen watchdog +
+  shallow context builder).
+- rlvgl SCTD-01 (faithful tutorial-machine demo) is blocked on this:
+  `ops/packer/submodules/rlvgl/docs/concepts/SCTD-00-CONCEPTS.md` §8 names iState
+  MCP as the generation authority, and the tutorial machines cannot be generated
+  until the search is bounded.
+
+### Fix prescription
+
+EXEC-E (spec first, per scjson `CLAUDE.md` — this changes cross-language trace
+generation behavior):
+
+1. Add a committed bound to `generate_sequences` in `py/vector_lib/search.py`:
+   a candidate-count cap (e.g. `max_candidates`) and a wall-clock budget
+   (`time_budget_ms`), checked at the top of the `while frontier:` loop, plus
+   a construct-aware depth/alphabet reduction when the chart contains
+   `<parallel>` and/or `<invoke>` (detectable from the doc before the search).
+2. Define the terminal outcome of an exhausted/over-budget run: emit a
+   `limited` result carrying whatever partial vectors were found plus a
+   `truncated: true` marker, **or** a `blocked` result with an explicit reason
+   — the choice is EOQ-001-ERRATA-002, to be ratified under EXEC-E.
+3. Ensure `ctx_factory()` reuse / memoization where safe, so repeated node
+   evaluation does not re-pay full inline-`<invoke>` child-machine
+   initialization for an unchanged prefix.
+4. Cross-check: the trivial null-datamodel baseline must stay byte-identical
+   (no churn in existing golden vectors); add a regression vector from a small
+   `<parallel>`+`<invoke>` machine that completes under the new budget.
+
+The reciprocal istate-side watchdog (ERRATA-006) is belt-and-braces: even with
+this fix, the codegen Celery task MUST carry an effective per-task time limit so
+no future construct can park a job in `STARTED` forever.
+
+### Verification
+
+✅ 2026-06-20. `generate_sequences`/`generate_vectors` now carry `max_candidates`
++ `time_budget_ms` budgets checked at the top of the BFS loop, plus EXEC-E-D2
+construct-aware depth reduction and a `truncated` marker. Evidence:
+(a) the Dining Philosophers machine now **terminates in ~39 s** with 22 partial
+sequences and `truncated: true` (was an indefinite 30+ min hang);
+(b) the existing null-datamodel golden vectors are byte-identical — full scjson
+suite **480 passed / 1 skipped** (baseline 410/1 before the EXEC-E + ecmascript
+work, all prior tests still green);
+(c) a new bounded `<parallel>`+`<invoke>` regression machine (`test_vector_search.py`)
+completes under budget at effective depth 2. Memoization (EXEC-E-D3) deferred with
+a TODO per spec (optional for first landing).
+
+### Tracking
+
+- Owning phase: `docs/concepts/SCJSON-EXEC-00-CONCEPTS.md` §EXEC-E (to be
+  drafted with the bound decision + EOQ-001-ERRATA-002 resolution).
+- Reciprocal istate entry: `softoboros/docs/todo/istate/ERRATA.md` ERRATA-006.
+- Downstream demo: `ops/packer/submodules/rlvgl/docs/concepts/SCTD-00-CONCEPTS.md`
+  §8 (iState MCP generation boundary).
 
 ---
 
