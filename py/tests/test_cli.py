@@ -214,7 +214,11 @@ def test_document_context_datamodel_default():
 
 
 def test_document_context_invalid_datamodel():
-    """Creating a context with non-python datamodel should fail."""
-    doc = Scxml(state=[{"id": "a"}], datamodel_attribute="ecmascript", version=1.0)
+    """Creating a context with an unsupported datamodel should fail.
+
+    Note: ``ecmascript`` is now an admitted datamodel (M1P6 D-M1P6-1).
+    The test uses ``"xpath"`` as a truly unsupported value.
+    """
+    doc = Scxml(state=[{"id": "a"}], datamodel_attribute="xpath", version=1.0)
     with pytest.raises(ValueError):
         DocumentContext.from_doc(doc)

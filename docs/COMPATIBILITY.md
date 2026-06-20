@@ -65,9 +65,9 @@ The table below summarizes the current Python engine feature coverage relative t
 |------|---------------|--------------|-----------------------|
 | Execution algorithm | Macro/microstep with quiescence | Same | Equivalent semantics |
 | Transition selection | Document order; multi-token, `*`, `error.*` | Same | Equivalent |
-| Condition evaluation | Sandboxed Python datamodel (`safe_eval`) | JS datamodel | Equivalent for tests; non-boolean cond → `error.execution` in Python |
-| Executable content | assign, log, raise, if/elseif/else, foreach, send, cancel | Same | Equivalent; `script` is a warning/no-op in Python ([SCION](https://www.npmjs.com/package/scion) executes JS) |
-| `script` blocks | No-op (warn) | Executes JS | Expected difference; tests avoid requiring `script` side effects |
+| Condition evaluation | Sandboxed Python datamodel (`safe_eval`) or ECMAScript normalizer (M1P6 G2) | JS datamodel | ECMAScript expressions normalized to Python before `safe_eval`; inadmissible forms → `error.execution` |
+| Executable content | assign, log, raise, if/elseif/else, foreach, send, cancel, script | Same | Equivalent; `script` executes the admitted ECMAScript subset (M1P6 D-M1P6-2) when `datamodel="ecmascript"` |
+| `script` blocks | Executes admitted ECMAScript subset (assign + if) | Executes JS | Equivalent for admitted forms (D-M1P6-2); inadmissible forms emit `error.execution` per D-M1P6-8 |
 | History | Shallow + deep | Same | Equivalent; deep restores exact descendant leaves |
 | Parallel completion | Region done → parent done | Same | Equivalent ordering |
 | Done events | `done.state.*`, `done.invoke*` | Same | Equivalent; see invoke ordering notes |
@@ -80,6 +80,46 @@ The table below summarizes the current Python engine feature coverage relative t
 | Finalize semantics | Runs in invoking state; `_event` = `{name,data,invokeid}` | Same | Equivalent |
 | Invoke ordering | Modes: `tolerant` (default), `strict`, `scion` | N/A | `scion` mode aligns `done.invoke` ordering with [SCION](https://www.npmjs.com/package/scion) (generic before id-specific, push-front) |
 | Step-0 normalization | Compare tooling strips step-0 noise | N/A | Reduces diffs due to initial transitions visibility |
+
+---
+
+## ECMAScript Datamodel Admission (M1P6 G2)
+
+The Python engine now admits `datamodel="ecmascript"` alongside the default `python` datamodel.
+ECMAScript expressions and `<script>` bodies are normalized to Python by the
+`ecmascript_normalizer` module before evaluation.
+
+**Admitted ECMAScript subset (D-M1P6-2):**
+
+| JS form | Python equivalent |
+|---------|------------------|
+| `&&` | `and` |
+| `\|\|` | `or` |
+| `!` | `not ` |
+| `===` | `==` |
+| `!==` | `!=` |
+| `true` / `false` | `True` / `False` |
+| `null` / `undefined` | `None` |
+| `parseInt(x)` / `parseInt(x, r)` | `int(x)` / `int(x, r)` |
+| `String(x)` | `str(x)` |
+| `Number(x)` | `float(x)` |
+| `'str' + intVar` | `'str' + str(intVar)` (JS coercion) |
+| `{key: val}` (object literal) | `{"key": val}` (Python dict) |
+| `// comment` / `/* ... */` | stripped before evaluation |
+| `if (cond) { ... }` (script only) | `if cond:\n    ...` |
+
+**_event binding:** When `datamodel="ecmascript"`, the `_event` object exposes
+`.name` and `.data` in condition and expression contexts.
+
+**Inadmissible forms** (`=>`, `new`, `typeof`, `for`, `while`, `class`, template
+literals, etc.) raise `ECMAScriptNormalizationError` with diagnostic
+`"unsupported-ecmascript"` and cause the engine to emit `error.execution` per
+D-M1P6-8.
+
+**Verified against:** the Alex Z tutorial Dining Philosophers machine
+(`tutorial/Examples/StateCharts/DiningPhilosphersProblem/machine_dining_philosphers.scxml`)
+with five parallel philosopher child machines loading correctly and entering
+their initial `Thinking` state.
 
 ---
 
