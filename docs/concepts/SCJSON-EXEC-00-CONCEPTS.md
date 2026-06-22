@@ -147,17 +147,162 @@ Independent from: Python 0.3.7 release unless release scope expands.
 
 ### EXEC-E: Vector Generation Phase 3
 
-Goal: move vector minimization and parallel/invoke corpus expansion out of
-generic TODOs into a phase with explicit trace dependencies.
+**Status: owner-ratified 2026-06-20. This section is normative. The acceptance
+checklist item "EXEC-E vector-generation Phase 3 plan drafted before
+implementation" is satisfied by this section.**
 
-Output:
+The following decisions close EOQ-001-ERRATA-002 (see
+`docs/concepts/ERRATA.md` ERRATA-002 for the symptom evidence and root cause).
+Implementers MUST satisfy all five sub-decisions; changing any frozen value
+requires a §15 amendment to this document before implementation.
 
-- Work plan for delta-preserving minimization.
-- Corpus expansion criteria for parallel, history, invoke, and step-0 variance.
+#### EXEC-E-D1: Candidate-count cap and wall-clock budget (Standards Action)
 
-Dependencies: EXEC-D for invoke ordering-sensitive vectors.
+`generate_sequences` in `py/vector_lib/search.py` currently bounds only
+sequence length (`if len(seq) >= max_depth` at `search.py:84`). It has no
+bound on how many candidates accumulate in `frontier` or on elapsed wall-clock
+time.  ERRATA-002 shows that a root `<parallel>` with five inline-`<content>`
+`<invoke>` children and `max_depth=4` (the value the iState caller passes at
+`backend/istate/codegen/vectors.py:63`) makes the search effectively
+non-terminating because alphabet breadth grows as `|alphabet|^depth` and each
+frontier node calls `ctx_factory()` in full.
 
-Independent from: converter schema audit except for input normalization.
+`generate_sequences` MUST accept two additional keyword parameters:
+
+- `max_candidates: int` — maximum cumulative frontier entries to evaluate
+  before stopping the `while frontier:` loop. Checked at the top of the loop,
+  before popping the next sequence, so the loop exits cleanly with whatever
+  partial results have been collected.
+- `time_budget_ms: int` — elapsed wall-clock budget in milliseconds, measured
+  from the moment `generate_sequences` is entered. Checked at the top of the
+  same loop, immediately after the `max_candidates` check.
+
+**Default values (proposed; flag for owner confirmation before freezing):**
+`max_candidates=2000`, `time_budget_ms=30000` (30 s). These are deliberately
+conservative for the common null-datamodel case, which completes in
+milliseconds and is unaffected. The iState caller MAY lower these further for
+interactive use.
+
+Registration policy: **Standards Action** — changing either default requires
+a §15 amendment to this document.
+
+#### EXEC-E-D2: Construct-aware reduction (Standards Action)
+
+When the chart being searched contains at least one `<parallel>` element or at
+least one `<invoke>` element (detectable from the SCJSON document before the
+first `ctx_factory()` call), the search MUST apply a construct-aware
+reduction: the effective `max_depth` passed into the BFS expansion is capped
+at `min(max_depth, 2)` for those charts, and the alphabet is reduced to the
+set of events that appear in `event` attributes of `<transition>` elements in
+the top-level (non-child-machine) document. The reduction is applied
+statically, before the loop, and logged as a diagnostic so callers can observe
+it.
+
+**Rationale:** The per-candidate `ctx_factory()` call for a chart that
+combines `<parallel>` and inline-`<content>` `<invoke>` re-instantiates all
+parallel regions and starts each `SCXMLChildHandler` from scratch on every
+frontier node (identified in ERRATA-002 as the dominant cost factor). The
+depth+alphabet reduction substantially contracts the frontier while retaining
+coverage of the top-level event/state topology. Full child-machine vector
+generation is out of scope for EXEC-E; it depends on M1P6 G2 (the IR
+front-end) and is deferred.
+
+**A future amendment MAY relax the depth cap for `<parallel>`-only charts
+(no `<invoke>`) once ctx-factory memoization is implemented (see EXEC-E-D3).**
+
+Registration policy: **Standards Action** — the reduction trigger conditions
+and the cap formula require a §15 amendment to change.
+
+#### EXEC-E-D3: ctx_factory memoization for repeated prefixes (Specification Required)
+
+For each distinct sequence prefix evaluated during BFS, the `ctx_factory()`
+result SHOULD be reused across frontier nodes that share that prefix, rather
+than re-instantiating from scratch. Implementation MAY memoize by prefix tuple
+key, constructing a fresh context only for novel prefixes. This is particularly
+load-bearing for inline-`<invoke>` charts because each `SCXMLChildHandler`
+initialization re-parses the inline `<content>` XML.
+
+Memoization is optional for the first landing of EXEC-E-D1 + EXEC-E-D2 (the
+budget+reduction alone resolves the hang). It MUST land before the
+construct-aware depth cap is relaxed per the note in EXEC-E-D2.
+
+Registration policy: **Specification Required** — implementation details may
+evolve without a §15 amendment as long as observable behavior (sequence
+output, coverage scores, and the `limited`/`blocked` terminal outcomes) is
+unchanged.
+
+#### EXEC-E-D4: Terminal outcomes — `limited` and `blocked` (Standards Action)
+
+This sub-decision resolves EOQ-001-ERRATA-002 and is co-owned with M1P6
+D-M1P6-8 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` §"Frozen Decisions"
+D-M1P6-8, ratified 2026-06-20). Do NOT restate the M1P6 definition here;
+implementers MUST read D-M1P6-8 as the primary normative source.
+
+The commitment here is the vector-search-layer contract:
+
+- **`limited`**: if `generate_sequences` exits the `while frontier:` loop
+  because `max_candidates` was reached or `time_budget_ms` elapsed, it MUST
+  return whatever partial vector list has been collected (possibly empty),
+  and MUST set a `truncated: True` flag on the return value (as a named
+  result object or an out-of-band signal agreed with the caller). The caller
+  (e.g. `vector_gen.generate_vectors` and the iState codegen path in
+  `backend/istate/codegen/vectors.py`) MUST propagate `truncated: True`
+  through to the terminal job status so consumers receive a `limited` outcome
+  rather than a silent success or an indefinite `STARTED`.
+- **`blocked`**: an un-lowerable construct (as defined by M1P6 D-M1P6-8) is
+  NOT signaled by `generate_sequences` — it is a compile-time diagnostic
+  emitted by the IR lowering layer (M1P6 G2). `blocked` is not a vector-search
+  outcome and MUST NOT be synthesized inside `generate_sequences`.
+- **Indefinite `STARTED`**: prohibited. A run that cannot terminate within the
+  committed budget MUST produce `limited`, never hang.
+
+Registration policy: **Standards Action** — the names `limited`/`blocked`, the
+`truncated` flag semantics, and the prohibition on indefinite `STARTED` are
+cross-family invariants (consumed by istate ERRATA-006 and rlvgl SCTD-00 §8).
+Changing them requires a §15 amendment here and a reciprocal amendment to M1P6
+D-M1P6-8.
+
+#### EXEC-E-D5: Regression corpus requirement (Specification Required)
+
+The following regression contract MUST hold across all EXEC-E implementation
+PRs:
+
+1. **Null-datamodel baseline unchanged.** The golden vectors for the existing
+   null-datamodel test machines in the scjson corpus MUST remain byte-identical
+   after EXEC-E-D1..D4 land. No churn in existing output is acceptable. The
+   existing `PYTHONPATH=py pytest -q py/tests` suite is the verification gate.
+
+2. **Bounded parallel+invoke regression vector.** A new corpus machine
+   containing at least one `<parallel>` element and at least one
+   inline-`<content>` `<invoke>` element MUST be added to the test corpus.
+   The vector-generation run for that machine MUST complete within the
+   committed `time_budget_ms` and MUST produce either a non-empty `limited`
+   result or a `success` result with at least one vector. The machine SHOULD
+   be small enough that the BFS completes well under the budget on any CI
+   runner (suggested: two parallel regions, one nested `<invoke>` with a
+   two-state child machine, alphabet of three events).
+
+Registration policy: **Specification Required** — the corpus machine shape may
+evolve; the two-part invariant (null-datamodel no-churn + bounded
+parallel+invoke completion) requires only a PR-level note to change.
+
+#### EXEC-E: Output summary
+
+- `py/vector_lib/search.py` extended with `max_candidates` + `time_budget_ms`
+  parameters, construct-aware depth/alphabet reduction, and `truncated` signal.
+- `py/vector_gen.py` updated to propagate `truncated` to callers.
+- iState codegen path (`backend/istate/codegen/vectors.py`) updated to treat
+  `truncated: True` as a `limited` terminal outcome.
+- New bounded `<parallel>`+`<invoke>` regression machine added to the corpus.
+
+Dependencies: EXEC-E-D4 and the `limited`/`blocked` naming are jointly owned
+with M1P6 D-M1P6-8; EXEC-E-D3 memoization SHOULD land before any future
+relaxation of the EXEC-E-D2 depth cap; invoke ordering semantics remain under
+EXEC-D.
+
+Independent from: converter schema audit, Ruby conformance (EXEC-F), and the
+M1P6 IR front-end (EXEC-E resolves the hang at the search layer; full
+child-machine vectors depend on M1P6 G2).
 
 ### EXEC-F: Ruby Execution Conformance
 
@@ -191,7 +336,9 @@ EXEC-D, EXEC-E, and EXEC-F are deferred to larger initiatives.
   entries now carry inline reasons.
 - [ ] EXEC-D invoke/finalize ordering concepts drafted before behavioral
   changes.
-- [ ] EXEC-E vector-generation Phase 3 plan drafted before implementation.
+- [x] EXEC-E vector-generation Phase 3 plan drafted before implementation.
+  Ratified 2026-06-20; see §5 EXEC-E for the committed bound (EXEC-E-D1..D5)
+  resolving EOQ-001-ERRATA-002.
 - [ ] EXEC-F Ruby conformance TODOs rebaselined against this doc.
 
 ## Section 8. Manager Notes
@@ -224,11 +371,27 @@ initiative.
 - `docs/TODO-ENGINE-PY.md`
 - `docs/TODO-ENGINE-RUBY.md`
 - `docs/concepts/SCJSON-00-CONCEPTS.md`
+- `docs/concepts/ERRATA.md` (ERRATA-002: vector-generation BFS hang; symptom
+  evidence and root cause for EXEC-E)
 - `py/scjson/cli.py`
 - `py/scjson/context.py`
 - `py/uber_test.py`
+- `py/vector_lib/search.py` (EXEC-E: `generate_sequences` BFS, `while
+  frontier:` at line 82, depth cap at line 84, frontier append at lines
+  100–101)
+- `py/vector_gen.py`
 - `ruby/lib/scjson/engine/context.rb`
+- `softoboros/backend/istate/codegen/vectors.py` (iState caller; passes
+  `max_depth=4, limit=1` at line 63)
+- `softoboros/docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` (M1P6 D-M1P6-8:
+  terminal codegen outcomes; G1 gate: vector-search bound)
 
 ## Section 11. Change Log
 
 - 2026-05-14: Initial execution concepts document.
+- 2026-06-20: §5 EXEC-E expanded with five normative sub-decisions
+  (EXEC-E-D1..D5) committing the candidate-count cap, wall-clock budget,
+  construct-aware reduction, ctx_factory memoization policy, `limited`/`blocked`
+  terminal outcomes, and regression corpus requirement. Resolves
+  EOQ-001-ERRATA-002 (`docs/concepts/ERRATA.md` ERRATA-002). Acceptance
+  checklist item EXEC-E marked satisfied. §10 updated with EXEC-E cited files.

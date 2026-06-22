@@ -37,6 +37,11 @@ from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
 from .invoke import InvokeRegistry, InvokeHandler
 from . import dataclasses as dataclasses_module
+from .ecmascript_normalizer import (
+    ECMAScriptNormalizationError,
+    normalize as _normalize_ecmascript,
+    normalize_script as _normalize_ecmascript_script,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -421,8 +426,8 @@ class DocumentContext(BaseModel):
         dm_attr = getattr(doc, "datamodel_attribute", "null")
         if not dm_attr or dm_attr == "null":
             doc.datamodel_attribute = "python"
-        elif dm_attr != "python":
-            raise ValueError("Only the python datamodel is supported")
+        elif dm_attr not in ("python", "ecmascript"):
+            raise ValueError("Only the python and ecmascript datamodels are supported")
         raw_data = doc.model_dump(mode="python")
         raw_data["datamodel_attribute"] = doc.datamodel_attribute
 
@@ -451,12 +456,17 @@ class DocumentContext(BaseModel):
         parent: Optional[ActivationRecord],
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
+        ecmascript_mode: bool = False,
     ) -> ActivationRecord:
-        """Recursively create activations and collect datamodel entries."""
+        """Recursively create activations and collect datamodel entries.
 
-        # The Scxml root has no `id` attribute — its `name` is metadata, not an
+        When ``ecmascript_mode`` is ``True``, ``<data>`` expressions are
+        normalized through the ECMAScript normalizer before evaluation so that
+        JS literals evaluate correctly in Python (M1P6 D-M1P6-1).
+        """
+        # The Scxml root has no `id` attribute -- its `name` is metadata, not an
         # identifier, and using it as the activation id collides with state ids
-        # of the same value (e.g. <scxml name="menu">…<state id="menu"/></scxml>).
+        # of the same value (e.g. <scxml name="menu">...<state id="menu"/></scxml>).
         # The collision wipes the matching state from `_filter_states` outputs
         # because `_is_user_state` rejects anything == root_activation.id.
         if isinstance(node, Scxml):
@@ -465,7 +475,9 @@ class DocumentContext(BaseModel):
             ident = getattr(node, "id", None) or getattr(node, "name", None) or "anon"
         act = ActivationRecord(id=ident, node=node, parent=parent)
         act.local_data.update(
-            DocumentContext._extract_datamodel(node, evaluator, allow_unsafe_eval)
+            DocumentContext._extract_datamodel(
+                node, evaluator, allow_unsafe_eval, ecmascript_mode=ecmascript_mode
+            )
         )
 
         for t in getattr(node, "transition", []):
@@ -488,25 +500,29 @@ class DocumentContext(BaseModel):
         for child in getattr(node, "state", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval
+                    child, act, evaluator, allow_unsafe_eval,
+                    ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "parallel", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval
+                    child, act, evaluator, allow_unsafe_eval,
+                    ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "final", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval
+                    child, act, evaluator, allow_unsafe_eval,
+                    ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "history", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval
+                    child, act, evaluator, allow_unsafe_eval,
+                    ecmascript_mode=ecmascript_mode,
                 )
             )
         return act
@@ -516,8 +532,15 @@ class DocumentContext(BaseModel):
         node: SCXMLNode,
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
+        ecmascript_mode: bool = False,
     ) -> Dict[str, Any]:
-        """Return a dict mapping data IDs to values for *node*'s datamodel."""
+        """Return a dict mapping data IDs to values for *node*'s datamodel.
+
+        When ``ecmascript_mode`` is ``True``, ``data.expr`` values are first
+        normalized through the ECMAScript normalizer so that JS literals
+        (``true``, ``false``, ``null``, object/array expressions) evaluate
+        correctly in the Python sandbox (M1P6 D-M1P6-1).
+        """
         result: Dict[str, Any] = {}
         for dm in getattr(node, "datamodel", []):
             for data in dm.data:
@@ -525,7 +548,8 @@ class DocumentContext(BaseModel):
                 if data.expr is not None:
                     try:
                         value = DocumentContext._evaluate_static(
-                            data.expr, {}, evaluator, allow_unsafe_eval
+                            data.expr, {}, evaluator, allow_unsafe_eval,
+                            ecmascript_mode=ecmascript_mode,
                         )
                     except (SafeEvaluationError, Exception):
                         value = data.expr
@@ -545,9 +569,19 @@ class DocumentContext(BaseModel):
         env: Mapping[str, Any],
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
+        ecmascript_mode: bool = False,
     ) -> Any:
-        """Evaluate ``expr`` during context construction."""
+        """Evaluate ``expr`` during context construction.
 
+        When ``ecmascript_mode`` is ``True`` the expression is first normalized
+        from the admitted ECMAScript subset to Python via the
+        ``ecmascript_normalizer`` before evaluation (M1P6 D-M1P6-1).
+        """
+        if ecmascript_mode:
+            try:
+                expr = _normalize_ecmascript(expr)
+            except ECMAScriptNormalizationError:
+                pass  # let the evaluator handle (will produce an error value)
         if allow_unsafe_eval:
             return eval(expr, {}, dict(env))
         return evaluator.evaluate(expr, env)
@@ -971,7 +1005,78 @@ class DocumentContext(BaseModel):
             logger.warning("<cancel> could not find pending send with id '%s'", send_id)
 
     def _do_script(self, script: Any, act: ActivationRecord) -> None:
-        logger.warning("<script> execution is not yet implemented; skipping block")
+        """Execute a ``<script>`` block.
+
+        For the ``python`` datamodel, script execution is not yet implemented
+        and emits a warning.  For the ``ecmascript`` datamodel (M1P6 D-M1P6-2),
+        the script body is normalized from the admitted ECMAScript subset to
+        Python statements and then executed via ``exec()`` against the current
+        datamodel scope so that assignments to datamodel locations take effect.
+        """
+        if not getattr(self, "_ecmascript_mode", False):
+            logger.warning("<script> execution is not yet implemented; skipping block")
+            return
+
+        # Collect the script body from the script element.
+        # The pydantic schema wraps the text as: content=[{'content': ['text']}]
+        body: str = ""
+        if isinstance(script, str):
+            body = script
+        elif hasattr(script, "content") and script.content:
+            parts = []
+            def _extract_text(node):
+                if isinstance(node, str):
+                    parts.append(node)
+                elif isinstance(node, dict):
+                    for v in node.values():
+                        _extract_text(v)
+                elif isinstance(node, list):
+                    for item in node:
+                        _extract_text(item)
+            _extract_text(script.content)
+            body = "".join(parts)
+        if not body or not body.strip():
+            return
+
+        try:
+            py_body = _normalize_ecmascript_script(body)
+        except ECMAScriptNormalizationError as exc:
+            logger.warning(
+                "<script> body contains unsupported ECMAScript (%s): %s",
+                exc.diagnostic,
+                exc,
+            )
+            self._emit_error("error.execution", front=True)
+            return
+
+        # Build a mutable local namespace from the current scope so that
+        # assignments within the script propagate back to the datamodel.
+        env = self._scope_env(act)
+        local_ns = dict(env)
+        try:
+            exec(py_body, {}, local_ns)  # noqa: S102
+        except Exception as exc:
+            logger.warning("<script> execution failed: %s", exc)
+            self._emit_error("error.execution", front=True)
+            return
+
+        # Write back any variables that changed to their canonical location.
+        # We always write back dicts and lists because they may have been
+        # mutated in-place (e.g. t_INPUTS['key'] = val changes the dict
+        # without replacing the reference, so an identity check would miss it).
+        for varname, new_value in local_ns.items():
+            if varname.startswith("_") or varname == "In":
+                continue
+            old_value = env.get(varname)
+            changed = new_value is not old_value
+            if not changed and isinstance(new_value, (dict, list)):
+                # Mutable container: always write back in case of in-place mutation.
+                changed = True
+            if changed:
+                try:
+                    self._set_variable(varname, new_value, act)
+                except Exception:
+                    pass
 
     def _build_send_payload(self, send: Any, env: Dict[str, Any], act: ActivationRecord) -> Any:
         payload: Dict[str, Any] = {}
@@ -1587,8 +1692,19 @@ class DocumentContext(BaseModel):
         return env
 
     def _evaluate_expr(self, expr: str, env: Mapping[str, Any]) -> Any:
-        """Evaluate ``expr`` with the configured sandbox or raw ``eval``."""
+        """Evaluate ``expr`` with the configured sandbox or raw ``eval``.
 
+        When the machine uses ``datamodel="ecmascript"`` (M1P6 D-M1P6-1), the
+        expression is first normalized from the admitted ECMAScript subset to
+        Python via ``ecmascript_normalizer.normalize`` before evaluation.  Any
+        inadmissible form raises ``ECMAScriptNormalizationError`` which is
+        re-raised so callers can emit the appropriate ``error.execution`` event.
+        """
+        if getattr(self, "_ecmascript_mode", False):
+            try:
+                expr = _normalize_ecmascript(expr)
+            except ECMAScriptNormalizationError:
+                raise
         if self.allow_unsafe_eval:
             return eval(expr, {}, dict(env))
         return self.evaluator.evaluate(expr, env)
@@ -2063,7 +2179,12 @@ class DocumentContext(BaseModel):
     ) -> "DocumentContext":
         evaluator = evaluator or SafeExpressionEvaluator()
         lookup, path_map = cls._build_json_lookup(doc, raw_data)
-        root_state = cls._build_activation_tree(doc, None, evaluator, allow_unsafe_eval)
+        # Detect ecmascript datamodel before building the activation tree so
+        # that data expressions are normalized during construction.
+        _em_mode = getattr(doc, "datamodel_attribute", "python") == "ecmascript"
+        root_state = cls._build_activation_tree(
+            doc, None, evaluator, allow_unsafe_eval, ecmascript_mode=_em_mode
+        )
         ctx = cls(
             doc=doc,
             root_activation=root_state,
@@ -2077,6 +2198,8 @@ class DocumentContext(BaseModel):
         except Exception:
             ctx._base_dir = None
         ctx._action_cache = {}
+        # Record whether this machine uses the ecmascript datamodel (M1P6 D-M1P6-1).
+        ctx._ecmascript_mode = getattr(doc, "datamodel_attribute", "python") == "ecmascript"
         ctx.json_order = cls._build_order_map(raw_data, path_map, source_xml)
         ctx.data_model = root_state.local_data
         ctx._index_activations(root_state)

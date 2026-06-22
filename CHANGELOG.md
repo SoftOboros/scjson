@@ -6,7 +6,7 @@ single version stream.
 
 | Language | Path                  | Latest version  | Per-package log |
 |----------|-----------------------|-----------------|------------------|
-| Python   | `py/`                 | 0.4.1           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
+| Python   | `py/`                 | 0.4.2           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
 | Ruby     | `ruby/`               | 0.4.1           | (in `git log`)   |
 | JS       | `js/`                 | 0.4.1           | (in `git log`)   |
 | Rust     | `rust/`               | 0.4.1           | (in `git log`)   |
@@ -17,6 +17,16 @@ single version stream.
 | C#       | `csharp/`             | (csproj)        | (in `git log`)   |
 
 ## Cross-language entries
+
+### 2026-06-20 — Python 0.4.2 (constrained-ECMAScript execution + M1 IR; Python-only)
+
+Python-only release (no JS/Ruby/Rust/Java changes). Adds the constrained-ECMAScript
+datamodel engine (`scjson.ecmascript_normalizer`), the M1 Executable IR
+(`scjson.exec_ir` + `lower_document`), admitted-`<script>` statement lowering, and a
+bounded vector-generation coverage search (fixes the `<parallel>`+`<invoke>` hang).
+Drives the Infinity Stack iState SCXML→Rust generator (parent
+`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md`). See [`py/CHANGELOG.md`](py/CHANGELOG.md)
+0.4.2 and `docs/concepts/ERRATA.md` ERRATA-002 (vector bound) + ERRATA-003 (`In()` gap).
 
 ### 2026-05-28 — 0.4.1 release (TypeScript helpText surface)
 

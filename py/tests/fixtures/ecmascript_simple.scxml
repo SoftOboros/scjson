@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml datamodel="ecmascript" initial="idle" version="1.0"
+       xmlns="http://www.w3.org/2005/07/scxml">
+  <datamodel>
+    <data id="x" expr="0"/>
+    <data id="flag" expr="false"/>
+  </datamodel>
+  <state id="idle">
+    <!-- ECMAScript cond: x === 0 (strict equality) -->
+    <transition cond="x === 0" event="go" target="active"/>
+    <!-- ECMAScript cond: flag === false -->
+    <transition cond="flag === false &amp;&amp; x !== 1" event="go2" target="done"/>
+  </state>
+  <state id="active">
+    <!-- ECMAScript cond: x &gt; 0 || flag === true -->
+    <transition cond="x &gt; 0 || flag === true" event="finish" target="done"/>
+    <transition event="reset" target="idle"/>
+  </state>
+  <state id="done"/>
+</scxml>
