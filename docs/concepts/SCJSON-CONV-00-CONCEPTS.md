@@ -670,6 +670,13 @@ Output:
   tutorial submodule.
 - Documentation that names which language conversion commands are expected to
   support each fixture family and which execution fixtures are SCION-supported.
+- Per-language parity audits as they are performed. The first is
+  `docs/concepts/CONV-I-LUA-PARITY-AUDIT.md` (2026-07-05): a static
+  code-level review (no Lua runtime was available to run `uber_test.py -l
+  lua` live) finding Lua has no `other_attributes`/`other_element`, no
+  `help_text`, no SCXML comment promotion, and no XInclude handling, plus
+  minimal test coverage — six sub-gates opened (LUA-CONV-G1..G6), one
+  deferred on runtime availability.
 
 Dependencies: CONV-E, CONV-F, and CONV-H.
 
@@ -886,3 +893,12 @@ It remains rejected for Python 0.3.7 and is not a dependency.
   idiomatically without requiring consumers to parse `other_attributes`";
   v0.4.1 is the action that satisfies that requirement on the published
   TypeScript surface.
+- 2026-07-05: §6 CONV-I gained a pointer to
+  `docs/concepts/CONV-I-LUA-PARITY-AUDIT.md`, the first per-language parity
+  audit produced under CONV-I. Static code-level review (no Lua runtime
+  available for a live `uber_test.py -l lua` run) found Lua has no
+  `other_attributes`/`other_element` structural surface, no `help_text`, no
+  SCXML comment promotion, and no XInclude handling, plus only two test
+  specs total. Six CONV-I sub-gates opened (LUA-CONV-G1..G6); five accepted
+  as backlog, one (live harness confirmation) deferred on runtime
+  availability. No implementation code changed.

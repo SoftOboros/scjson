@@ -68,8 +68,21 @@ climb — converter parity, then engine parity — not engine work alone.
 ## Roadmap (Iterations)
 
 0) Converter Parity Prerequisite
-- [ ] Audit the current "minimal subset converter" against the tutorial
-  corpus; file gaps as CONV-family backlog items, not here.
+- [x] Audit the current "minimal subset converter" against the schema and
+  the CONV-E/F/H accepted surfaces; gaps filed as CONV-family backlog in
+  `docs/concepts/CONV-I-LUA-PARITY-AUDIT.md` (2026-07-05): no
+  `other_attributes`/`other_element`, no `help_text`, no SCXML comment
+  promotion, no XInclude handling, and minimal test coverage
+  (LUA-CONV-G1..G5). This was a static code review — no Lua runtime was
+  available in the auditing environment, so the live `uber_test.py -l lua`
+  corpus run (LUA-CONV-G6) is deferred, not done. Treat G1-G5 as real but
+  unconfirmed-by-execution until G6 lands.
+- [ ] Land LUA-CONV-G1 through LUA-CONV-G5 (see the audit doc's Section 4
+  gate table) in the Lua converter.
+- [ ] Run LUA-CONV-G6 (`python py/uber_test.py -l lua` against the tutorial
+  corpus, on a machine/CI with Lua 5.4 + `luaexpat` + `dkjson` available)
+  once G1-G5 land, to confirm the audit's static findings and close the
+  loop before claiming converter parity.
 - [ ] Do not start Section 1 engine work on a converter that cannot yet
   round-trip the corpus used for trace comparison — engine traces are only
   meaningful once the underlying SCJSON documents parse correctly.
@@ -168,8 +181,11 @@ climb — converter parity, then engine parity — not engine work alone.
 ## Status Snapshot — 2026-07-05
 - Converter CLI (`json`/`xml`/`validate`) exists, rated Experimental in
   `docs/COMPATIBILITY.md`; no engine/trace code exists yet.
-- This checklist is newly drafted; no roadmap items are checked.
-- Depends on a converter-parity pass (Section 0) before Section 1 engine
+- Converter-parity audit complete (static code review):
+  `docs/concepts/CONV-I-LUA-PARITY-AUDIT.md`. Five concrete gaps accepted
+  as backlog (LUA-CONV-G1..G5); live harness confirmation (LUA-CONV-G6)
+  deferred on Lua runtime availability.
+- Depends on LUA-CONV-G1..G5 landing (Section 0) before Section 1 engine
   work is meaningful, and on EXEC-D before Section 2 ordering work.
 
 ---
