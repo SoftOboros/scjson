@@ -318,12 +318,98 @@ Dependencies: EXEC-D for ordering-sensitive claims.
 
 Independent from: Python 0.3.7 release gates.
 
+### EXEC-G: Go Execution Conformance
+
+Goal: build a Go execution engine achieving SCION-compatible trace parity
+per Section 3/4, starting from the existing Go converter CLI (`json`/`xml`/
+`validate` at `go/main.go:123,199,272`). No execution/trace code exists in
+`go/` today.
+
+Output:
+
+- `docs/TODO-ENGINE-GO.md` checklist plan (this document remains
+  authoritative for trace/ordering semantics).
+- Go engine `engine-trace` subcommand emitting the Section 3 trace record
+  schema.
+- Go acceptance corpus wired into the existing `py/uber_test.py`
+  `LANG_CMDS["go"]` entry.
+
+Dependencies: EXEC-D for ordering-sensitive claims.
+
+Independent from: Python 0.3.7 release gates; EXEC-H, EXEC-I, EXEC-J.
+
+### EXEC-H: Swift Execution Conformance
+
+Goal: build a Swift execution engine achieving SCION-compatible trace
+parity per Section 3/4. The `swift` submodule (nested, pointing at
+`SoftOboros/scjson-swift`) was not checked out when this work package was
+drafted; a submodule-init-and-fact-check step is a hard prerequisite before
+any other Swift engine work is scheduled.
+
+Output:
+
+- `docs/TODO-ENGINE-SWIFT.md` checklist plan, including a Roadmap step 0 that
+  verifies current Swift converter/CLI state against the submodule source
+  before trusting any inference drawn from the harness.
+- Swift engine `engine-trace` subcommand emitting the Section 3 trace record
+  schema.
+- Swift acceptance corpus wired into the existing `py/uber_test.py`
+  `LANG_CMDS["swift"]` entry.
+
+Dependencies: EXEC-D for ordering-sensitive claims; submodule initialization
+precedes all other EXEC-H work.
+
+Independent from: Python 0.3.7 release gates; EXEC-G, EXEC-I, EXEC-J.
+
+### EXEC-I: C# Execution Conformance
+
+Goal: build a C# execution engine achieving SCION-compatible trace parity
+per Section 3/4, starting from the existing C# converter CLI (`json`/`xml`/
+`validate` switch cases at `csharp/ScjsonCli/Program.cs:40,42,44`), tested
+with xUnit (`csharp/Scjson.Tests/CliTests.cs`). No execution/trace code
+exists in `csharp/` today.
+
+Output:
+
+- `docs/TODO-ENGINE-CSHARP.md` checklist plan.
+- C# engine `engine-trace` verb emitting the Section 3 trace record schema.
+- C# acceptance corpus wired into the existing `py/uber_test.py`
+  `LANG_CMDS["csharp"]` entry (aliases `"cs"`, `"dotnet"`).
+
+Dependencies: EXEC-D for ordering-sensitive claims.
+
+Independent from: Python 0.3.7 release gates; EXEC-G, EXEC-H, EXEC-J.
+
+### EXEC-J: Lua Execution Conformance
+
+Goal: build a Lua execution engine achieving SCION-compatible trace parity
+per Section 3/4. Unlike Go/Swift/C#, Lua's converter is rated Experimental
+("minimal subset converter") in `docs/COMPATIBILITY.md`, not Beta — engine
+work here has a converter-parity prerequisite that Go/Swift/C# do not.
+
+Output:
+
+- `docs/TODO-ENGINE-LUA.md` checklist plan, including an explicit Roadmap
+  step 0 that scopes the converter-parity audit as CONV-family backlog
+  rather than absorbing it into EXEC-J estimates.
+- Lua engine `engine-trace` command emitting the Section 3 trace record
+  schema, added to the existing `lua/bin/scjson` CLI.
+- Lua acceptance corpus wired into the existing `py/uber_test.py`
+  `LANG_CMDS["lua"]` entry.
+
+Dependencies: EXEC-D for ordering-sensitive claims; a converter-parity pass
+(coordinated with CONV-00, not restated here) precedes meaningful engine
+trace comparison.
+
+Independent from: Python 0.3.7 release gates; EXEC-G, EXEC-H, EXEC-I.
+
 ## Section 6. Python 0.3.7 Execution Gates
 
 Only EXEC-A, EXEC-B, and the Python portion of EXEC-C are accepted as Python
 0.3.7 release gates.
 
-EXEC-D, EXEC-E, and EXEC-F are deferred to larger initiatives.
+EXEC-D, EXEC-E, EXEC-F, EXEC-G, EXEC-H, EXEC-I, and EXEC-J are deferred to
+larger initiatives.
 
 ## Section 7. Acceptance Checklist
 
@@ -340,6 +426,20 @@ EXEC-D, EXEC-E, and EXEC-F are deferred to larger initiatives.
   Ratified 2026-06-20; see §5 EXEC-E for the committed bound (EXEC-E-D1..D5)
   resolving EOQ-001-ERRATA-002.
 - [ ] EXEC-F Ruby conformance TODOs rebaselined against this doc.
+- [ ] EXEC-G Go execution engine checklist drafted against this doc.
+  Satisfied by `docs/TODO-ENGINE-GO.md` (drafted 2026-07-05); engine
+  implementation itself remains open.
+- [ ] EXEC-H Swift execution engine checklist drafted against this doc.
+  Satisfied by `docs/TODO-ENGINE-SWIFT.md` (drafted 2026-07-05); submodule
+  initialization and fact-check (Roadmap step 0) and engine implementation
+  remain open.
+- [ ] EXEC-I C# execution engine checklist drafted against this doc.
+  Satisfied by `docs/TODO-ENGINE-CSHARP.md` (drafted 2026-07-05); engine
+  implementation itself remains open.
+- [ ] EXEC-J Lua execution engine checklist drafted against this doc.
+  Satisfied by `docs/TODO-ENGINE-LUA.md` (drafted 2026-07-05); the
+  converter-parity prerequisite (Roadmap step 0) and engine implementation
+  remain open.
 
 ## Section 8. Manager Notes
 
@@ -350,6 +450,14 @@ Safe parallelism:
 - EXEC-E should wait for EXEC-D if it touches invoke/finalize vectors.
 - EXEC-F can inventory Ruby docs in parallel, but should not assert new ordering
   policy before EXEC-D.
+- EXEC-G, EXEC-H, EXEC-I, and EXEC-J are file-disjoint from each other
+  (`go/`, `swift/`, `csharp/`, `lua/` respectively) and from EXEC-F
+  (`ruby/`), so their checklists and eventual engine implementations may
+  proceed in parallel worktrees. None should assert new ordering policy
+  before EXEC-D. EXEC-H additionally cannot start real engine work until its
+  Roadmap step 0 (submodule init) lands, and EXEC-J cannot start Roadmap
+  step 1 until its converter-parity prerequisite (Roadmap step 0, owned by
+  CONV-00) lands.
 
 Recommended worker boundaries:
 
@@ -357,6 +465,14 @@ Recommended worker boundaries:
 - Worker 2: Python root activation regression test only.
 - Worker 3: unsupported corpus/submodule skip policy only.
 - Worker 4: invoke/finalize ordering concepts only.
+- Worker 5: Go engine checklist/implementation only (`go/`,
+  `docs/TODO-ENGINE-GO.md`, `docs/ENGINE-GO.md`).
+- Worker 6: Swift submodule init + fact-check only, before any Swift engine
+  implementation is assigned.
+- Worker 7: C# engine checklist/implementation only (`csharp/`,
+  `docs/TODO-ENGINE-CSHARP.md`, `docs/ENGINE-CSHARP.md`).
+- Worker 8: Lua converter-parity audit only (coordinate with CONV-00),
+  strictly before any Lua engine implementation is assigned.
 
 ## Section 9. Rejections
 
@@ -385,6 +501,20 @@ initiative.
   `max_depth=4, limit=1` at line 63)
 - `softoboros/docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` (M1P6 D-M1P6-8:
   terminal codegen outcomes; G1 gate: vector-search bound)
+- `go/main.go` (converter CLI: `json` at line 123, `xml` at line 199,
+  `validate` at line 272), `go/converter.go`, `go/cli_test.go`,
+  `go/README.md`
+- `csharp/ScjsonCli/Program.cs` (converter CLI switch: `xml` at line 40,
+  `json` at line 42, `validate` at line 44), `csharp/Scjson.Tests/CliTests.cs`,
+  `csharp/README.md`
+- `lua/bin/scjson` (usage/commands at lines 32-46), `lua/tests/scjson_spec.lua`,
+  `lua/README.md`
+- `.gitmodules` (`swift` submodule → `SoftOboros/scjson-swift`, not checked
+  out at time of EXEC-H drafting)
+- `py/uber_test.py` (`LANG_CMDS` mapping at lines 76-95; aliases including
+  `"cs"`/`"dotnet"` → `"csharp"` and `"swfit"` → `"swift"` at lines 98-110)
+- `docs/TODO-ENGINE-GO.md`, `docs/TODO-ENGINE-SWIFT.md`,
+  `docs/TODO-ENGINE-CSHARP.md`, `docs/TODO-ENGINE-LUA.md`
 
 ## Section 11. Change Log
 
@@ -395,3 +525,15 @@ initiative.
   terminal outcomes, and regression corpus requirement. Resolves
   EOQ-001-ERRATA-002 (`docs/concepts/ERRATA.md` ERRATA-002). Acceptance
   checklist item EXEC-E marked satisfied. §10 updated with EXEC-E cited files.
+- 2026-07-05: §5 expanded with four new work packages — EXEC-G (Go), EXEC-H
+  (Swift), EXEC-I (C#), EXEC-J (Lua) — each requesting full execution-engine
+  parity with Python, mirroring EXEC-F's shape. All four are deferred to
+  larger initiatives (§6) and are not Python 0.3.7 release gates. §7
+  acceptance checklist gained four corresponding items, satisfied by the new
+  `docs/TODO-ENGINE-GO.md`, `docs/TODO-ENGINE-SWIFT.md`,
+  `docs/TODO-ENGINE-CSHARP.md`, and `docs/TODO-ENGINE-LUA.md` checklists
+  (engine implementation itself remains open in all four). §8 updated with
+  file-disjoint parallelism notes and four new recommended worker
+  boundaries. §10 updated with cited converter/CLI/test files for all four
+  languages. No implementation code was written as part of this change —
+  planning only, per spec-before-code discipline.

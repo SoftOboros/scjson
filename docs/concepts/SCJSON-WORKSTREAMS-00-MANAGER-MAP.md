@@ -47,6 +47,10 @@ flowchart LR
   HARNESS["HARNESS-00 corpus and CI gates"]
   VEC["VEC-00 vector generation phase 3"]
   RUBY["RUBY-EXEC-00 Ruby conformance"]
+  GO["GO-EXEC-00 Go conformance"]
+  SWIFT["SWIFT-EXEC-00 Swift conformance"]
+  CSHARP["CSHARP-EXEC-00 C# conformance"]
+  LUA["LUA-EXEC-00 Lua conformance"]
   DOCARCH["DOCARCH-00 doc archive"]
 
   SBC --> PYREL
@@ -56,6 +60,10 @@ flowchart LR
   EXEC --> HARNESS
   EXEC --> VEC
   EXEC --> RUBY
+  EXEC --> GO
+  EXEC --> SWIFT
+  EXEC --> CSHARP
+  EXEC --> LUA
   CONV --> DOCARCH
   EXEC --> DOCARCH
   HARNESS --> DOCARCH
@@ -75,6 +83,10 @@ workstream can proceed in parallel if write scopes are disjoint.
 | CONV-I | `SCJSON-CONV-00-CONCEPTS.md` | Post-CONV-H | focused conversion corpus, `py/uber_test.py`, converter parity tests, docs | CONV-E/F/H | EXEC docs if execution fixtures stay separate |
 | VEC-00 | future doc | Deferred | vector generator, vector tests, corpus expansion | EXEC-D | CONV docs after field audit |
 | RUBY-EXEC-00 | future doc | Deferred | Ruby engine docs/tests/gemspec | EXEC-D | converter docs if no README overlap |
+| GO-EXEC-00 | `docs/TODO-ENGINE-GO.md` | Deferred | `go/` engine code, `docs/ENGINE-GO.md`, `go/ENGINE-GO-DETAILS.md` | EXEC-D | SWIFT-EXEC-00, CSHARP-EXEC-00, LUA-EXEC-00, RUBY-EXEC-00 (file-disjoint) |
+| SWIFT-EXEC-00 | `docs/TODO-ENGINE-SWIFT.md` | Deferred | `swift` submodule init, Swift engine code/docs (in `scjson-swift`) | EXEC-D, own Roadmap step 0 (submodule init) | GO-EXEC-00, CSHARP-EXEC-00, LUA-EXEC-00, RUBY-EXEC-00 (file-disjoint) |
+| CSHARP-EXEC-00 | `docs/TODO-ENGINE-CSHARP.md` | Deferred | `csharp/` engine code, `docs/ENGINE-CSHARP.md`, `csharp/ENGINE-CSHARP-DETAILS.md` | EXEC-D | GO-EXEC-00, SWIFT-EXEC-00, LUA-EXEC-00, RUBY-EXEC-00 (file-disjoint) |
+| LUA-EXEC-00 | `docs/TODO-ENGINE-LUA.md` | Deferred | `lua/` engine code, `docs/ENGINE-LUA.md`, `lua/ENGINE-LUA-DETAILS.md` | EXEC-D, CONV-00 (converter-parity prerequisite) | GO-EXEC-00, SWIFT-EXEC-00, CSHARP-EXEC-00, RUBY-EXEC-00 (file-disjoint) |
 | DOCARCH-00 | future doc | Deferred | archive headers, doc moves, README links | CONV-00, EXEC-00, HARNESS-00 | none touching docs index |
 
 ## Section 5. Python 0.3.7 Manager Cut
@@ -165,6 +177,12 @@ docs are accepted:
 - EXEC-D invoke/finalize ordering concepts.
 - VEC-00 vector minimization and corpus expansion.
 - RUBY-EXEC-00 Ruby conformance.
+- GO-EXEC-00 Go conformance.
+- SWIFT-EXEC-00 Swift conformance (submodule init required first; see
+  `docs/TODO-ENGINE-SWIFT.md` Roadmap step 0).
+- CSHARP-EXEC-00 C# conformance.
+- LUA-EXEC-00 Lua conformance (converter itself is Experimental tier, not
+  Beta like Go/Swift/C#; converter-parity prerequisite owned by CONV-00).
 - DOCARCH-00 archive old docs.
 
 ## Section 7. Explicit Non-Dependencies
@@ -203,3 +221,12 @@ changed files in their final report.
 - 2026-05-26: Added CONV-I as the follow-on propagation workstream for
   maintained language converters, focused checked-in corpus coverage, and
   SCION-supported Python reference gates.
+- 2026-07-05: Added four deferred workstreams — GO-EXEC-00, SWIFT-EXEC-00,
+  CSHARP-EXEC-00, LUA-EXEC-00 — for full execution-engine parity in Go,
+  Swift, C#, and Lua, each governed by `SCJSON-EXEC-00-CONCEPTS.md` (work
+  packages EXEC-G/H/I/J) and tracked by a new per-language
+  `docs/TODO-ENGINE-<LANG>.md` checklist. All four depend on EXEC-D and are
+  file-disjoint from each other and from RUBY-EXEC-00. SWIFT-EXEC-00 has an
+  additional own-Roadmap-step-0 dependency (its submodule was not checked
+  out when drafted); LUA-EXEC-00 has an additional CONV-00 dependency (its
+  converter is Experimental tier, not Beta).
