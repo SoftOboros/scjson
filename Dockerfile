@@ -116,7 +116,7 @@ RUN set -eux; \
     && unzip awscliv2.zip \
     && ./aws/install \
     && rm -rf awscliv2.zip aws
-RUN npm install -g yarn @openai/codex makeitso-codex
+RUN npm install -g yarn
 
 # Upgrade Rust
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
@@ -148,7 +148,6 @@ ENV RUSTC_WRAPPER=/usr/bin/sccache
 # Prepare user-owned folders and Python venv
 RUN mkdir -p \
     /home/${SOFTOBOROS_USER}/.ssh \
-    /home/${SOFTOBOROS_USER}/.codex \
     /home/${SOFTOBOROS_USER}/.npm \
     /home/${SOFTOBOROS_USER}/.local \
     /home/${SOFTOBOROS_USER}/.luarocks \
