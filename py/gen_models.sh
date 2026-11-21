@@ -90,3 +90,6 @@ python patch_finalize_restrictions.py \
 
 # Preserve grouped payloads and record the executable order defined by SCJSON-CONV-00.
 python patch_execution_order.py
+for schema in ../scjson.schema.json ../js/scjson.schema.json ../java/src/main/resources/scjson.schema.json; do
+    python patch_scxml_forward_ref.py --schema-file "$schema"
+done

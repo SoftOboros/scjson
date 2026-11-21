@@ -23,10 +23,15 @@ USAGE::
 
 import argparse
 import ast
+import json
 import re
 import subprocess
 from pathlib import Path
 from typing import Dict, List
+
+
+MIXED_CONTENT = 'Optional[List["str | XmlPayloadElement | NestedChart[Scxml]"]]'
+PAYLOAD_IMPORT = "from ..xml_payload import NestedChart, XmlPayloadElement"
 
 
 def extract_readme_descriptions(readme_path: Path) -> Dict[str, str]:
@@ -85,7 +90,7 @@ class FieldStripper(ast.NodeTransformer):
         # content and expr as Optional
         new_fields = [
             self._make_optional(
-                "content", 'Optional[List["Scxml"]]', "Recursive SCJSON"
+                "content", MIXED_CONTENT, "SCXML mixed wildcard"
             ),
             self._make_optional("expr", "Optional[str]", None),
             self._make_field_call(
@@ -157,6 +162,17 @@ def patch_generated_model(file_path: str, class_name: str, fields_to_remove: Lis
     path = Path(file_path)
     original_code = path.read_text()
     parsed = ast.parse(original_code)
+    # Refresh already-processed models without rewriting unrelated generated code.
+    model = next(node for node in parsed.body if isinstance(node, ast.ClassDef) and node.name == class_name)
+    content = next(node for node in model.body if isinstance(node, ast.AnnAssign) and node.target.id == "content")
+    if isinstance(content.value, ast.Constant) and content.value.value is None:
+        lines = original_code.splitlines(keepends=True)
+        lines[content.lineno - 1 : content.end_lineno] = [f"    content: {MIXED_CONTENT} = None\n"]
+        if PAYLOAD_IMPORT not in original_code.splitlines():
+            index = next(i for i, line in enumerate(lines) if line.startswith("from xsdata_pydantic.fields import"))
+            lines.insert(index + 1, PAYLOAD_IMPORT + "\n")
+        path.write_bytes("".join(lines).encode("utf-8"))
+        return
 
     transformer = FieldStripper(class_name=class_name, field_names=fields_to_remove)
     modified_ast = transformer.visit(parsed)
@@ -183,6 +199,9 @@ def patch_generated_model(file_path: str, class_name: str, fields_to_remove: Lis
         lines.insert(0, "from typing import Optional, List, Any  # inserted by patch")
 
     # Write and format
+    if PAYLOAD_IMPORT not in lines:
+        index = next(i for i, line in enumerate(lines) if line.startswith("from typing import"))
+        lines.insert(index + 1, PAYLOAD_IMPORT)
     modified_code = "\n".join(lines)
     path.write_text(modified_code)
     subprocess.run(["black", str(path)], check=True)
@@ -193,13 +212,25 @@ def patch_generated_model(file_path: str, class_name: str, fields_to_remove: Lis
     print("   • Formatted with Black")
 
 
+def patch_payload_schema(path: Path) -> None:
+    """Project only the mixed payload definitions into the maintained schema."""
+    from scjson.pydantic import Content
+
+    model = Content.model_json_schema()
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    definitions = schema["$defs"]
+    definitions["Content"]["properties"]["content"] = model["$defs"]["Content"]["properties"]["content"]
+    definitions["XmlPayloadElement"] = model["$defs"]["XmlPayloadElement"]
+    path.write_bytes((json.dumps(schema, indent=4) + "\n").encode("utf-8"))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Patch SCXML model for recursive schema compatibility."
     )
-    parser.add_argument(
-        "--file", required=True, help="Path to the generated Python model file."
-    )
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--file", help="Path to the generated Python model file.")
+    target.add_argument("--schema-file", type=Path, help="Path to a maintained JSON Schema.")
     parser.add_argument(
         "--class",
         dest="class_name",
@@ -213,4 +244,7 @@ if __name__ == "__main__":
         help="Field names to remove and rewrite.",
     )
     args = parser.parse_args()
-    patch_generated_model(args.file, args.class_name, args.remove)
+    if args.schema_file:
+        patch_payload_schema(args.schema_file)
+    else:
+        patch_generated_model(args.file, args.class_name, args.remove)

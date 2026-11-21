@@ -517,7 +517,10 @@ def _strip_unsupported_character_data_in_place(elem: _ET._Element) -> None:
         elem.text = ""
 
     for child in list(elem):
-        _strip_unsupported_character_data_in_place(child)
+        # Only an embedded chart has SCXML structure inside a mixed payload.
+        # A literal XML element can share a name such as "state" or "send".
+        if local != "content" or child.tag in {"scxml", "{http://www.w3.org/2005/07/scxml}scxml"}:
+            _strip_unsupported_character_data_in_place(child)
         if structural_scxml and child.tail and child.tail.strip():
             child.tail = ""
 

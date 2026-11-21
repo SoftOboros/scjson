@@ -1142,38 +1142,16 @@ class DocumentContext(BaseModel):
         raw = self.json_lookup.get(id(content_obj))
         if raw is None:
             if hasattr(content_obj, "model_dump"):
-                raw = content_obj.model_dump(mode="python")
+                raw = content_obj.model_dump(mode="json", exclude_unset=True)
             else:
                 raw = content_obj
 
-        return self._coerce_content_node(raw)
-
-    def _coerce_content_node(self, node: Any) -> Any:
-        if isinstance(node, dict):
-            if "content" in node:
-                values = [self._coerce_content_node(item) for item in node["content"]]
-                if not values:
-                    return ""
-                if all(isinstance(value, str) for value in values):
-                    return "".join(values)
-                return [value for value in values if value is not None]
-
-            filtered: Dict[str, Any] = {}
-            for key, value in node.items():
-                if key == "other_attributes" and not value:
-                    continue
-                filtered[key] = self._coerce_content_node(value)
-            return filtered
-
-        if isinstance(node, list):
-            values = [self._coerce_content_node(item) for item in node]
-            if not values:
-                return []
-            if all(isinstance(value, str) for value in values):
-                return "".join(values)
-            return [value for value in values if value is not None]
-
-        return node
+        items = raw.get("content") if isinstance(raw, dict) else raw
+        if items is None:
+            return ""
+        if isinstance(items, list) and all(isinstance(item, str) for item in items):
+            return "".join(items)
+        return items
 
     def _split_if_branches(self, block: Any) -> List[Dict[str, Any]]:
         from .execution_order import ACTION_FIELDS, MARKER_FIELDS, ordered_children
@@ -2290,6 +2268,21 @@ class DocumentContext(BaseModel):
             if isinstance(node, dict):
                 updated: Dict[str, Any] = {}
                 for key, value in node.items():
+                    if key == "content" and field_name in {"send", "invoke", "donedata"}:
+                        # These fields hold <content> elements. The elements'
+                        # own content is a mixed wildcard, already canonical.
+                        def payload_block(block: Any) -> Any:
+                            if isinstance(block, str):
+                                return {"content": [block]}
+                            if isinstance(block, dict) and isinstance(block.get("content"), str):
+                                return {**block, "content": [block["content"]]}
+                            return block
+
+                        updated[key] = (
+                            [payload_block(block) for block in value]
+                            if isinstance(value, list) else payload_block(value)
+                        )
+                        continue
                     if key == "content" and isinstance(value, list) and not skip_content:
                         # Data.content is a mixed wildcard. Its character data
                         # already has the shape expected by the validated model.

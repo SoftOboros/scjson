@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional
 from pydantic import BaseModel, ConfigDict, field_serializer, model_validator
 from xsdata_pydantic.fields import field
+from ..xml_payload import NestedChart, XmlPayloadElement
 
 from ..execution_order import ordered_children
 
@@ -93,7 +94,7 @@ class ScxmlCancelType(BaseModel):
 
 
 class ScxmlContentType(BaseModel):
-    content: Optional[List["Scxml"]] = None
+    content: Optional[List["str | XmlPayloadElement | NestedChart[Scxml]"]] = None
     expr: Optional[str] = None
     other_attributes: dict[str, Any] = field(
         default_factory=dict, title="Other Attributes"

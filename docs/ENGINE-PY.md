@@ -29,6 +29,12 @@ the original character data for round trips. The executable IR records the
 decoded constant in the data slot and reserves `expr_source` for an authored
 `expr` attribute.
 
+For `<send>` and `<donedata>`, literal `<content>` text keeps its characters,
+including surrounding whitespace. Thus `<content>42</content>` delivers the
+string `"42"`, while `<content expr="6 * 7"/>` delivers the number `42`.
+Mixed content keeps text and qualified XML elements in order. An inline
+`<invoke><content><scxml>…</scxml></content></invoke>` carries a nested chart.
+
 The Python engine executes SCXML/SCJSON statecharts and can emit deterministic JSONL traces of execution. A set of CLI utilities help you:
 
 - Run the Python engine and collect traces

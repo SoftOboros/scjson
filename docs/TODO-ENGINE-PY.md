@@ -54,8 +54,9 @@ Decision notes (invoke/finalize ordering)
   handlers. Cover original tests 156 and 159 through both file loaders.
 - [ ] Repair the remaining first-use bindings, error interruption, and
   XML/SCJSON action discrepancies in both dialects (ERRATA-005 through -007).
-- [ ] Repair the canonical literal-payload model with conversion and
-  round-trip coverage (ERRATA-008).
+- [x] Represent literal, nested XML and inline chart payloads in both
+  generated Python model families and the canonical schema. Check round trips,
+  event delivery and the original 17 literal-payload roots (ERRATA-008).
 - [ ] Resolve every remaining authored-outcome discrepancy in the original
   ECMA pilot (ERRATA-009) and clear the reproducible qualification failures
   on their affected platforms (ERRATA-010). The

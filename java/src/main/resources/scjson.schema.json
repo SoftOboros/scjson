@@ -145,7 +145,22 @@
                     "anyOf": [
                         {
                             "items": {
-                                "$ref": "#/$defs/Scxml"
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/XmlPayloadElement"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/Scxml",
+                                        "not": {
+                                            "required": [
+                                                "qname"
+                                            ]
+                                        }
+                                    }
+                                ]
                             },
                             "type": "array"
                         },
@@ -1915,6 +1930,59 @@
             ],
             "title": "TransitionTypeDatatype",
             "type": "string"
+        },
+        "XmlPayloadElement": {
+            "additionalProperties": false,
+            "description": "Preserve an extension element's qualified name, attributes and mixed text.",
+            "properties": {
+                "qname": {
+                    "title": "Qname",
+                    "type": "string"
+                },
+                "text": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Text"
+                },
+                "tail": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Tail"
+                },
+                "children": {
+                    "items": {
+                        "$ref": "#/$defs/XmlPayloadElement"
+                    },
+                    "title": "Children",
+                    "type": "array"
+                },
+                "attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "qname"
+            ],
+            "title": "XmlPayloadElement",
+            "type": "object"
         }
     },
     "$ref": "#/$defs/Scxml",

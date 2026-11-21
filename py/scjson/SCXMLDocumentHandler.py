@@ -21,6 +21,7 @@ import json
 from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.nodes import ElementNode, WildcardNode
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
@@ -34,6 +35,31 @@ from .comment_promotion import (
     extract_help_text_from_xml,
     inject_help_text_comments_into_xml,
 )
+
+
+class _PayloadParser(XmlParser):
+    """Bind inline charts as charts and preserve other payload elements as XML."""
+
+    def start(self, clazz, queue, objects, qname, attrs, ns_map):
+        parent = queue[-1] if queue else None
+        if (isinstance(parent, ElementNode)
+                and parent.meta.qname == "{http://www.w3.org/2005/07/scxml}content"
+                and qname != "{http://www.w3.org/2005/07/scxml}scxml"):
+            wildcard = next(var for var in parent.meta.find_children(qname) if var.is_wildcard)
+            queue.append(WildcardNode(wildcard, attrs, ns_map, len(objects), self.context.class_type.any_element))
+            return
+        super().start(clazz, queue, objects, qname, attrs, ns_map)
+
+    def end(self, queue, objects, qname, text, tail):
+        bound = super().end(queue, objects, qname, text, tail)
+        if bound and qname == "{http://www.w3.org/2005/07/scxml}content" and text and text.isspace():
+            for tag, value in reversed(objects):
+                if tag == qname:
+                    if getattr(value, "expr", None) is None and getattr(value, "content", None) == []:
+                        value.content.append(text)
+                    break
+        return bound
+
 
 class SCXMLDocumentHandler:
     def __init__(
@@ -75,7 +101,7 @@ class SCXMLDocumentHandler:
         """
         self.model_class = model_class
         self.schema_path = schema_path
-        self.parser = XmlParser(
+        self.parser = _PayloadParser(
             config=ParserConfig(fail_on_unknown_properties=fail_on_unknown_properties)
         )
         self.serializer = XmlSerializer(
