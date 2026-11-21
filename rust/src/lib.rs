@@ -142,6 +142,8 @@ pub enum ScjsonError {
     Unsupported,
     #[error("invalid region_order: {0}")]
     RegionOrder(&'static str),
+    #[error("invalid state_order: {0}")]
+    StateOrder(&'static str),
 }
 
 fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
@@ -408,7 +410,8 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
     }
 
     let mut text_items = Vec::new();
-    let mut regions = Vec::new();
+    let structural = child_order(&elem.name);
+    let mut child_kinds = Vec::new();
     let mut pending_comments: Vec<String> = Vec::new();
     let mut saw_non_ws_text_since_comment = false;
     let current_can_own_help = SCXML_ELEMS.contains(&elem.name.as_str()) && !suppress_help_text;
@@ -426,10 +429,10 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
             }
             XMLNode::Element(e) => {
                 if e.namespace == elem.namespace && SCXML_ELEMS.contains(&e.name.as_str()) {
-                    if elem.name == "parallel" && elem.namespace.as_deref() == Some(SCXML_NS)
-                        && matches!(e.name.as_str(), "state" | "parallel")
+                    if elem.namespace.as_deref() == Some(SCXML_NS)
+                        && structural.is_some_and(|order| order.kinds.contains(&e.name.as_str()))
                     {
-                        regions.push(e.name.as_str());
+                        child_kinds.push(e.name.as_str());
                     }
                     let key = match e.name.as_str() {
                         "if" => "if_value",
@@ -465,7 +468,7 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
                     }
                 } else {
                     let val = any_element_to_value(e);
-                    let field = if elem.name == "parallel" { "other_element" } else { "content" };
+                    let field = if structural.is_some() { "other_element" } else { "content" };
                     append_child(&mut map, field, val);
                 }
             }
@@ -491,8 +494,10 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
         }
     }
 
-    if regions.contains(&"state") && regions.contains(&"parallel") {
-        map.insert("region_order".into(), Value::from(regions));
+    if let Some(order) = structural {
+        if child_kinds.windows(2).any(|pair| pair[0] != pair[1]) {
+            map.insert(order.field.into(), Value::from(child_kinds));
+        }
     }
     if elem.name == "scxml" {
         if !map.contains_key("version") {
@@ -533,69 +538,69 @@ fn join_tokens(v: &Value) -> Option<String> {
     }
 }
 
-type Region<'a> = (&'static str, &'a Map<String, Value>);
+#[derive(Clone, Copy)]
+struct ChildOrder {
+    field: &'static str,
+    kinds: &'static [&'static str],
+    error: fn(&'static str) -> ScjsonError,
+}
 
-fn region_items<'a>(map: &'a Map<String, Value>, name: &str) -> Result<&'a [Value], ScjsonError> {
-    match map.get(name) {
-        None => Ok(&[]),
-        Some(Value::Array(items)) => Ok(items),
-        Some(_) => Err(ScjsonError::RegionOrder(
-            "state and parallel fields must be arrays",
-        )),
+fn child_order(owner: &str) -> Option<ChildOrder> {
+    match owner {
+        "scxml" | "state" => Some(ChildOrder {
+            field: "state_order",
+            kinds: &["state", "parallel", "final"],
+            error: ScjsonError::StateOrder,
+        }),
+        "parallel" => Some(ChildOrder {
+            field: "region_order",
+            kinds: &["state", "parallel"],
+            error: ScjsonError::RegionOrder,
+        }),
+        _ => None,
     }
 }
 
-/// Each marker consumes the next region of that kind, preserving its own payload and comments.
-fn ordered_regions<'a>(
-    name: &str,
+type StateChild<'a> = (&'static str, &'a Map<String, Value>);
+
+/// Consume each kind's payloads in array order, independent of JSON key order.
+fn ordered_state_children<'a>(
+    order: ChildOrder,
     map: &'a Map<String, Value>,
-) -> Result<Option<Vec<Region<'a>>>, ScjsonError> {
-    let Some(order) = map.get("region_order") else {
-        if name == "parallel" {
-            if let (Some(Value::Array(states)), Some(Value::Array(parallels))) =
-                (map.get("state"), map.get("parallel"))
-            {
-                // Legacy wire data records order within each group, with states first.
-                let regions = states
-                    .iter()
-                    .map(|v| ("state", v))
-                    .chain(parallels.iter().map(|v| ("parallel", v)));
-                return Ok(regions
-                    .map(|(kind, v)| v.as_object().map(|obj| (kind, obj)))
-                    .collect());
-            }
+) -> Result<Option<Vec<StateChild<'a>>>, ScjsonError> {
+    let mut groups = Vec::new();
+    for &kind in order.kinds {
+        match map.get(kind) {
+            Some(Value::Array(items)) => groups.push((kind, items.iter())),
+            None => {}
+            Some(_) if !map.contains_key(order.field) => return Ok(None),
+            Some(_) => return Err((order.error)("expected a child array")),
         }
-        return Ok(None);
+    }
+    let Some(markers) = map.get(order.field) else {
+        if groups.iter().filter(|(_, items)| items.len() > 0).count() < 2 {
+            return Ok(None);
+        }
+        let children = groups.into_iter().flat_map(|(kind, items)| {
+            items.map(move |v| v.as_object().map(|obj| (kind, obj)))
+        });
+        return Ok(children.collect());
     };
-    if name != "parallel" {
-        return Err(ScjsonError::RegionOrder(
-            "only a parallel may specify region_order",
-        ));
+    let kinds = markers.as_array().ok_or((order.error)("expected an array"))?;
+    let mut children = Vec::with_capacity(kinds.len());
+    for marker in kinds {
+        let (kind, items) = groups
+            .iter_mut()
+            .find(|(kind, _)| Some(*kind) == marker.as_str())
+            .ok_or((order.error)("unknown or absent child kind"))?;
+        let value = items.next().ok_or((order.error)("excess child occurrence"))?;
+        let payload = value.as_object().ok_or((order.error)("expected a child object"))?;
+        children.push((*kind, payload));
     }
-    let kinds = order
-        .as_array()
-        .ok_or(ScjsonError::RegionOrder("expected an array"))?;
-    let mut states = region_items(map, "state")?.iter();
-    let mut parallels = region_items(map, "parallel")?.iter();
-    let mut regions = Vec::with_capacity(kinds.len());
-    for kind in kinds {
-        let (name, value) = match kind.as_str() {
-            Some("state") => ("state", states.next()),
-            Some("parallel") => ("parallel", parallels.next()),
-            _ => return Err(ScjsonError::RegionOrder("expected state or parallel")),
-        };
-        let value = value.ok_or(ScjsonError::RegionOrder("excess region occurrence"))?;
-        regions.push((
-            name,
-            value
-                .as_object()
-                .ok_or(ScjsonError::RegionOrder("expected a region object"))?,
-        ));
+    if groups.iter().any(|(_, items)| items.len() > 0) {
+        return Err((order.error)("one or more children omitted"));
     }
-    if states.len() != 0 || parallels.len() != 0 {
-        return Err(ScjsonError::RegionOrder("one or more regions omitted"));
-    }
-    Ok(Some(regions))
+    Ok(Some(children))
 }
 
 fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, ScjsonError> {
@@ -628,7 +633,17 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, Scjso
         }
         element
     };
-    let mut region_sequence = ordered_regions(name, map)?.map(Vec::into_iter);
+    let structural = child_order(name);
+    if map.contains_key("region_order") && name != "parallel" {
+        return Err(ScjsonError::RegionOrder("only a parallel may specify region_order"));
+    }
+    if map.contains_key("state_order") && !matches!(name, "scxml" | "state") {
+        return Err(ScjsonError::StateOrder("only scxml and state may specify state_order"));
+    }
+    let mut sequence = match structural {
+        Some(order) => ordered_state_children(order, map)?.map(Vec::into_iter),
+        None => None,
+    };
     if let Some(Value::String(text)) = map.get("text") {
         if !text.is_empty() {
             elem.children.push(XMLNode::Text(text.clone()));
@@ -642,13 +657,13 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, Scjso
         }
     }
     for (k, v) in map {
-        if k == "region_order" {
+        if matches!(k.as_str(), "region_order" | "state_order") {
             continue;
         }
-        if matches!(k.as_str(), "state" | "parallel") {
-            if let Some(ordered) = &mut region_sequence {
-                // Replace just the existing region slots. Other child kinds retain their positions.
-                for (kind, payload) in ordered.take(region_items(map, k)?.len()) {
+        if structural.is_some_and(|order| order.kinds.contains(&k.as_str())) {
+            if let (Some(ordered), Some(slots)) = (&mut sequence, v.as_array()) {
+                // Fill only child-state slots so unrelated siblings keep their positions.
+                for (kind, payload) in ordered.take(slots.len()) {
                     append_element_with_help_text(&mut elem, kind, payload)?;
                 }
                 continue;
@@ -894,12 +909,17 @@ fn collapse_whitespace(value: &mut Value) {
 fn remove_empty(value: &mut Value) -> bool {
     match value {
         Value::Object(map) => {
-            let has_order = map.contains_key("region_order");
             let keys: Vec<String> = map.keys().cloned().collect();
             for k in keys {
                 // Keep explicit metadata (including invalid null) and every referenced
                 // region occurrence intact until the owning element validates it.
-                if has_order && matches!(k.as_str(), "region_order" | "state" | "parallel") {
+                if matches!(k.as_str(), "region_order" | "state_order") {
+                    continue;
+                }
+                if matches!(k.as_str(), "state" | "parallel" | "final")
+                    && (map.contains_key("region_order") || map.contains_key("state_order")
+                        || map[&k].as_array().is_some_and(|a| a.iter().any(Value::is_object)))
+                {
                     continue;
                 }
                 if let Some(v) = map.get_mut(&k) {

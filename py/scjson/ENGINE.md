@@ -73,6 +73,13 @@ Exit handlers run in reverse order. SCJSON records the sequence in the
 parent's optional `region_order` list. Older files without this list enter
 the `state` array in order, followed by the `parallel` array.
 
+At the document root or in a compound state, an explicit initial target
+takes precedence. Without one, the engine enters the first child state
+in document order. For example, a root whose first child is a final state
+finishes immediately. SCJSON records mixed child kinds in `state_order`.
+An older file without that list uses the first available child in the
+`state`, `parallel`, then `final` arrays.
+
 For environments that fully trust the input chart you can opt out of the
 sandbox by passing `--unsafe-eval` to `scjson engine-trace` (or by constructing
 `DocumentContext` with `allow_unsafe_eval=True`). This re-enables CPython’s

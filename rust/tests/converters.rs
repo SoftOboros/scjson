@@ -10,6 +10,43 @@ use xmltree::{Element, XMLNode};
 
 const SCXML_NS: &str = "http://www.w3.org/2005/07/scxml";
 
+#[test]
+fn document_and_compound_state_keep_their_own_child_order() {
+    let xml = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="owner">
+        <final/><state id="owner"><initial><transition target="p"/></initial>
+        <parallel id="p"><state id="leaf"/></parallel><final/><state id="s"/></state></scxml>"#;
+    let mut wire: Value = serde_json::from_str(&xml_to_json(xml, true).unwrap()).unwrap();
+    assert_eq!(wire["state_order"], serde_json::json!(["final", "state"]));
+    assert_eq!(wire["state"][0]["state_order"], serde_json::json!(["parallel", "final", "state"]));
+    let output = json_to_xml(&wire.to_string()).unwrap();
+    assert!(!output.contains("state_order"));
+    let reread: Value = serde_json::from_str(&xml_to_json(&output, true).unwrap()).unwrap();
+    assert_eq!(wire, reread);
+    wire.as_object_mut().unwrap().remove("state_order");
+    wire["state"][0].as_object_mut().unwrap().remove("state_order");
+    let restored = json_to_xml(&wire.to_string()).unwrap();
+    let legacy: Value = serde_json::from_str(&xml_to_json(&restored, true).unwrap()).unwrap();
+    assert_eq!(legacy["state_order"], serde_json::json!(["state", "final"]));
+    assert_eq!(legacy["state"][0]["state_order"], serde_json::json!(["state", "parallel", "final"]));
+}
+
+#[test]
+fn rejects_invalid_state_order_before_pruning() {
+    let doc = serde_json::json!({"state":[{}], "final":[{}]});
+    for marker in [Value::Null, serde_json::json!([]), serde_json::json!(["state"]),
+                   serde_json::json!(["final","final"]), serde_json::json!(["other","state"])] {
+        let mut bad = doc.clone();
+        bad["state_order"] = marker;
+        for omit in [true, false] {
+            let error = scjson::json_to_xml_opts(&bad.to_string(), omit).unwrap_err();
+            assert!(error.to_string().contains("state_order"));
+        }
+    }
+    for bad in [r#"{"parallel":[{"state_order":[]}]}"#, r#"{"final":[{"state_order":[]}]}"#] {
+        assert!(json_to_xml(bad).unwrap_err().to_string().contains("state_order"));
+    }
+}
+
 fn region_ids(node: &Element) -> Vec<&str> {
     node.children
         .iter()

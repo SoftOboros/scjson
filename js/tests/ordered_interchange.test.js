@@ -15,12 +15,46 @@ function write(doc) {
   expect(output.errors).toBeNull();
   expect(output.result).not.toContain('execution_order');
   expect(output.result).not.toContain('region_order');
+  expect(output.result).not.toContain('state_order');
   return output.result;
 }
 
 const mixedRegions = `<scxml xmlns="${ns}"><parallel id="p">
   <parallel id="first"><state id="leaf"/></parallel><onentry><log/></onentry>
   <state id="second"/><state id="third"/></parallel></scxml>`;
+
+test('preserves implicit and explicit initial targets, anonymous children and legacy grouping', () => {
+  const doc = read(`<scxml xmlns="${ns}" initial="owner"><final/><state id="owner">
+    <initial><transition target="p"/></initial><parallel id="p"><state id="leaf"/></parallel>
+    <final/><state id="s"/></state></scxml>`);
+  expect(doc.state_order).toEqual(['final', 'state']);
+  expect(doc.state[0].state_order).toEqual(['parallel', 'final', 'state']);
+  const round = read(write(doc));
+  expect(round.state_order).toEqual(doc.state_order);
+  expect(round.initial).toEqual(['owner']);
+  expect(round.state[0].initial).toEqual(doc.state[0].initial);
+  expect(round.state[0].state_order).toEqual(doc.state[0].state_order);
+  delete doc.state_order;
+  delete doc.state[0].state_order;
+  const legacy = read(write(doc));
+  expect(legacy.state_order).toEqual(['state', 'final']);
+  expect(legacy.state[0].state_order).toEqual(['state', 'parallel', 'final']);
+});
+
+test('validates structural lists at their owner, including an invoked chart', () => {
+  const nested = read(`<scxml xmlns="${ns}"><state><invoke><content>
+    <scxml><final/><state/></scxml></content></invoke></state></scxml>`);
+  const child = nested.state[0].invoke[0].content[0].content[0];
+  expect(child.state_order).toEqual(['final', 'state']);
+  expect(read(write(nested)).state[0].invoke[0].content[0].content[0].state_order).toEqual(child.state_order);
+  for (const value of [null, 'state', ['state'], ['state', 'state'], ['history', 'final']]) {
+    child.state_order = value;
+    expect(jsonToXml(JSON.stringify(nested)).valid).toBe(false);
+  }
+  for (const wrong of [{parallel: [{state_order: []}]}, {state: [{region_order: []}]}]) {
+    expect(jsonToXml(JSON.stringify(wrong)).valid).toBe(false);
+  }
+});
 
 test('restores mixed parallel regions, same-kind occurrences, and legacy grouping', () => {
   const doc = read(mixedRegions);

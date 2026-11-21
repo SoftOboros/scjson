@@ -18,6 +18,14 @@ single version stream.
 
 ## Cross-language entries
 
+### 2026-11-21 — Implicit startup targets on v0.4.3 (ERRATA-012)
+
+Python, JavaScript, and native Rust preserve the order of `state`,
+`parallel`, and `final` children of a document or compound state.
+XML order chooses the default initial child. SCJSON records that order
+in `state_order` and keeps older files readable. An explicit initial
+target still wins.
+
 ### 2026-11-21 — Mixed parallel regions on v0.4.3 (ERRATA-011)
 
 Python, JavaScript, and native Rust preserve the authored order of sibling

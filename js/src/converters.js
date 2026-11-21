@@ -71,6 +71,7 @@ const STRUCTURAL_METADATA_KEYS = new Set([
   'help_text',
   'execution_order',
   'region_order',
+  'state_order',
 ]);
 
 /// Known SCXML structural fields that should be pulled out of `content[]`

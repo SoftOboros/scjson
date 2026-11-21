@@ -1,5 +1,5 @@
 /**
- * Preserve executable child order and parallel region order in SCXML.
+ * Preserve executable and state child order in SCXML.
  * Part of the scjson project. Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
@@ -11,9 +11,16 @@ const XI = 'http://www.w3.org/2001/XInclude';
 const containers = new Set(['transition', 'onentry', 'onexit', 'finalize', 'foreach', 'if']);
 const actions = ['assign', 'log', 'raise', 'if', 'foreach', 'send', 'cancel', 'script'];
 const regionKinds = ['state', 'parallel'];
+const stateKinds = [...regionKinds, 'final'];
+const compoundOrder = { key: 'state_order', kinds: stateKinds };
+const stateOrders = new Map([
+  ['scxml', compoundOrder],
+  ['state', compoundOrder],
+  ['parallel', { key: 'region_order', kinds: regionKinds }],
+]);
 const payloadParents = new Set(['send', 'donedata', 'invoke']);
 const field = modelAttrForTag;
-const emptyElements = new Set([...actions, 'elseif', 'else', ...regionKinds].flatMap(tag => [tag, field(tag)]));
+const emptyElements = new Set([...actions, 'elseif', 'else', ...stateKinds].flatMap(tag => [tag, field(tag)]));
 const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
 const options = { preserveOrder: true, ignoreAttributes: false, parseTagValue: false,
   trimValues: false, commentPropName: '#comment', suppressEmptyNode: true,
@@ -70,7 +77,7 @@ function wildcardNode(value) {
     const local = qname.slice(end + 1);
     if (!uri) return local;
     if (!prefixes.has(uri)) {
-      const prefix = 'ns' + prefixes.size;
+      const prefix = uri === XI ? 'xi' : 'ns' + prefixes.size;
       attrs['@_xmlns:' + prefix] = uri;
       prefixes.set(uri, prefix);
     }
@@ -120,17 +127,20 @@ function orderedChildren(model, tag) {
 function validateModel(model, tag = 'scxml') {
   if (!model || typeof model !== 'object') return false;
   let needsProjection = false;
-  if (Object.hasOwn(model, 'region_order')) {
-    if (tag !== 'parallel') throw new Error('region_order is invalid on ' + tag);
-    if (!Array.isArray(model.region_order)) throw new Error('region_order must be an array');
-    const remaining = new Map(regionKinds.map(kind => [kind, list(model[kind]).length]));
-    for (const kind of model.region_order) {
-      if (!remaining.get(kind)) throw new Error('region_order references an unknown or excess region');
+  const structural = stateOrders.get(tag);
+  for (const key of ['region_order', 'state_order']) {
+    if (!Object.hasOwn(model, key)) continue;
+    if (structural?.key !== key) throw new Error(key + ' is invalid on ' + tag);
+    if (!Array.isArray(model[key])) throw new Error(key + ' must be an array');
+    const remaining = new Map(structural.kinds.map(kind => [kind, list(model[kind]).length]));
+    for (const kind of model[key]) {
+      if (!remaining.get(kind)) throw new Error(key + ' references an unknown or excess child');
       remaining.set(kind, remaining.get(kind) - 1);
     }
-    if ([...remaining.values()].some(count => count)) throw new Error('region_order omits a region');
+    if ([...remaining.values()].some(count => count)) throw new Error(key + ' omits a child');
     needsProjection = true;
-  } else if (tag === 'parallel' && regionKinds.every(kind => list(model[kind]).length)) {
+  }
+  if (structural && structural.kinds.filter(kind => list(model[kind]).length).length > 1) {
     // Restore the historical grouping even when JSON keys were reordered.
     needsProjection = true;
   }
@@ -147,11 +157,11 @@ function validateModel(model, tag = 'scxml') {
     }
   }
   for (const content of list(model.content)) {
-    if (content && typeof content === 'object' && !content.qname && validateModel(content, 'content')) {
+    if (content && typeof content === 'object' && !content.qname && validateModel(content, tag === 'content' ? 'scxml' : 'content')) {
       needsProjection = true;
     }
   }
-  return needsProjection || ((containers.has(tag) || tag === 'parallel') && list(model.other_element).length > 0)
+  return needsProjection || ((containers.has(tag) || structural) && list(model.other_element).length > 0)
     || (payloadParents.has(tag) && list(model.content).length > 0);
 }
 
@@ -220,10 +230,11 @@ function captureOrder(tree, grouped) {
   function walk(node, raw, tag) {
     if (!raw || typeof raw !== 'object' || tag.uri !== SCXML) return;
     const executable = containers.has(tag.local);
+    const stateOrder = stateOrders.get(tag.local);
     const original = new Map();
     const structural = new Map();
     const order = [];
-    const regions = [];
+    const childOrder = [];
     for (const child of node[tag.name].filter(isElementNode)) {
       const name = nodeDataKey(child);
       if (!original.has(name)) original.set(name, { values: list(raw[name]), used: 0 });
@@ -231,13 +242,13 @@ function captureOrder(tree, grouped) {
       const childTag = element(child, tag.ns);
       let value = group.values[group.used++];
       if (executable) order.push(childTag.kind);
-      if (tag.local === 'parallel' && regionKinds.includes(childTag.kind)) regions.push(childTag.kind);
-      if ((executable || tag.local === 'parallel') && childTag.uri !== SCXML) {
+      if (stateOrder?.kinds.includes(childTag.kind)) childOrder.push(childTag.kind);
+      if ((executable || stateOrder) && childTag.uri !== SCXML) {
         (raw.other_element ||= []).push(wildcard(child, childTag));
         continue;
       }
       const key = childTag.uri === SCXML ? childTag.local : name;
-      if ((executable || regionKinds.includes(childTag.kind)) && value === '') value = {};
+      if ((executable || stateKinds.includes(childTag.kind)) && value === '') value = {};
       walk(child, value, childTag);
       if (!structural.has(key)) structural.set(key, []);
       structural.get(key).push(value);
@@ -253,7 +264,7 @@ function captureOrder(tree, grouped) {
       }
     }
     if (new Set(order).size > 1) raw.execution_order = order;
-    if (new Set(regions).size > 1) raw.region_order = regions;
+    if (new Set(childOrder).size > 1) raw[stateOrder.key] = childOrder;
   }
   const root = tree.find(isElementNode);
   if (root) {
@@ -307,8 +318,9 @@ function restoreOrder(tree, model, writeChart) {
       counts.set(key, index + 1);
       walk(entry.child, list(value)[index], entry.tag);
     }
-    if (!executable && tag.local !== 'parallel') return;
-    const orderedEntries = executable ? entries : entries.filter(entry => regionKinds.includes(entry.tag.kind));
+    const stateOrder = stateOrders.get(tag.local);
+    if (!executable && !stateOrder) return;
+    const orderedEntries = executable ? entries : entries.filter(entry => stateOrder.kinds.includes(entry.tag.kind));
     const extensions = new Map();
     for (const value of list(current.other_element)) {
       const kind = value.qname.startsWith('{') ? value.qname : '{}' + value.qname;
@@ -324,7 +336,7 @@ function restoreOrder(tree, model, writeChart) {
     }
     const used = new Map();
     const order = executable ? current.execution_order ?? orderedEntries.map(entry => entry.tag.kind)
-      : current.region_order ?? regionKinds.flatMap(kind => list(current[kind]).map(() => kind));
+      : current[stateOrder.key] ?? stateOrder.kinds.flatMap(kind => list(current[kind]).map(() => kind));
     const ordered = order.map(kind => {
       const index = used.get(kind) || 0;
       used.set(kind, index + 1);
@@ -339,7 +351,7 @@ function restoreOrder(tree, model, writeChart) {
     let extension = 0;
     node[tag.name] = children.map(child => {
       if (slots.has(child)) return ordered[index++];
-      if (tag.local === 'parallel' && foreignSlots.has(child) && extension < foreign.length) {
+      if (stateOrder && foreignSlots.has(child) && extension < foreign.length) {
         return wildcardNode(foreign[extension++]);
       }
       return child;

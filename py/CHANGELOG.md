@@ -8,6 +8,11 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## 0.4.3 — Unreleased
 
+- Select the first authored child when a document or compound state has no
+  explicit initial target. The optional `state_order` list preserves the
+  order of `state`, `parallel`, and `final` through conversion. Unmarked
+  legacy SCJSON keeps its grouped order.
+
 - Preserve the authored order of `state` and `parallel` regions within a
   parallel, including the order seen by entry guards and by generated code.
   Existing SCJSON without `region_order` keeps its grouped execution order.
