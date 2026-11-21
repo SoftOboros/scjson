@@ -33,7 +33,7 @@ def patch(path):
     is_pydantic = "from pydantic import" in source
     if is_pydantic:
         source = source.replace("from pydantic import BaseModel, ConfigDict, model_validator",
-                                "from pydantic import BaseModel, ConfigDict, field_serializer, model_validator")
+                                "from pydantic import BaseModel, ConfigDict, field_serializer, model_serializer, model_validator")
         source = source.replace("from xsdata_pydantic.fields import field",
                                 "from xsdata_pydantic.fields import field\n\nfrom ..execution_order import ordered_children")
     for kind in CONTAINERS:
@@ -44,13 +44,19 @@ def patch(path):
         if is_pydantic:
             addition = (
                 '    execution_order: list[str] = field(\n'
-                '        default_factory=lambda: None, exclude_if=lambda value: value is None,\n'
+                '        default_factory=lambda: None,\n'
                 '        metadata={"type": "Ignore"},\n'
                 '    )\n\n'
                 '    @model_validator(mode="after")\n'
                 '    def _validate_execution_order(self):\n'
                 '        ordered_children(self)\n'
                 '        return self\n\n'
+                '    @model_serializer(mode="wrap")\n'
+                '    def _serialize_execution_order(self, handler):\n'
+                '        data = handler(self)\n'
+                '        if self.execution_order is None:\n'
+                '            data.pop("execution_order", None)\n'
+                '        return data\n\n'
             )
         else:
             addition = (

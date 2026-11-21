@@ -91,6 +91,24 @@ def test_repeated_guards_and_foreign_names_keep_their_individual_payloads_and_co
 
 
 @pytest.mark.parametrize("model", [pydantic, pydantic_strict])
+def test_model_export_omits_absent_orders_at_each_depth_and_preserves_explicit_empty(model):
+    """The Python export contract is the same on the pinned Pydantic 2.11 runtime."""
+    raw = json.loads(HANDLER.xml_to_json(chart(
+        '<if cond="True"><foreach array="[1]" item="v">' + assigned(1) + '</foreach></if>'
+        '<log expr="v"/>')))
+    raw["state"][0]["onexit"] = [{"execution_order": []}]
+    doc = model.Scxml.model_validate(raw)
+    for exported in (doc.model_dump(), doc.model_dump(mode="json"), json.loads(doc.model_dump_json())):
+        outer = entry(exported)
+        assert outer["execution_order"] == ["if", "log"]
+        assert exported["state"][0]["onexit"][0]["execution_order"] == []
+        assert "execution_order" not in outer["if_value"][0]
+        assert "execution_order" not in outer["if_value"][0]["foreach"][0]
+        wire = model.Scxml.model_validate(exported).model_dump_json()
+        assert DocumentContext.from_doc(pydantic.Scxml.model_validate_json(wire)).data_model["v"] == 1
+
+
+@pytest.mark.parametrize("model", [pydantic, pydantic_strict])
 def test_legacy_input_and_canonical_singleton_elseif(model):
     raw = json.loads(HANDLER.xml_to_json(chart('<if cond="False"><elseif cond="True"/>'
                                                + assigned(5) + '</if>')))

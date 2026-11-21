@@ -1,7 +1,7 @@
 from decimal import Decimal
 from enum import Enum
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, model_serializer, model_validator
 from xsdata_pydantic.fields import field
 from ..xml_payload import NestedChart, XmlPayloadElement
 
@@ -547,7 +547,7 @@ class ScxmlIfType(BaseModel):
     )
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -555,6 +555,13 @@ class ScxmlIfType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
     @field_serializer("elseif", mode="wrap")
     def _serialize_elseif(self, value, handler):
@@ -632,7 +639,7 @@ class ScxmlForeachType(BaseModel):
     )
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -640,6 +647,13 @@ class ScxmlForeachType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
 
 
@@ -720,7 +734,7 @@ class ScxmlFinalizeType(BaseModel):
         return self
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -728,6 +742,13 @@ class ScxmlFinalizeType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
 
 
@@ -788,7 +809,7 @@ class ScxmlOnentryType(BaseModel):
     )
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -796,6 +817,13 @@ class ScxmlOnentryType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
 
 
@@ -856,7 +884,7 @@ class ScxmlOnexitType(BaseModel):
     )
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -864,6 +892,13 @@ class ScxmlOnexitType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
 
 
@@ -938,7 +973,7 @@ class ScxmlTransitionType(BaseModel):
     )
 
     execution_order: list[str] = field(
-        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        default_factory=lambda: None,
         metadata={"type": "Ignore"},
     )
 
@@ -946,6 +981,13 @@ class ScxmlTransitionType(BaseModel):
     def _validate_execution_order(self):
         ordered_children(self)
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
 
 
 
