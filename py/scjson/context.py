@@ -1888,11 +1888,11 @@ class DocumentContext(BaseModel):
                 self.history_deep[act.id] = self._active_leaves_under(act)
             except Exception:
                 self.history_deep[act.id] = list(active_children)
-        # Cancel invocations for this state prior to onexit
-        self._cancel_invocations_for_state(act)
-        for cid in active_children:
+        # Exit the last active sibling first. Each child finishes before its parent.
+        for cid in reversed(active_children):
             child = self.activations[cid]
             exited.update(self._exit_state(child))
+        self._cancel_invocations_for_state(act)
         for onexit in getattr(act.node, "onexit", []):
             self._run_actions(onexit, act)
         self.configuration.discard(act.id)
@@ -1972,7 +1972,7 @@ class DocumentContext(BaseModel):
         self, source: ActivationRecord, trans: TransitionSpec
     ) -> tuple[Set[str], Set[str]]:
         self._snapshot_active_histories()
-        exit_list = self._compute_exit_set(source, trans.target)
+        exit_list = self._compute_exit_roots(source, trans.target)
         exited_ids: Set[str] = set()
         for act in exit_list:
             if act.id in self.configuration:
@@ -1993,14 +1993,6 @@ class DocumentContext(BaseModel):
 
         return entered_ids, exited_ids
 
-    def _depth(self, act: ActivationRecord) -> int:
-        depth = 0
-        cur = act
-        while cur.parent:
-            depth += 1
-            cur = cur.parent
-        return depth
-
     def _least_common_ancestor(
         self, first: ActivationRecord, second: ActivationRecord
     ) -> Optional[ActivationRecord]:
@@ -2016,7 +2008,7 @@ class DocumentContext(BaseModel):
             cur = cur.parent
         return None
 
-    def _compute_exit_set(
+    def _compute_exit_roots(
         self, source: ActivationRecord, targets: List[str]
     ) -> List[ActivationRecord]:
         exit_set: Dict[str, ActivationRecord] = {}
@@ -2048,8 +2040,11 @@ class DocumentContext(BaseModel):
                     exit_set[cur.id] = cur
                     cur = cur.parent
 
-        ordered = sorted(exit_set.values(), key=self._depth, reverse=True)
-        return ordered
+        # _exit_state traverses whole active subtrees. Starting at a leaf on
+        # the transition source path would exit that region before later siblings.
+        roots = [node for node in exit_set.values()
+                 if not any(ancestor.id in exit_set for ancestor in node.path()[:-1])]
+        return sorted(roots, key=lambda node: self._activation_order_key(node.id), reverse=True)
 
     def _compute_entry_list(
         self, source: ActivationRecord, targets: List[str]
