@@ -39,7 +39,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-002 | 🟢     | Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines | 2026-06-19 | EXEC-E (`SCJSON-EXEC-00-CONCEPTS.md`) |
 | ERRATA-003 | 🟡     | `In()` cross-region predicate not in the admitted ECMAScript subset — blocks real infotainment control cores | 2026-06-20 | M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2) |
 | ERRATA-004 | 🟢 | Inline JSON data becomes text in the Python engine and disappears from executable IR | 2026-11-21 | Python execution / M1P6 |
-| ERRATA-005 | 🔴 | First-use foreach bindings have the expected values but the chart selects the wrong final | 2026-11-21 | EXEC-C |
+| ERRATA-005 | 🟢 | First-use foreach bindings have the expected values but the chart selects the wrong final | 2026-11-21 | EXEC-C |
 | ERRATA-006 | 🔴 | Execution continues after a failing action inside foreach | 2026-11-21 | EXEC-C |
 | ERRATA-007 | 🔴 | Converted SCJSON disagrees with XML on foreach action order and data witnesses | 2026-11-21 | EXEC-C / conversion |
 | ERRATA-008 | 🟡 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
@@ -384,13 +384,28 @@ fix and a regression test in both dialects.
 
 ## ERRATA-005 — First-use item and index bindings reach the wrong final
 
-**Open, EXEC-C.** Tests 150 and 151 fail through XML and SCJSON on 0.4.2
+**Resolved, EXEC-C, 2026-11-21.** Tests 150 and 151 failed through XML and SCJSON on 0.4.2
 and on `b0a9a37`. On 0.4.3 the last declared and first-use item/index
 pairs both equal `(3, 2)`, yet both charts select `fail`. Their final
-guards read the newly introduced item and index respectively. Trace the
-bindings across the state change and the eventless guard before assigning
-a root cause. Close when both original charts reach `pass` and retain
-both pairs through both file loaders.
+guards read the newly introduced item and index respectively. At entry to
+`s2` the guard evaluated to 3 or 2. The old guard handler required a Boolean
+instance, queued `error.execution`, and selected the unconditional fallback.
+
+Commit `d0cb3791aeeb951297ad54d9cbc862a4c13e41ff` applies datamodel
+truth testing after sandbox evaluation. On docker-vm the untouched ECMA
+and Python 150 and 151 charts passed on all eight XML and SCJSON routes
+with both pairs intact. Numeric zero took the fallback without an error.
+A missing variable and original invalid-condition test 344 retained their
+error event. Both SoS charts and all seven native vectors passed.
+The 20-chart final-and-data counts improved from 14 to 18 for XML and
+from 8 to 12 for SCJSON. All previous passes were retained.
+[SCXML conditional expressions](https://www.w3.org/TR/scxml/#ConditionalExpression)
+
+| ERRATA-005 verification | SHA-256 |
+| --- | --- |
+| Baseline VM evidence | `c3c10ebdf8393c942f2b6435e9fd0c72d599a7c7c7eae028bed0694258a5af1d` |
+| Qualified Python 0.4.3 wheel | `f6c19292c1744a58aed718ce7af3fea330e6805af7a1086a529a78c7bfd9c104` |
+| Candidate VM evidence | `b8d8cc6d1556025dd36128e6d40ad583140a36efad01b2e097dc00de5e9a6564` |
 
 ## ERRATA-006 — An action failure inside foreach leaves later iterations running
 
