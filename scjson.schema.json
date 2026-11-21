@@ -1292,6 +1292,17 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "region_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "Region Order",
+                    "type": "array"
                 }
             },
             "title": "Parallel",

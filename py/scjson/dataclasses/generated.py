@@ -1742,6 +1742,10 @@ class ScxmlParallelType:
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    region_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )
+
 
 @dataclass
 class Parallel(ScxmlParallelType):

@@ -92,4 +92,5 @@ python patch_finalize_restrictions.py \
 python patch_execution_order.py
 for schema in ../scjson.schema.json ../js/scjson.schema.json ../java/src/main/resources/scjson.schema.json; do
     python patch_scxml_forward_ref.py --schema-file "$schema"
+    python patch_execution_order.py --schema-file "$schema"
 done

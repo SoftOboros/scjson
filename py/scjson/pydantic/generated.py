@@ -1,11 +1,11 @@
 from decimal import Decimal
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Literal, Any, List, Optional
 from pydantic import ConfigDict, field_serializer, model_serializer, model_validator
 from xsdata_pydantic.fields import field
 from ..xml_payload import NestedChart, XmlPayloadElement
 
-from ..execution_order import ScxmlModel, ordered_children
+from ..execution_order import ScxmlModel, ordered_children, ordered_regions
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
 
@@ -1311,6 +1311,22 @@ class ScxmlParallelType(ScxmlModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    region_order: list[Literal["state", "parallel"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_region_order(self):
+        ordered_regions(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_region_order(self, handler):
+        data = handler(self)
+        if self.region_order is None:
+            data.pop("region_order", None)
+        return data
 
 
 class Parallel(ScxmlParallelType):

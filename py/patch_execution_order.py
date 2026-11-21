@@ -5,10 +5,11 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-Project the CONV executable-order field and repeatable elseif onto xsdata models.
+Project the CONV order fields and repeatable elseif onto xsdata models.
 """
 
 from pathlib import Path
+import json
 import re
 import sys
 
@@ -86,11 +87,60 @@ def patch(path):
     path.write_text(source, encoding="utf-8", newline="\n")
 
 
+def patch_parallel(path):
+    """Append the optional region sequence to the generated parallel model."""
+    source = path.read_text(encoding="utf-8")
+    if "    region_order:" in source:
+        return
+    if "from pydantic import" in source:
+        source = source.replace("from typing import ", "from typing import Literal, ", 1)
+        source = source.replace("from ..execution_order import ScxmlModel, ordered_children",
+                                "from ..execution_order import ScxmlModel, ordered_children, ordered_regions")
+        addition = '''    region_order: list[Literal["state", "parallel"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_region_order(self):
+        ordered_regions(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_region_order(self, handler):
+        data = handler(self)
+        if self.region_order is None:
+            data.pop("region_order", None)
+        return data'''
+    else:
+        addition = '''    region_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )'''
+    block = re.search(r"^class ScxmlParallelType\b.*?(?=^class |^@dataclass|\Z)", source, re.M | re.S)
+    if not block:
+        raise ValueError(f"Missing ScxmlParallelType in {path}")
+    source = source[:block.end()].rstrip() + "\n\n" + addition + "\n\n\n" + source[block.end():]
+    path.write_text(source, encoding="utf-8", newline="\n")
+
+
+def patch_schema(path):
+    """Project the optional structural-order property without changing unrelated schema fields."""
+    from scjson.pydantic import Scxml
+
+    schema = json.loads(path.read_bytes())
+    region_order = Scxml.model_json_schema()["$defs"]["Parallel"]["properties"]["region_order"]
+    schema["$defs"]["Parallel"]["properties"]["region_order"] = region_order
+    path.write_bytes((json.dumps(schema, indent=4) + "\n").encode("utf-8"))
+
+
 if __name__ == "__main__":
     root = Path(__file__).parent
     if sys.argv[1:] == ["--xsd"]:
         for name in ("scxml-module-core.xsd", "scxml-core-strict.xsd"):
             patch_xsd(root.parent / "xsd" / name)
+    elif len(sys.argv) == 3 and sys.argv[1] == "--schema-file":
+        patch_schema(Path(sys.argv[2]))
     else:
         for variant in ("dataclasses", "dataclasses_strict", "pydantic", "pydantic_strict"):
-            patch(root / "scjson" / variant / "generated.py")
+            path = root / "scjson" / variant / "generated.py"
+            patch(path)
+            patch_parallel(path)

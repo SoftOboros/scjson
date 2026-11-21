@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from pathlib import Path
 import xmlschema
 import json
+import sys
 from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
@@ -31,7 +32,8 @@ from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
 from .execution_order import (
-    MisplacedExecutionOrder, canonical_json, capture_order, restore_order, validate_order_location,
+    InvalidRegionOrder, MisplacedExecutionOrder, canonical_json, capture_order,
+    ordered_regions, restore_order, validate_order_location,
 )
 from xml.etree import ElementTree as ET
 from xml.etree import ElementInclude
@@ -129,12 +131,14 @@ class SCXMLDocumentHandler:
         self.xinclude = xinclude
         self.xinclude_base_url = xinclude_base_url
 
-    @staticmethod
-    def _resolve(cls: type) -> type:
-        """Resolve forward references to actual classes."""
+    def _resolve(self, cls: type) -> type:
+        """Resolve children in the chosen model family, including strict parallels."""
         if isinstance(cls, ForwardRef):
-            return getattr(dataclasses_module, cls.__forward_arg__)
+            cls = cls.__forward_arg__
         if isinstance(cls, str):
+            module = sys.modules[self.model_class.__module__]
+            if hasattr(module, cls):
+                return getattr(module, cls)
             return getattr(dataclasses_module, cls)
         return cls
 
@@ -266,7 +270,7 @@ class SCXMLDocumentHandler:
                     continue
                 try:
                     return self._to_dataclass(self._resolve(arg), data)
-                except MisplacedExecutionOrder:
+                except (MisplacedExecutionOrder, InvalidRegionOrder):
                     raise
                 except Exception:
                     pass
@@ -285,8 +289,8 @@ class SCXMLDocumentHandler:
                 )
             if isinstance(data, dict):
                 try:
-                    return self._to_dataclass(Scxml, data)
-                except MisplacedExecutionOrder:
+                    return self._to_dataclass(self._resolve("Scxml"), data)
+                except (MisplacedExecutionOrder, InvalidRegionOrder):
                     raise
                 except Exception:
                     pass
@@ -316,6 +320,8 @@ class SCXMLDocumentHandler:
                 if f.name not in data:
                     continue
                 raw = data[f.name]
+                if f.name == "region_order" and not isinstance(raw, list):
+                    raise InvalidRegionOrder("region_order must be an array of region kinds")
                 if f.name == "execution_order":
                     if not isinstance(raw, list) or not all(isinstance(k, str) for k in raw):
                         raise ValueError("execution_order must be an array of child-kind strings")
@@ -338,6 +344,8 @@ class SCXMLDocumentHandler:
             obj = cls(**kwargs)
             for name, value in post.items():
                 setattr(obj, name, value)
+            if "region_order" in data:
+                ordered_regions(obj)
             return obj
         if isinstance(cls, type) and issubclass(cls, Enum):
             try:

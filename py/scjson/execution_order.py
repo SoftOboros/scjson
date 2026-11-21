@@ -5,7 +5,7 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-Preserve direct SCXML executable child order across grouped SCJSON fields.
+Preserve executable child order and parallel region order across grouped SCJSON fields.
 """
 
 from collections import Counter, defaultdict, deque
@@ -28,16 +28,23 @@ ACTION_FIELDS = {
     "cancel": "cancel",
 }
 MARKER_FIELDS = {"elseif": "elseif", "else": "else_value"}
+REGION_KINDS = ("state", "parallel")
 
 
 class MisplacedExecutionOrder(ValueError):
     """An SCJSON executable-order field appeared on a structural node."""
 
 
+class InvalidRegionOrder(ValueError):
+    """A parallel region sequence is invalid or appears on another SCXML node."""
+
+
 def validate_order_location(data, fields):
     """Reject reserved order metadata on typed nodes unable to own it."""
     if isinstance(data, dict) and "execution_order" in data and "execution_order" not in fields:
         raise MisplacedExecutionOrder("execution_order is valid only on an executable container")
+    if isinstance(data, dict) and "region_order" in data and "region_order" not in fields:
+        raise InvalidRegionOrder("region_order is valid only on a parallel")
 
 
 class ScxmlModel(BaseModel):
@@ -100,6 +107,37 @@ def ordered_children(container):
     return children
 
 
+def ordered_regions(container):
+    """Return validated (kind, region) pairs, or None for a legacy parallel."""
+    order = getattr(container, "region_order", None)
+    if order is None:
+        return None
+    if not isinstance(order, list):
+        raise InvalidRegionOrder("region_order must be an array of region kinds")
+    queues = {kind: deque(getattr(container, kind)) for kind in REGION_KINDS}
+    regions = []
+    for kind in order:
+        if kind not in REGION_KINDS:
+            raise InvalidRegionOrder(f"region_order has an invalid kind {kind!r}")
+        if not queues[kind]:
+            raise InvalidRegionOrder(f"region_order has an excess occurrence of {kind!r}")
+        regions.append((kind, queues[kind].popleft()))
+    if any(queues.values()):
+        raise InvalidRegionOrder("region_order omits one or more direct regions")
+    return regions
+
+
+def iter_regions(container):
+    """Yield (kind, region) in explicit order or the legacy grouped order."""
+    regions = ordered_regions(container)
+    if regions is not None:
+        yield from regions
+    else:
+        for kind in REGION_KINDS:
+            for region in getattr(container, kind, ()):
+                yield kind, region
+
+
 def _walk(element, model):
     """Pair standard XML children with their typed payloads using per-kind indexes."""
     yield element, model
@@ -126,6 +164,12 @@ def capture_order(model, xml):
     parser = etree.XMLParser(recover=True, resolve_entities=False, no_network=True)
     root = etree.fromstring(xml if isinstance(xml, bytes) else xml.encode("utf-8"), parser)
     for element, container in _walk(root, model):
+        if hasattr(container, "region_order"):
+            regions = [_kind(c.tag) for c in element if isinstance(c.tag, str)]
+            regions = [kind for kind in regions if kind in REGION_KINDS]
+            if len(set(regions)) > 1:
+                container.region_order = regions
+                ordered_regions(container)
         if hasattr(container, "execution_order"):
             kinds = [_kind(child.tag) for child in element if isinstance(child.tag, str)]
             if len(set(kinds)) > 1 or any(kind in MARKER_FIELDS for kind in kinds):
@@ -139,20 +183,30 @@ def restore_order(model, xml):
     root = etree.fromstring(xml.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True))
     changed = False
     for element, container in _walk(root, model):
-        sequence = ordered_children(container)
+        sequence = ordered_regions(container)
+        if sequence is not None:
+            slots = [i for i, child in enumerate(element) if _kind(child.tag) in REGION_KINDS]
+            field = "region_order"
+        else:
+            sequence = ordered_children(container)
+            slots = range(len(element))
+            field = "execution_order"
         if sequence is None:
             continue
         expected = [kind for kind, _ in sequence]
-        if expected == [_kind(child.tag) for child in element]:
+        children = list(element)
+        if expected == [_kind(children[i].tag) for i in slots]:
             continue
         groups = defaultdict(deque)
-        tails = []
-        for child in element:
+        tails = [child.tail for child in children]
+        for i in slots:
+            child = children[i]
             groups[_kind(child.tag)].append(child)
-            tails.append(child.tail)
         if Counter(expected) != {kind: len(children) for kind, children in groups.items()}:
-            raise ValueError("execution_order disagrees with the serialized XML children")
-        element[:] = [groups[kind].popleft() for kind in expected]
+            raise ValueError(f"{field} disagrees with the serialized XML children")
+        for i, kind in zip(slots, expected):
+            children[i] = groups[kind].popleft()
+        element[:] = children
         for child, tail in zip(element, tails):
             child.tail = tail
         changed = True
@@ -165,6 +219,8 @@ def restore_order(model, xml):
 
 def canonical_json(model, data):
     """Remove absent order fields and retain the original singleton elseif wire shape."""
+    if hasattr(model, "region_order") and model.region_order is None:
+        data.pop("region_order", None)
     if hasattr(model, "execution_order"):
         if model.execution_order is None:
             data.pop("execution_order", None)
