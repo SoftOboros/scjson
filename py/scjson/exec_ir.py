@@ -73,6 +73,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 from .inline_data import inline_data_value
+from .state_tree import anonymous_state_ids, structural_children
 
 
 # ---------------------------------------------------------------------------
@@ -633,7 +634,10 @@ class StateIR:
     """IR for a ``<state>`` element.
 
     :param id: State identifier.
-    :param initial: Initial sub-state id (or ``None``).
+    :param initial: Whitespace-separated explicit target IDs from the initial
+        attribute or transition. When absent, select the first real child.
+    :param initial_actions: Content of the default initial transition, executed
+        after this state's entry actions and before entering its targets.
     :param datamodel: Data slots declared on this state.
     :param onentry: Onentry action list.
     :param onexit: Onexit action list.
@@ -652,6 +656,7 @@ class StateIR:
     children: List["AnyStateIR"] = field(default_factory=list)
     invokes: List["InvokeIR"] = field(default_factory=list)
     diagnostics: List[ExecutableDiagnostic] = field(default_factory=list)
+    initial_actions: List[ActionNode] = field(default_factory=list)
 
 
 @dataclass
@@ -749,6 +754,8 @@ class MachineIR:
     :param children: Top-level state / parallel / final nodes.
     :param diagnostics: All diagnostics collected during lowering of this
         machine (does not include child-machine diagnostics).
+    :param anonymous_ids: Stable session-local identities for unnamed states.
+        They can be entered but are not authored state references for In().
     """
 
     name: Optional[str] = None
@@ -757,10 +764,11 @@ class MachineIR:
     datamodel: List[DataSlotIR] = field(default_factory=list)
     children: List[AnyStateIR] = field(default_factory=list)
     diagnostics: List[ExecutableDiagnostic] = field(default_factory=list)
+    anonymous_ids: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
-# Python-AST → ExpressionNode converter
+# Python-AST â†’ ExpressionNode converter
 # ---------------------------------------------------------------------------
 
 _ADMITTED_BUILTINS = frozenset({"int", "str", "float"})
@@ -975,7 +983,7 @@ def lower_expression(expr_str: str, origin: str, *, guard: bool = False) -> tupl
 
 
 # ---------------------------------------------------------------------------
-# SCJSON → IR lowerer
+# SCJSON â†’ IR lowerer
 # ---------------------------------------------------------------------------
 
 
@@ -993,6 +1001,10 @@ class _LoweringContext:
         self.diagnostics: List[ExecutableDiagnostic] = []
         # Counters used for capability-call name synthesis (M1P3)
         self._cap_counters: Dict[str, int] = {}
+        self.anonymous_ids: Dict[int, str] = {}
+
+    def state_id(self, node: Any) -> str:
+        return getattr(node, "id", None) or self.anonymous_ids[id(node)]
 
     def push_diag(self, diag: ExecutableDiagnostic) -> None:
         """Append a diagnostic.
@@ -1357,7 +1369,7 @@ def _lower_script_body(
     If every top-level statement in *body_text* is admitted, returns the
     equivalent ``ActionNode`` sequence (``AssignNode`` and/or ``IfNode`` items
     in document order).  If ANY statement is unadmitted, returns ``None``
-    (callers must fall through to the ``CapabilityCallNode`` path — do NOT
+    (callers must fall through to the ``CapabilityCallNode`` path â€” do NOT
     partially-lower a mixed block per D-M1P6-2).
 
     :param body_text: Raw JS ``<script>`` body text.
@@ -1552,8 +1564,8 @@ def _lower_script(
     statement is admitted the function returns the resulting ``ActionNode``
     list (an ``AssignNode`` / ``IfNode`` sequence in document order).
 
-    If any statement is not admitted — or when the body cannot be normalized
-    at all — falls back to the M0-D10 ``CapabilityCallNode`` path with the
+    If any statement is not admitted â€” or when the body cannot be normalized
+    at all â€” falls back to the M0-D10 ``CapabilityCallNode`` path with the
     appropriate diagnostic (D-M1P6-8).  A mixed block is never partially
     lowered.
 
@@ -2018,7 +2030,7 @@ def _lower_invoke(
             break
 
     if src is not None and child_machine is None:
-        # External src reference — not admitted by M1P6
+        # External src reference â€” not admitted by M1P6
         diag = ExecutableDiagnostic(
             code="unsupported-invoke-src",
             outcome="normalize",
@@ -2146,7 +2158,7 @@ def _lower_onexit(node: Any, ctx: _LoweringContext, state_id: str) -> List[Actio
 
 def _lower_history(node: Any, ctx: _LoweringContext) -> HistoryIR:
     """Retain the chart's default transition and executable actions."""
-    state_id = getattr(node, "id", None) or f"hist_{id(node)}"
+    state_id = ctx.state_id(node)
     kind = getattr(node, "type_value", None)
     transition = getattr(node, "transition", None)
     return HistoryIR(id=state_id, type=getattr(kind, "value", kind) or "shallow",
@@ -2155,7 +2167,7 @@ def _lower_history(node: Any, ctx: _LoweringContext) -> HistoryIR:
 
 def _lower_final(node: Any, ctx: _LoweringContext) -> FinalIR:
     """Preserve both executable handlers on a final state."""
-    state_id = getattr(node, "id", None) or f"final_{id(node)}"
+    state_id = ctx.state_id(node)
     return FinalIR(id=state_id, onentry=_lower_onentry(node, ctx, state_id),
                    onexit=_lower_onexit(node, ctx, state_id))
 
@@ -2168,16 +2180,16 @@ def _lower_state(node: Any, ctx: _LoweringContext, parent_id: str) -> StateIR:
     :param parent_id: Parent state id (for diagnostics).
     :returns: StateIR.
     """
-    from .pydantic import History as _PydHistory, ScxmlFinalType as _PydFinal
-
-    state_id = getattr(node, "id", None) or "anon_{}".format(id(node))
-    initial_attr = getattr(node, "initial_attribute", None)
-    if not initial_attr:
-        initial_nodes = getattr(node, "initial", []) or []
-        if initial_nodes:
-            first = initial_nodes[0]
-            tgt = getattr(getattr(first, "transition", None), "target", None)
-            initial_attr = list(tgt)[0] if tgt else None
+    state_id = ctx.state_id(node)
+    targets = getattr(node, "initial_attribute", None)
+    initial_actions = []
+    if not targets:
+        initial = getattr(node, "initial", None)
+        if initial and initial[0].transition is not None:
+            transition = initial[0].transition
+            targets = transition.target
+            initial_actions = _lower_action_block(transition, ctx, f"{state_id}:initial")
+    initial_ids = targets if isinstance(targets, str) else " ".join(targets or ())
 
     datamodel = _lower_datamodel(node, ctx)
     onentry = _lower_onentry(node, ctx, state_id)
@@ -2191,24 +2203,15 @@ def _lower_state(node: Any, ctx: _LoweringContext, parent_id: str) -> StateIR:
     for inv in getattr(node, "invoke", []) or []:
         invokes.append(_lower_invoke(inv, ctx, state_id))
 
-    children: List[AnyStateIR] = []
-    for child in getattr(node, "state", []) or []:
-        children.append(_lower_state(child, ctx, state_id))
-    for child in getattr(node, "parallel", []) or []:
-        children.append(_lower_parallel(child, ctx, state_id))
-    for child in getattr(node, "final", []) or []:
-        children.append(_lower_final(child, ctx))
-    for child in getattr(node, "history", []) or []:
-        children.append(_lower_history(child, ctx))
-
     return StateIR(
         id=state_id,
-        initial=str(initial_attr) if initial_attr else None,
+        initial=initial_ids or None,
+        initial_actions=initial_actions,
         datamodel=datamodel,
         onentry=onentry,
         onexit=onexit,
         transitions=transitions,
-        children=children,
+        children=_lower_state_children(node, ctx, state_id),
         invokes=invokes,
     )
 
@@ -2221,9 +2224,7 @@ def _lower_parallel(node: Any, ctx: _LoweringContext, parent_id: str) -> Paralle
     :param parent_id: Parent id (for diagnostics).
     :returns: ParallelIR.
     """
-    from .execution_order import iter_regions
-
-    parallel_id = getattr(node, "id", None) or "parallel_{}".format(id(node))
+    parallel_id = ctx.state_id(node)
     datamodel = _lower_datamodel(node, ctx)
     onentry = _lower_onentry(node, ctx, parallel_id)
     onexit = _lower_onexit(node, ctx, parallel_id)
@@ -2236,24 +2237,29 @@ def _lower_parallel(node: Any, ctx: _LoweringContext, parent_id: str) -> Paralle
     for inv in getattr(node, "invoke", []) or []:
         invokes.append(_lower_invoke(inv, ctx, parallel_id))
 
-    children: List[AnyStateIR] = []
-    for kind, region in iter_regions(node):
-        lower = _lower_state if kind == "state" else _lower_parallel
-        children.append(lower(region, ctx, parallel_id))
-    for child in getattr(node, "final", []) or []:
-        children.append(_lower_final(child, ctx))
-    for child in getattr(node, "history", []) or []:
-        children.append(_lower_history(child, ctx))
-
     return ParallelIR(
         id=parallel_id,
         datamodel=datamodel,
         onentry=onentry,
         onexit=onexit,
         transitions=transitions,
-        children=children,
+        children=_lower_state_children(node, ctx, parallel_id),
         invokes=invokes,
     )
+
+
+def _lower_state_children(node: Any, ctx: _LoweringContext, owner: str) -> List[AnyStateIR]:
+    children = []
+    for kind, child in structural_children(node):
+        if kind == "state":
+            children.append(_lower_state(child, ctx, owner))
+        elif kind == "parallel":
+            children.append(_lower_parallel(child, ctx, owner))
+        elif kind == "final":
+            children.append(_lower_final(child, ctx))
+        else:
+            children.append(_lower_history(child, ctx))
+    return children
 
 
 def _lower_scxml(doc: Any, ctx: _LoweringContext) -> MachineIR:
@@ -2272,20 +2278,15 @@ def _lower_scxml(doc: Any, ctx: _LoweringContext) -> MachineIR:
 
     datamodel = _lower_datamodel(doc, ctx)
 
-    children: List[AnyStateIR] = []
-    for child in getattr(doc, "state", []) or []:
-        children.append(_lower_state(child, ctx, "__root__"))
-    for child in getattr(doc, "parallel", []) or []:
-        children.append(_lower_parallel(child, ctx, "__root__"))
-    for child in getattr(doc, "final", []) or []:
-        children.append(_lower_final(child, ctx))
+    ctx.anonymous_ids = anonymous_state_ids(doc)
 
     return MachineIR(
         name=name,
         datamodel_attr=datamodel_attr,
-        initial=list(initial_attr),
+        initial=initial_attr.split() if isinstance(initial_attr, str) else list(initial_attr),
         datamodel=datamodel,
-        children=children,
+        children=_lower_state_children(doc, ctx, "__root__"),
+        anonymous_ids=list(ctx.anonymous_ids.values()),
         diagnostics=ctx.diagnostics,
     )
 

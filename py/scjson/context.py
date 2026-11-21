@@ -20,7 +20,6 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 import logging
 from enum import Enum
 from collections import defaultdict
-from itertools import chain
 from uuid import uuid4
 from xml.etree import ElementTree as ET
 
@@ -35,7 +34,7 @@ from .pydantic import (
     State,
 )
 from .events import Event, EventQueue
-from .execution_order import iter_regions
+from .state_tree import anonymous_state_ids, structural_children
 from .inline_data import inline_data_value
 from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
@@ -469,6 +468,7 @@ class DocumentContext(BaseModel):
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
         ecmascript_mode: bool = False,
+        anonymous_ids: Optional[Dict[int, str]] = None,
     ) -> ActivationRecord:
         """Recursively create activations and collect datamodel entries.
 
@@ -481,10 +481,12 @@ class DocumentContext(BaseModel):
         # of the same value (e.g. <scxml name="menu">...<state id="menu"/></scxml>).
         # The collision wipes the matching state from `_filter_states` outputs
         # because `_is_user_state` rejects anything == root_activation.id.
+        if anonymous_ids is None:
+            anonymous_ids = anonymous_state_ids(node)
         if isinstance(node, Scxml):
             ident = "__scxml_root__"
         else:
-            ident = getattr(node, "id", None) or getattr(node, "name", None) or "anon"
+            ident = getattr(node, "id", None) or anonymous_ids[id(node)]
         act = ActivationRecord(id=ident, node=node, parent=parent)
         act.local_data.update(
             DocumentContext._extract_datamodel(
@@ -509,12 +511,12 @@ class DocumentContext(BaseModel):
         except Exception:
             pass
 
-        regions = (child for _, child in iter_regions(node))
-        for child in chain(regions, getattr(node, "final", ()), getattr(node, "history", ())):
+        for _, child in structural_children(node):
             act.add_child(
                 DocumentContext._build_activation_tree(
                     child, act, session_id, evaluator, allow_unsafe_eval,
                     ecmascript_mode=ecmascript_mode,
+                    anonymous_ids=anonymous_ids,
                 )
             )
         return act
@@ -605,9 +607,11 @@ class DocumentContext(BaseModel):
             if node.initial_attribute:
                 targets = list(node.initial_attribute)
             elif node.initial:
-                targets = list(node.initial[0].transition.target)
+                transition = node.initial[0].transition
+                self._run_actions(transition, act)
+                targets = list(transition.target)
             elif act.children:
-                targets = [act.children[0].id]
+                targets = [c.id for c in act.children if not isinstance(c.node, History)][:1]
         elif isinstance(node, ScxmlParallelType):
             targets = [c.id for c in act.children if not isinstance(c.node, History)]
 
@@ -1529,7 +1533,8 @@ class DocumentContext(BaseModel):
                    if sid not in self._invocations_started_for_state
                    and (act := self.activations.get(sid)) is not None and act.invokes]
         if len(pending) > 1 and any(
-            getattr(ancestor.node, "region_order", None) is not None
+            (getattr(ancestor.node, "region_order", None) is not None
+             or getattr(ancestor.node, "state_order", None) is not None)
             for act in pending for ancestor in act.path()[:-1]
         ):
             pending.sort(key=lambda act: self._activation_order_key(act.id))
@@ -1775,16 +1780,21 @@ class DocumentContext(BaseModel):
         # Emit done.state for the immediate parent compound state
         self.events.push(Event(name=f"done.state.{parent.id}", data=payload))
 
-        # Mark the parent as final; this may propagate to ancestors (e.g. parallel)
-        parent.mark_final()
-
-        # For any ancestor <parallel> that is now complete, emit its done.state
+        parent.status = ActivationStatus.FINAL
         cur = parent.parent
-        while cur is not None:
-            if isinstance(cur.node, ScxmlParallelType):
-                if all(child.status is ActivationStatus.FINAL for child in cur.children):
-                    self.events.push(Event(name=f"done.state.{cur.id}", data=None))
+        while cur is not None and isinstance(cur.node, ScxmlParallelType) and self._in_final_configuration(cur):
+            cur.status = ActivationStatus.FINAL
+            self.events.push(Event(name=f"done.state.{cur.id}", data=None))
             cur = cur.parent
+
+    def _in_final_configuration(self, act: ActivationRecord) -> bool:
+        if act.id not in self.configuration:
+            return False
+        if isinstance(act.node, ScxmlParallelType):
+            return all(self._in_final_configuration(child) for child in act.children
+                       if not isinstance(child.node, History))
+        return any(isinstance(child.node, ScxmlFinalType) and child.id in self.configuration
+                   for child in act.children)
 
     def _build_donedata_payload(self, final_node: ScxmlFinalType, env: Mapping[str, Any], act: ActivationRecord) -> Any:
         """Materialize a ``<donedata>`` payload for a containing state's done event.
@@ -1858,6 +1868,11 @@ class DocumentContext(BaseModel):
         for onexit in getattr(act.node, "onexit", []):
             self._run_actions(onexit, act)
         self.configuration.discard(act.id)
+        act.status = ActivationStatus.ACTIVE
+        cur = act.parent
+        while cur is not None and cur.status is ActivationStatus.FINAL and not self._in_final_configuration(cur):
+            cur.status = ActivationStatus.ACTIVE
+            cur = cur.parent
         exited.add(act.id)
         return exited
 
