@@ -12,6 +12,15 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
   entry points. A `foreach` over the inline array in W3C test 155 now visits
   its three numbers in order. Conversion retains the authored text.
 - Preserve inline constants in executable IR data slots.
+- Apply datamodel truth testing to conditions and stop the current executable
+  block when an action fails. ECMAScript array concatenation preserves the
+  collection a foreach loop started iterating.
+- Preserve executable order and literal or mixed XML payloads through XML
+  and SCJSON. Both file loaders resolve relative child invocations from the
+  parent document. Each session exposes its SCXML event processor location.
+- Run exit actions in reverse document order. Correct Windows reference
+  command arguments, recursive conversion paths, local XInclude resolution
+  and redirected CLI output.
 
 ## 0.4.2 — 2026-06-20
 

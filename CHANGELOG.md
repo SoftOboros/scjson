@@ -8,7 +8,7 @@ single version stream.
 |----------|-----------------------|-----------------|------------------|
 | Python   | `py/`                 | 0.4.3           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
 | Ruby     | `ruby/`               | 0.4.1           | (in `git log`)   |
-| JS       | `js/`                 | 0.4.1           | (in `git log`)   |
+| JS       | `js/`                 | 0.4.3 candidate | (in `git log`)   |
 | Rust     | `rust/`               | 0.4.1           | (in `git log`)   |
 | Java     | `java/`               | 0.4.1           | (in `git log`)   |
 | Swift    | `swift/`              | (see swift)     | [`swift/CHANGELOG.md`](swift/CHANGELOG.md) |
@@ -17,6 +17,13 @@ single version stream.
 | C#       | `csharp/`             | (csproj)        | (in `git log`)   |
 
 ## Cross-language entries
+
+### 2026-11-21 — Executable order and mixed content on v0.4.3
+
+The Python and JavaScript converters preserve the order of executable children
+in SCJSON with an optional `execution_order` list. Existing grouped documents
+still load. Both converters preserve literal and structured event payloads,
+and the TypeScript package exposes the updated model types.
 
 ### 2026-06-20 — Python 0.4.2 (constrained-ECMAScript execution + M1 IR; Python-only)
 

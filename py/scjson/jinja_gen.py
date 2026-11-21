@@ -134,7 +134,16 @@ class JinjaGenPydantic(object):
                     self.objekts[name] = obj
                 except Exception as e:
                     print(f"Skipping {name} due to schema generation error: {e}")
-        # collect array types for tempalate use.
+        # A generated schema can reference a shared model imported by its
+        # defining module, even when the package does not re-export it.
+        root = self.objekts.get(input)
+        if root is not None:
+            defining_module = sys.modules[root.__module__]
+            for name in root.model_json_schema().get("$defs", {}):
+                model = getattr(defining_module, name, None)
+                if name not in self.objekts and inspect.isclass(model) and issubclass(model, BaseModel):
+                    self.objekts[name] = model
+        # Collect array types for template use.
         ptuples = {}
         for name, objekt in self.objekts.items():
             if not self._check_props(objekt, name):
@@ -159,7 +168,7 @@ class JinjaGenPydantic(object):
         """
         outname = os.path.join(self.output, out_name)
         ts = self.env.get_template(template_name).render(template_env)
-        with open(outname, "w") as tsfile:
+        with open(outname, "w", encoding="utf-8", newline="\n") as tsfile:
             tsfile.write(ts)
         print(f'Generated: {outname}')
 
@@ -208,9 +217,14 @@ class JinjaGenPydantic(object):
     def _get_field_type(prop: dict | str) -> str:
         """Extracts the correct type for a property in the Pydantic schema."""
         def xlate_type(prop: dict | str, is_array: bool = False) -> str:
+            if "anyOf" in prop:
+                members = " | ".join(xlate_type(member) for member in prop["anyOf"])
+                return f"({members})" if is_array else members
             if "type" in prop:
                 if prop["type"] == "array":
                     p_type = f"{xlate_type(prop['items'], is_array=True)}[]"
+                elif prop["type"] == "object" and prop.get("additionalProperties") == {"type": "string"}:
+                    p_type = "Record<string, string>"
                 else:
                     p_type = prop["type"]
             elif '$ref' in prop:

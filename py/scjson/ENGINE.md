@@ -80,11 +80,11 @@ To improve reproducibility, `datamodelDelta` keys are emitted in sorted order wh
 
 ## Canonical JSON Ingestion
 
-Even when the CLI receives SCXML, the runtime first converts it into its
-canonical SCJSON form and executes against the JSON tree. This guarantees the
-same inference rules apply regardless of the source format and lets the engine
-preserve authoring order for executable content by reading directly from the
-normalised JSON structure.
+The XML loader records the direct child sequence of each executable block that
+mixes action kinds. The SCJSON loader validates the optional `execution_order`
+list against the grouped children and consumes each kind in sequence. Legacy
+SCJSON without that list retains the earlier grouped traversal. Reconvert the
+original XML to recover interleaving that an older converter discarded.
 
 ## Reference Compatibility Guidance
 
@@ -131,8 +131,8 @@ new scenario is exercised against scion-core.
 
 - `<assign>`, `<log>`, and `<raise>` execute in authoring order and feed into the
   JSON trace.
-- `<if>`/`<elseif>`/`<else>` and `<foreach>` respect document order by consulting
-  the canonical JSON structure rather than regenerated dataclasses.
+- `<if>`/`<elseif>`/`<else>` and `<foreach>` follow the validated child order,
+  including repeated actions of the same kind in separate conditional branches.
 - `<send>` enqueues internal events (including `<param>` and `namelist`
   payloads); delayed sends are queued via the built-in scheduler and can be
   triggered in tests with `DocumentContext.advance_time(seconds)`. `<cancel>`
