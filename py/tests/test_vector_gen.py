@@ -80,7 +80,7 @@ def _chart_chained_range() -> str:
         """
         <scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
           <state id="s0">
-            <transition event="go" cond="0 < _event.data.n < 5" target="ok"/>
+            <transition event="go" cond="0 &lt; _event.data.n &lt; 5" target="ok"/>
           </state>
           <state id="ok"/>
         </scxml>

@@ -58,9 +58,11 @@ Decision notes (invoke/finalize ordering)
   generated Python model families and the canonical schema. Check round trips,
   event delivery and the original 17 literal-payload roots (ERRATA-008).
 - [ ] Resolve every remaining authored-outcome discrepancy in the original
-  ECMA pilot (ERRATA-009) and clear the reproducible qualification failures
-  on their affected platforms (ERRATA-010). The
-  [errata register](concepts/ERRATA.md) owns per-case closure checks.
+  ECMA pilot (ERRATA-009). The [errata register](concepts/ERRATA.md) owns
+  the per-case closure checks.
+- [x] Recover the 17 reproducible Windows qualification failures and check
+  native command arguments, long paths, and local includes on Linux and
+  Windows (ERRATA-010).
 - [x] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
 
 4) Events, Timers, and External I/O

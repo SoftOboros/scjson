@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 include-package-data = true
 # Install top-level helper modules used by CLI workflows as importable modules
-py-modules = ["exec_compare", "exec_sweep", "vector_gen"]
+py-modules = ["exec_compare", "exec_sweep", "vector_gen", "scjson_argv"]
 
 [tool.setuptools.packages.find]
 include = ["scjson", "scjson.*", "vector_lib"]

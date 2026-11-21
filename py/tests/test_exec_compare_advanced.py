@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "py"))
 import pytest
 from tempfile import TemporaryDirectory
 
+from scjson_argv import format_command
 from scion_support import (
     SCION_NPM_URL,
     augment_node_path,
@@ -39,12 +40,12 @@ NONCONFORMANT_CORPUS = (
 def _ref_command(root: Path) -> str:
     scion = root / "tools" / "scion-runner" / "scion-trace.cjs"
     if scion.exists() and ensure_scion_runner(root):
-        return f"node {scion}"
-    return f"{sys.executable} -m scjson.cli engine-trace"
+        return format_command(["node", str(scion)])
+    return format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
 
 
 def _python_ref() -> str:
-    return f"{sys.executable} -m scjson.cli engine-trace"
+    return format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
 
 
 def _run_compare(chart: Path, *, generate: bool = True, depth: int = 2, extra: list[str] | None = None, force_python_ref: bool = False) -> subprocess.CompletedProcess[str]:
@@ -182,7 +183,7 @@ def test_parallel_invoke_compare_scion() -> None:
         "--events",
         str(chart.with_suffix(".events.jsonl")),
         "--reference",
-        f"node {scion}",
+        format_command(["node", str(scion)]),
     ]
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=str(root))
     _assert_rejects_nonconformant_finalize_send(result)
@@ -219,7 +220,7 @@ def test_finalize_order_compare_scion() -> None:
             "--events",
             str(ev),
             "--reference",
-            f"node {scion}",
+            format_command(["node", str(scion)]),
         ]
         result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=str(root))
         _assert_rejects_nonconformant_finalize_send(result)

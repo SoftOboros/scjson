@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
+from scjson_argv import split_command
 import subprocess
 import sys
 from pathlib import Path
@@ -296,10 +296,10 @@ def _default_reference_cmd() -> List[str]:
 
 def _resolve_reference_cmd(args: argparse.Namespace) -> List[str]:
     if args.reference:
-        return shlex.split(args.reference)
+        return split_command(args.reference)
     env_cmd = os.environ.get("SCJSON_REF_ENGINE_CMD")
     if env_cmd:
-        return shlex.split(env_cmd)
+        return split_command(env_cmd)
     default = _default_reference_cmd()
     if default:
         return default
@@ -519,7 +519,7 @@ def main() -> None:
         type=str,
         choices=["tolerant", "strict", "scion"],
         default="tolerant",
-        help="Ordering policy for child→parent emissions (finalize, etc.)",
+        help="Ordering policy for child-to-parent emissions (finalize, etc.)",
     )
     parser.add_argument(
         "--norm",
@@ -623,7 +623,7 @@ def main() -> None:
 
     # Build python trace command (supports extra flags for size/determinism)
     py_cmd = (
-        shlex.split(args.python_cmd) if args.python_cmd else list(PYTHON_TRACE_CMD)
+        split_command(args.python_cmd) if args.python_cmd else list(PYTHON_TRACE_CMD)
     )
     py_flags: list[str] = []
     if args.leaf_only:
@@ -699,13 +699,13 @@ def main() -> None:
             print(f"Artifacts retained in {workdir}")
         sys.exit(1)
 
-    print("✔ Python vs reference traces match")
+    print("Python vs reference traces match")
 
     if args.secondary:
-        secondary_cmd = shlex.split(args.secondary)
+        secondary_cmd = split_command(args.secondary)
     else:
         secondary_env = os.environ.get("SCJSON_SECONDARY_ENGINE_CMD")
-        secondary_cmd = shlex.split(secondary_env) if secondary_env else []
+        secondary_cmd = split_command(secondary_env) if secondary_env else []
 
     if secondary_cmd:
         secondary_trace = workdir / "secondary.trace.jsonl"
@@ -742,7 +742,7 @@ def main() -> None:
             if temp_dir:
                 print(f"Artifacts retained in {workdir}")
             sys.exit(2)
-        print("✔ Reference vs secondary traces match")
+        print("Reference vs secondary traces match")
     if temp_dir:
         temp_dir.cleanup()
 

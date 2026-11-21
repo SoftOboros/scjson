@@ -44,7 +44,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-007 | 🔴 | Converted SCJSON disagrees with XML on foreach action order and data witnesses | 2026-11-21 | EXEC-C / conversion |
 | ERRATA-008 | 🟡 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
 | ERRATA-009 | 🔴 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
-| ERRATA-010 | 🔴 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
+| ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 
 ---
 
@@ -489,7 +489,7 @@ between 216 and 570. The 0.4.3 timing receipt has SHA-256
 
 ## ERRATA-010 — Qualification fixture, CLI, and platform failures
 
-**Open, Python CLI / harness.** Running `python -m pytest -q py/tests`
+**Resolved, Python CLI / harness.** Running `python -m pytest -q py/tests`
 on Windows against `b0a9a37` produced 567 passes, 17 failures and three
 skips. Every failing test reproduced on baseline `d04ae8f` at the same
 assertion with the same failure signature. The eight affected test modules
@@ -521,6 +521,18 @@ optional SCION comparisons skipped because SCION was unavailable. The
 one failure in the preceding Linux run was the missing Swift fixture.
 All 587 test IDs matched between runs. Full Linux evidence SHA-256
 `fe47b20e7552c574eb8069a9094dd089ce677f81ca2aba9fcc3062c790a2fa6f`.
+
+The portability repair runs reference commands with platform-native argument
+boundaries, uses the Windows extended path form for recursive conversions,
+and resolves local XInclude file and directory URIs. The two chained-range
+fixtures now encode their XML attribute correctly. The Windows run repeated
+all 17 failing test IDs plus three tests for argument quoting, deep paths,
+and relative includes. All 20 passed. The full standalone Python run passed
+587 tests and skipped three optional SCION and Ruby checks. The Linux
+portability run passed all 11 selected tests with the same source changes,
+including a real reference process and generated conversion and sweep files.
+Its verified evidence SHA-256 is
+`e33bd1fffbc89a9d1e2f29c08893acc4819e970fb48e82082badf57cee25b187`.
 
 ## How to add an entry
 

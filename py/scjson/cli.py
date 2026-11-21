@@ -21,12 +21,26 @@ from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError
 from json import dumps
 
+
+class _ConversionPath(click.Path):
+    """Allow recursive Windows input/output trees to exceed legacy MAX_PATH."""
+
+    def convert(self, value, param, ctx):
+        if os.name == "nt" and value is not None:
+            value = os.path.abspath(value)
+            if not value.startswith("\\\\?\\"):
+                if value.startswith("\\\\"):
+                    value = "\\\\?\\UNC\\" + value[2:]
+                else:
+                    value = "\\\\?\\" + value
+        return super().convert(value, param, ctx)
+
 def _get_metadata(pkg="scjson"):
     try:
         return {
             "version": version(pkg),
             "progname": pkg,
-            "description": "SCJSON: SCXML ↔ JSON converter"
+            "description": "SCJSON: SCXML and JSON converter"
         }
     except PackageNotFoundError:
         return {
@@ -51,8 +65,8 @@ def main(ctx):
 
 
 @main.command(help="Convert scjson file to SCXML.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
+@click.option("--output", "-o", type=_ConversionPath(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
@@ -105,8 +119,8 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
 
 
 @main.command(help="Convert SCXML file to scjson.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
+@click.option("--output", "-o", type=_ConversionPath(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
@@ -184,7 +198,7 @@ def json(
 
 
 @main.command(help="Validate scjson or SCXML files by round-tripping them in memory.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 def validate(path: Path, recursive: bool):
     """Check that files can be converted to the opposite format and back."""
@@ -446,7 +460,7 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     type=click.Choice(["tolerant", "strict", "scion"], case_sensitive=False),
     default="tolerant",
     show_default=True,
-    help="Ordering policy for child→parent emissions (finalize, etc.)",
+    help="Ordering policy for child-to-parent emissions (finalize, etc.)",
 )
 @click.option(
     "--emit-time-steps/--no-emit-time-steps",

@@ -22,6 +22,7 @@ import os
 import re
 import shlex
 import subprocess
+from scjson_argv import format_command
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -161,7 +162,7 @@ def main() -> None:
         type=str,
         choices=["tolerant", "strict", "scion"],
         default="tolerant",
-        help="Ordering policy for child→parent emissions (finalize, etc.)",
+        help="Ordering policy for child-to-parent emissions (finalize, etc.)",
     )
     opts = parser.parse_args()
 
@@ -187,8 +188,8 @@ def main() -> None:
         if scion_ready:
             common_env["NODE_PATH"] = augment_node_path(common_env.get("NODE_PATH"), repo_root)
 
-    python_reference = f"{sys.executable} -m scjson.cli engine-trace"
-    scion_reference = f"node {scion_script}"
+    python_reference = format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
+    scion_reference = format_command(["node", str(scion_script)])
     default_reference = opts.reference or (scion_reference if scion_ready else python_reference)
 
     charts: List[Path] = []
@@ -416,7 +417,7 @@ def main() -> None:
                     pass
         sys.exit(1)
 
-    print(f"✔ All charts matched reference ({total} compared)")
+    print(f"All charts matched reference ({total} compared)")
     if cov_count:
         print(
             f"Coverage (generated vectors): charts={cov_count} entered={cov_total['enteredStates']} fired={cov_total['firedTransitions']} done={cov_total['doneEvents']} error={cov_total['errorEvents']}"

@@ -343,6 +343,9 @@ def test_xinclude_resolve_mode_converts_assembled_tree(tmp_path):
 )
 def test_maintained_language_bindings_expose_conv_h_surface(path, snippets):
     """Maintained generated bindings expose CONV-H families and defaults."""
+    if REPO_ROOT / "swift" in path.parents and not (REPO_ROOT / "swift/Package.swift").is_file():
+        pytest.fail("Missing Swift submodule fixture. Run git submodule update --init swift from the scjson root.")
+    assert path.is_file(), f"Missing maintained binding source: {path}"
     text = path.read_text(encoding="utf-8")
     missing = [snippet for snippet in snippets if snippet not in text]
     assert missing == []

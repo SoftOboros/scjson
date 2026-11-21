@@ -31,6 +31,7 @@ from typing import Any, Dict, Iterable
 
 import pytest
 
+from scjson_argv import format_command
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from scjson.context import DocumentContext, ExecutionMode
 
@@ -162,7 +163,12 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
     try:
         subprocess.run(cmd + ["--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, env=env)
         return True
-    except Exception:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or b"").decode("utf-8", errors="replace").strip()
+        print(f"{exe} --help exited {exc.returncode}: {ascii(detail)}", file=sys.stderr)
+        return False
+    except OSError as exc:
+        print(f"Cannot run {exe}: {exc}", file=sys.stderr)
         return False
 
 
@@ -252,7 +258,7 @@ def _run_python_exec_compare(
         if not ensure_scion_runner(ROOT):
             print(f"Skipping Python execution compare: SCION ({SCION_NPM_URL}) not available.")
             return 0
-        reference = f"node {ROOT / 'tools' / 'scion-runner' / 'scion-trace.cjs'}"
+        reference = format_command(["node", str(ROOT / "tools" / "scion-runner" / "scion-trace.cjs")])
         env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), ROOT)
 
     failures = 0
@@ -405,7 +411,7 @@ class MismatchInvestigator:
         if not jpath or not jpath.exists():
             return None
         try:
-            data = json.loads(jpath.read_text())
+            data = json.loads(jpath.read_text(encoding="utf-8"))
         except Exception:
             return None
         cache[src] = data
@@ -605,6 +611,8 @@ def main(
             env = dict(os.environ)
             env["PYTHONPATH"] = str(ROOT / "py")
         if not _available(cmd, env):
+            if language:
+                raise SystemExit(f"Requested {lang} converter is unavailable: {cmd[0]}")
             print(f"Skipping {lang}: executable not available")
             continue
         if lang == "javascript":
@@ -642,7 +650,7 @@ def main(
                     print(f"{lang} failed to write {jpath}")
                     continue
                 try:
-                    data = json.loads(jpath.read_text())
+                    data = json.loads(jpath.read_text(encoding="utf-8"))
                 except Exception as exc:
                     print(f"{lang} JSON parse error {rel}: {exc}")
                     errors += 1
@@ -692,7 +700,7 @@ def main(
                     print(f"{lang} failed to write {xpath}")
                     continue
                 try:
-                    parsed = json.loads(handler.xml_to_json(xpath.read_text()))
+                    parsed = json.loads(handler.xml_to_json(xpath.read_text(encoding="utf-8-sig")))
                 except Exception as exc:
                     print(f"{lang} XML parse error {rel}: {exc}")
                     errors += 1

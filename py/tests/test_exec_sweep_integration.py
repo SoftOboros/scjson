@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scjson_argv import format_command
+
 
 def test_exec_sweep_generates_coverage_summary(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
@@ -34,7 +36,7 @@ def test_exec_sweep_generates_coverage_summary(tmp_path: Path) -> None:
     )
 
     workdir = tmp_path / "artifacts"
-    reference = f"{sys.executable} -m scjson.cli engine-trace"
+    reference = format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
     env = dict(os.environ)
     env["PYTHONPATH"] = str(root / "py")
     cmd = [

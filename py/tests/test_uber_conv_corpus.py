@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scjson_argv import format_command
+
 import pytest
 
 
@@ -58,7 +60,7 @@ def test_uber_test_runs_focused_conversion_corpus(tmp_path: Path) -> None:
 def test_uber_test_python_exec_compare_mode_accepts_reference(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[2]
     corpus = root / "tests" / "exec"
-    reference = f"{sys.executable} -m scjson.cli engine-trace"
+    reference = format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
 
     result = subprocess.run(
         [

@@ -16,6 +16,9 @@ parsing.
 from typing import Optional, Type, Union, Any, get_args, get_origin, ForwardRef
 from enum import Enum
 from decimal import Decimal
+from urllib.request import url2pathname
+from urllib.parse import urlsplit
+from pathlib import Path
 import xmlschema
 import json
 from dataclasses import asdict, fields, is_dataclass
@@ -59,6 +62,14 @@ class _PayloadParser(XmlParser):
                         value.content.append(text)
                     break
         return bound
+
+
+def _load_included_file(href, parse, encoding=None):
+    """Open local file URIs produced while joining nested XInclude references."""
+    uri = urlsplit(href)
+    if uri.scheme == "file" and uri.netloc in ("", "localhost"):
+        href = url2pathname(uri.path)
+    return ElementInclude.default_loader(href, parse, encoding)
 
 
 class SCXMLDocumentHandler:
@@ -215,7 +226,17 @@ class SCXMLDocumentHandler:
                 if xinclude_base_url is not None
                 else self.xinclude_base_url
             )
-            ElementInclude.include(root, base_url=base_url)
+            if base_url and (Path(base_url).is_absolute() or not urlsplit(base_url).scheme):
+                directory_base = str(base_url).endswith(("/", "\\"))
+                document = str(Path(base_url).resolve())
+                if document.startswith("\\\\?\\UNC\\"):
+                    document = "\\\\" + document[8:]
+                elif document.startswith("\\\\?\\"):
+                    document = document[4:]
+                base_url = Path(document).as_uri()
+                if directory_base and not base_url.endswith("/"):
+                    base_url += "/"
+            ElementInclude.include(root, loader=_load_included_file, base_url=base_url)
             xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
         capture_order(model, xml_str)
