@@ -40,10 +40,10 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-003 | 🟡     | `In()` cross-region predicate not in the admitted ECMAScript subset — blocks real infotainment control cores | 2026-06-20 | M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2) |
 | ERRATA-004 | 🟢 | Inline JSON data becomes text in the Python engine and disappears from executable IR | 2026-11-21 | Python execution / M1P6 |
 | ERRATA-005 | 🟢 | First-use foreach bindings have the expected values but the chart selects the wrong final | 2026-11-21 | EXEC-C |
-| ERRATA-006 | 🔴 | Execution continues after a failing action inside foreach | 2026-11-21 | EXEC-C |
-| ERRATA-007 | 🔴 | Converted SCJSON disagrees with XML on foreach action order and data witnesses | 2026-11-21 | EXEC-C / conversion |
-| ERRATA-008 | 🟡 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
-| ERRATA-009 | 🔴 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
+| ERRATA-006 | 🟢 | Execution continues after a failing action inside foreach | 2026-11-21 | EXEC-C |
+| ERRATA-007 | 🟢 | Converted SCJSON disagrees with XML on foreach action order and data witnesses | 2026-11-21 | EXEC-C / conversion |
+| ERRATA-008 | 🟢 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
+| ERRATA-009 | 🟢 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 
 ---
@@ -324,6 +324,17 @@ D-M1P6-2 admits expressions/statements but not the SCXML `In(<stateid>)` predica
 
 Pending the future extension. The workaround is verified: the normalized media-player derived from Bolero lowers with 0 diagnostics, emits, and `cargo check` passes (SCTD demo, 2026-06-20).
 
+**Open at the 0.4.3 package boundary.** At `76ab694`, the original Bolero
+chart has 40 literal `In()` calls across 29 guard sites. A parallel-region
+probe distinguished the existing interpreter from generated Rust. Both
+could identify the active leaf and its ancestors directly, but the generated
+positive and negated guards selected the wrong branches. A lowerer must
+carry the current session's configuration into guard evaluation, including
+conditional actions. The next D-M1P6-2 amendment should specify the admitted
+argument, evaluation timing, and unknown-state behavior, then test those
+choices against compiled code on both source routes. Host probe SHA-256
+`2c448429605fe8cf0d03bfe057f1b34ec076b264c050b860ad6a62bdfb7475a8`.
+
 ### Tracking
 
 - Admitted-subset owner: `docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2 (a reciprocal note records the `In()` gap + the normalized-media-player conformance decision).
@@ -409,17 +420,26 @@ from 8 to 12 for SCJSON. All previous passes were retained.
 
 ## ERRATA-006 — An action failure inside foreach leaves later iterations running
 
-**Open, EXEC-C.** In original mandatory test 156 the body increments
+**Resolved, EXEC-C.** In original mandatory test 156 the body increments
 `Var1`, then attempts `<assign location="Var5" expr="return"/>`. On
 `b0a9a37` the XML and SCJSON engines finish at `fail` with counter and
 last item both equal to 3. The chart expects the loop to stop on the first
-error. Trace expression failure, error-event delivery, and propagation
-out of the loop. Close when both loaders select `pass` with counter and
-last item equal to 1, alongside a control whose valid body visits all items.
+error. At `961f7e1`, both dialects and both file loaders select `pass` with
+counter and last item equal to 1. The valid control visits all three items.
+Test 159 preserves the variable that follows a failed send and delivers
+`error.communication`. All 20 block-boundary tests passed on docker-vm.
+The VM evidence archive has SHA-256
+`9a25ce9edc887b4d99837f045620d711bf26ff2f0ef0dcd9672561717171312f`.
+
+The broader sweep also exposed earlier false passes in ECMA 460 and 525
+and Python 525. The old engine stored a failed assignment's source text.
+The corrected engine leaves the previous collection intact on failure.
+The ECMA array operation and original Python type error have separate
+regression coverage.
 
 ## ERRATA-007 — Converted SCJSON loses behavior in three original foreach charts
 
-**Open, EXEC-C / conversion.** In both original dialects on `b0a9a37`,
+**Resolved, EXEC-C / conversion.** In both original dialects on `b0a9a37`,
 XML matches the expected state and fields. Normal SCJSON conversion followed
 by strict JSON-file execution gives the observations below.
 
@@ -429,14 +449,26 @@ by strict JSON-file execution gives the observations below.
 | 457, invalid bindings followed by a valid loop | `pass`, `Var6 = 6` | `fail`, `Var6 = 0` |
 | 459, ordered values with an index | `pass`, `Var5 = 1` | `pass`, `Var5 = 0` |
 
-Trace the first differing action against the original XML order for each
-chart. Check what survives conversion before assigning the defect to a
-serializer or engine. Close each case when both routes reproduce the
-authored final and data witness. A final-state-only assertion misses 459.
+Grouping actions by kind erased the interleaving of assignments, other
+actions, and conditional markers. The optional `execution_order` list now
+preserves that information. Original 153, 457 and 459 select `pass` through
+both loaders in both dialects, with `Var4 = 1`, `Var6 = 6`, and `Var5 = 1`
+respectively. The first VM run found three failures when an absent field
+serialized as null on Pydantic 2.11.7. At `a9b82e9` all 34 order checks
+passed on that version, including legacy documents and explicit empty lists.
+See the [wire contract](SCJSON-CONV-00-CONCEPTS.md#executable-child-order-errata-007).
+
+On docker-vm the packed JavaScript converter from `bc58fae` converted and
+restored 47 original and SoS charts. Python independently executed both
+returned forms of 150, 151, 153, 155, 457 and 459 in both dialects. All
+24 final-and-data checks passed. The tarball has SHA-256
+`1ab72f3bd0113ac15a20b34662094eec780f957616b7c1cb47e9bb8bef485890`.
+The packed-converter VM evidence has SHA-256
+`8f040e6692f2ae030610de72f94900d2441d3bb29c4ccb7ed3b99d4a00cebecf`.
 
 ## ERRATA-008 — Literal send and donedata payloads fail canonical validation
 
-**Diagnosed, conversion / Python model.** On 0.4.2 the converter returns
+**Resolved, conversion / Python model.** On 0.4.2 the converter returns
 literal character data for `<send><content>` and `<donedata><content>`.
 At `py/scjson/pydantic/generated.py:93`, `ScxmlContentType.content` expects
 a list of nested charts. Direct validation of the converter's SCJSON therefore
@@ -452,15 +484,35 @@ in ERRATA-004. These are the two ECMA Custom/types
 Replaying all 19 on both package versions produced byte-identical intake
 results, SHA-256 `6775c9ffd2b163e0daa7a5d0d81577501c1825ac5d46ba14d95428f9da5199a5`.
 
-**Fix target.** Correct the source definition and generation of mixed payload
-content, regenerate the affected models/schema, and check maintained bindings.
-Replay XML conversion, canonical validation, SCJSON-to-XML, and the actual
-delivered payload. Retain text, whitespace, nested markup, and nested-chart
-controls. Keep the two malformed inputs as explicit refusals.
+Commit `bf1f852` preserves literal text, qualified XML elements, and inline
+charts in the canonical payload model. All 17 originals passed intake,
+model and schema validation, and literal round-trip checks on docker-vm.
+The focused tests also checked whitespace, nested markup, actual send and
+done data, child completion, and the two independent malformed inputs.
+The combined ERRATA-007/008 run at `a9b82e9` passed all 82 focused checks
+and the SoS controls. The tested wheel has SHA-256
+`c4e01488d8521c1ac6ddccd2500477e64d4d09e4bd850d7e9bd9c331dfbb6cf9`.
+The VM archive has SHA-256
+`0c1ee9f9bff0cf73ca1f22dca83d67892c558f0ba024c6e89671e9f369163b96`.
+
+An XML parser independently compared all 17 original payload literals with
+the XML restored by the packed JavaScript converter. Every string matched.
+Rust 1.85.1, Ruby 3.3.14 and Swift 6.2.4 also decoded and encoded a sparse
+chart with text, qualified markup, an inline chart, an omitted order, an
+explicit empty order and repeated conditional markers. Native binding
+evidence SHA-256
+`b60336985d1c0826e38431402af6b7aea5af0ca5ec0e0bb60bddc9aec3439189`.
+
+The final wheel at `76ab694` admitted 425 of 427 Alex Z root charts on
+docker-vm, up from 408. The run verified the original hashes of all
+440 files and excluded the same 13 invocation helpers. All 17 newly
+accepted roots are the payload cases above. Every previously accepted
+root still validated. Intake evidence SHA-256
+`d13f3dfcceeb229f337d640ec2738768e95fb41a9113a077f2d7ee94e0f85af6`.
 
 ## ERRATA-009 — Original execution cases select the wrong final
 
-**Open, EXEC-C.** The initial 0.4.2 Docker VM pilot ran 14 original ECMA
+**Resolved, EXEC-C.** The initial 0.4.2 Docker VM pilot ran 14 original ECMA
 mandatory automatic charts, each in both strict and lax mode. Seven selected
 `fail` where the chart expected `pass`. Case 151 is tracked in ERRATA-005.
 Case 570 passed the subsequent control that drained immediate work before
@@ -473,6 +525,27 @@ advancing the clock. Retain that scheduling order in future runs.
 | 216 | Invocation uses the current value of `srcexpr`. Supply the original child file and check completion in the parent. |
 | 404 | Exits run child before parent, with reverse document order for ties. Capture the actions in order. |
 | 500 | The SCXML event I/O processor exposes its location. Record the value read by the authored guard. |
+
+At `a7592d18111c12e472a7098ea02d6a4faa414171` the five cases and
+timing control 570 passed in both dialects on both XML and SCJSON entry
+points (24 observations). In 159 the failed send left the counter at
+zero. In 173 the event reached `#_internal` after the target variable
+changed. In 216 the parent loaded the original sibling file and received
+`done.invoke` before the timeout. In 404 the exit and transition actions
+raised `event1`, `event2`, `event3`, and `event4` in order. In 500 the
+authored expression returned the registered address of its own session.
+Separate controls verified self-addressed delivery and distinct session
+addresses. A nonempty string containing the unevaluated expression had
+previously made the guard in 500 pass.
+
+The same VM run matched the authored foreach final and data on 19 of 20
+originals through each loader. In ECMA 460 and 525 the collection became
+`[1,2,3,4,4,4]` in exactly three iterations. Python 525 evaluates
+`Var1 + '4'` with a list on the left. Its first assignment raises a type
+error and correctly leaves the counter at zero and the list at `[1,2,3]`.
+The original chart therefore selects `fail`. All four SoS file routes
+and seven native vectors passed. VM evidence SHA-256
+`6b379f1d98f1a26858ad2b249a5105e46fe8d2bb3fc5b76fc5678fe2ae0ed2e6`.
 
 **Closure.** Carry each row independently. Establish the first discrepancy
 with its original companion files, then require the authored final and the
@@ -533,6 +606,26 @@ portability run passed all 11 selected tests with the same source changes,
 including a real reference process and generated conversion and sweep files.
 Its verified evidence SHA-256 is
 `e33bd1fffbc89a9d1e2f29c08893acc4819e970fb48e82082badf57cee25b187`.
+
+### Final 0.4.3 package qualification for ERRATA-005 through ERRATA-010
+
+Implementation commit `76ab694fe1ddfc08de8d53cd97d1bd01f46497f3`
+passed 718 full-suite tests on Linux and 717 on Windows. Both skipped two
+optional SCION comparisons. Windows also skipped the Ruby CLI comparison.
+The independent Ruby binding test ran on docker-vm. The final semantic run
+passed 111 focused checks, all 24 adjacent-case checks, both SoS charts
+through both loaders, and all seven native vectors. The final packed Node
+rerun used the same Python wheel for its returned-file execution checks.
+
+| Artifact or result | SHA-256 |
+| --- | --- |
+| Python wheel | `4a5ac91456755725607908b92772007528a18f703b299c23dc7cfee2d82c90a4` |
+| npm tarball | `1ab72f3bd0113ac15a20b34662094eec780f957616b7c1cb47e9bb8bef485890` |
+| Linux full-suite archive | `26f1716e6225c4c25c382170097a22ac6783fe82b81af7e69bbfb64917b1bc46` |
+| Windows full-suite result | `ba250c56f0ec1207425cc103ea0403cb5376220af279ba28b8286dcef61b237b` |
+| Final semantic archive | `f23ef65c039072349af10a3a1e4538841e33aa52d59a83275e029d1175b722d2` |
+| Final packed Node archive | `ee58b74a2df668fd509b05394a66997c4c85cc2f0ff3b9b661ef54854cf9f886` |
+| Combined package and review ZIP | `207e2197310324c92ba2e554ab89b20062c57701f6005417cc7484907741cc6e` |
 
 ## How to add an entry
 

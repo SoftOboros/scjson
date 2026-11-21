@@ -52,12 +52,12 @@ Decision notes (invoke/finalize ordering)
 - [x] Stop the enclosing executable block and any remaining foreach iterations
   on a failed assignment or send. Keep earlier effects and execute independent
   handlers. Cover original tests 156 and 159 through both file loaders.
-- [ ] Repair the remaining first-use bindings, error interruption, and
-  XML/SCJSON action discrepancies in both dialects (ERRATA-005 through -007).
+- [x] Verify first-use bindings, error interruption, and XML/SCJSON
+  executable order on the original charts in both dialects (ERRATA-005 through -007).
 - [x] Represent literal, nested XML and inline chart payloads in both
   generated Python model families and the canonical schema. Check round trips,
   event delivery and the original 17 literal-payload roots (ERRATA-008).
-- [ ] Resolve every remaining authored-outcome discrepancy in the original
+- [x] Resolve every remaining authored-outcome discrepancy in the original
   ECMA pilot (ERRATA-009). The [errata register](concepts/ERRATA.md) owns
   the per-case closure checks.
 - [x] Recover the 17 reproducible Windows qualification failures and check
