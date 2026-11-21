@@ -199,6 +199,27 @@ parallel regions first. To reproduce that presentation for an old file,
 list its parallel occurrences first in `region_order`. New exports use
 the same legacy fallback as the Python engine and generated Rust.
 
+### Document and compound-state child order (ERRATA-012)
+
+`scxml` and `state` MAY carry `state_order` (`stateOrder` in camelCase
+projections). Each entry consumes the next direct SCXML `state`, `parallel`,
+or `final` in its existing array, including an element without an ID. XML
+intake MUST record the list when two or more of those kinds occur, including
+on owners with an explicit initial target. A homogeneous or empty owner MAY
+omit the field. A supplied list MUST cover exactly those children once each.
+Readers MUST reject null, unknown or misplaced kinds, unmatched counts, and
+the field on a different SCXML element. History, handlers, initial elements,
+foreign elements, and comments do not consume slots. Each owner, including an
+embedded chart, has its own order. XML export MUST restore that order and
+omit the metadata itself.
+
+An explicit `initial` attribute or a compound state's `<initial>` transition
+selects the target. Otherwise, execution and executable IR MUST select the
+first child state in the recorded order. When older SCJSON omits the field,
+read `state`, then `parallel`, then `final`, preserving array order within
+each kind regardless of JSON key order. A parallel owner continues to use
+`region_order` and enters all its regions. [SCXML initial state rules](https://www.w3.org/TR/scxml/#scxml)
+
 ## Section 6. Work Packages
 
 ### CONV-A: Schema Field Registry Audit
