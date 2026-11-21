@@ -39,6 +39,7 @@ from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
 from .invoke import InvokeRegistry, InvokeHandler
 from . import dataclasses as dataclasses_module
+from .ecmascript_array import prepare_array_calls
 from .ecmascript_normalizer import (
     ECMAScriptNormalizationError,
     normalize as _normalize_ecmascript,
@@ -610,6 +611,7 @@ class DocumentContext(BaseModel):
                 expr = _normalize_ecmascript(expr)
             except ECMAScriptNormalizationError:
                 pass  # let the evaluator handle (will produce an error value)
+            expr, env = prepare_array_calls(expr, env)
         if allow_unsafe_eval:
             return eval(expr, {}, dict(env))
         return evaluator.evaluate(expr, env)
@@ -1085,7 +1087,8 @@ class DocumentContext(BaseModel):
         # Build a mutable local namespace from the current scope so that
         # assignments within the script propagate back to the datamodel.
         env = self._scope_env(act)
-        local_ns = dict(env)
+        py_body, script_env = prepare_array_calls(py_body, env, mode="exec")
+        local_ns = dict(script_env)
         try:
             exec(py_body, {}, local_ns)  # noqa: S102
         except Exception as exc:
@@ -1730,6 +1733,7 @@ class DocumentContext(BaseModel):
                 expr = _normalize_ecmascript(expr)
             except ECMAScriptNormalizationError:
                 raise
+            expr, env = prepare_array_calls(expr, env)
         if self.allow_unsafe_eval:
             return eval(expr, {}, dict(env))
         return self.evaluator.evaluate(expr, env)
