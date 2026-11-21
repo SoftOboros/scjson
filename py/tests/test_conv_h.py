@@ -305,7 +305,7 @@ def test_xinclude_resolve_mode_converts_assembled_tree(tmp_path):
                 "pub finalize: Vec<FinalizeProps>",
                 "pub struct ContentProps",
                 "impl Default for ContentProps",
-                "pub content: Option<Vec<ScxmlProps>>",
+                "pub content: Option<Vec<Value>>",
                 "pub struct ParamProps",
                 "impl Default for ParamProps",
                 "pub struct DonedataProps",

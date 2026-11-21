@@ -121,7 +121,7 @@ public enum {{ swift_enum_name(if_name) }}: String, Codable, CaseIterable {
 public struct {{ if_name }}Props: ScjsonCodable, Equatable {
 {% for field_name, field in schem["properties"].items() %}
 {% set swift_name = swift_prop_name(field_name) %}
-{% set field_type = get_field_type(field, schem["$defs"]) %}
+{% set field_type = '[String]?' if field_name == 'execution_order' else get_field_type(field, schem["$defs"]) %}
 {% set field_doc = field.get('description') or field.get('title') %}
 {% if field_doc %}
     /// {{ field_doc.replace('\n', ' ') }}
@@ -132,8 +132,8 @@ public struct {{ if_name }}Props: ScjsonCodable, Equatable {
 {% set params = [] %}
 {% for field_name, field in schem["properties"].items() %}
 {% set swift_name = swift_prop_name(field_name) %}
-{% set field_type = get_field_type(field, schem["$defs"]) %}
-{% set default_value = get_field_default(field, schem["$defs"]) %}
+{% set field_type = '[String]?' if field_name == 'execution_order' else get_field_type(field, schem["$defs"]) %}
+{% set default_value = 'nil' if field_name == 'execution_order' else get_field_default(field, schem["$defs"]) %}
 {% do params.append(swift_name ~ ": " ~ field_type ~ " = " ~ default_value) %}
 {% endfor %}
     /// Create a new {{ if_name }}Props value with schema defaults applied.
@@ -150,6 +150,21 @@ public struct {{ if_name }}Props: ScjsonCodable, Equatable {
 {% for field_name, field in schem["properties"].items() %}
 {% set swift_name = swift_prop_name(field_name) %}
         case {{ swift_name }} = "{{ field_name }}"
+{% endfor %}
+    }
+
+    public init(from decoder: Decoder) throws {
+        let fields = try decoder.container(keyedBy: CodingKeys.self)
+{% for field_name, field in schem["properties"].items() %}
+{% set swift_name = swift_prop_name(field_name) %}
+{% set field_type = '[String]?' if field_name == 'execution_order' else get_field_type(field, schem["$defs"]) %}
+{% set base_type = field_type[:-1] if field_type.endswith('?') else field_type %}
+{% set default = 'nil' if field_name == 'execution_order' else get_field_default(field, schem["$defs"]) %}
+{% if field_name in schem.get('required', []) %}
+        {{ swift_name }} = try fields.decode({{ base_type }}.self, forKey: .{{ swift_name }})
+{% else %}
+        {{ swift_name }} = try fields.decodeIfPresent({{ base_type }}.self, forKey: .{{ swift_name }}){{ ' ?? ' ~ default if default != 'nil' else '' }}
+{% endif %}
 {% endfor %}
     }
 

@@ -294,6 +294,9 @@ class JinjaGenPydantic(object):
         """Return the Rust type for a schema property."""
 
         def xlate(prop: dict | str) -> str:
+            if "anyOf" in prop:
+                # Preserve each alternative of a heterogeneous JSON array.
+                return "Value"
             if "type" in prop:
                 if prop["type"] == "array":
                     return f"Vec<{xlate(prop['items'])}>"
