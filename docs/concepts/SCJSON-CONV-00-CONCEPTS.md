@@ -169,6 +169,32 @@ document omitted. Implementations MUST NOT infer that order from JSON
 object key insertion order. Canonical schema/types, converters, execution
 and IR lowering share this contract, including nested executable containers.
 
+### Parallel region order (ERRATA-011)
+
+A `parallel` MAY carry `region_order` (`regionOrder` in camelCase
+projections), an array of the strings `state` and `parallel`. Each string
+references the next direct SCXML region of that kind in its existing array.
+For example, `["state", "parallel", "state"]` places the first state before
+the nested parallel and the second state after it. History, executable
+handlers, comments and foreign elements do not occupy region slots.
+
+XML intake MUST emit the array whenever both kinds occur, even if the first
+kind is `state`. A homogeneous or empty region sequence MAY omit it.
+Readers MUST reject an explicit null, an invalid kind, a missing or excess
+occurrence, or the field on a different SCXML element. An explicit empty
+array is valid only when there are no regions. Each nested parallel,
+including one inside an invoked chart, owns its own sequence.
+
+XML export, execution, and executable-IR lowering MUST respect the supplied
+sequence. Entry handlers observe the regions entered before them. Exit
+handlers run in reverse document order. XML export writes the region
+elements in order and omits the SCJSON metadata itself.
+
+If the field is absent, keep the legacy grouping of states followed by
+parallel regions, preserving order within each group. JSON object key order
+has no effect. Recovering an interleaving lost in an older conversion
+requires the original XML or an explicit sequence supplied by the author.
+
 ## Section 6. Work Packages
 
 ### CONV-A: Schema Field Registry Audit
