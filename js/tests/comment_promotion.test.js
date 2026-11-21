@@ -53,6 +53,20 @@ const {
 
 const SCXML_NS = 'xmlns="http://www.w3.org/2005/07/scxml"';
 
+test.each([
+  ['', '', '<log xmlns="urn:foreign"/>', '<log expr="2"/>'],
+  ['', '', '<log xmlns=""/>', '<log expr="2"/>'],
+  ['s:', 'xmlns:s="http://www.w3.org/2005/07/scxml" xmlns:x="urn:foreign"', '<x:log/>', '<s:log expr="2"/>'],
+])('preserves the exact comment owner when core and foreign local names coincide', (prefix, extra, foreign, core) => {
+  const tag = name => prefix + name;
+  const xml = `<${tag('scxml')} ${SCXML_NS} ${extra}><${tag('state')} id="s"><${tag('onentry')}>
+    ${foreign}<!-- chosen -->${core}</${tag('onentry')}></${tag('state')}></${tag('scxml')}>`;
+  const [doc, emitted] = roundTrip(xml);
+  expect(doc.state[0].onentry[0].log[0].help_text).toEqual(['chosen']);
+  expect(emitted).toMatch(/<!--chosen-->\s*<log\s+expr="2"/);
+  expect(convert(emitted).state[0].onentry[0].log[0].help_text).toEqual(['chosen']);
+});
+
 /**
  * Run the canonical XML -> JSON conversion and return the parsed object.
  */
