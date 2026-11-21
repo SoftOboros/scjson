@@ -1561,6 +1561,23 @@ def _lower_ast_if(
     )
 
 
+def _script_text(value: Any) -> Optional[str]:
+    """Read canonical character data or its historical nested content wrapper."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict) and set(value) == {"content"}:
+        return _script_text(value["content"])
+    if isinstance(value, (list, tuple)):
+        parts = []
+        for item in value:
+            text = _script_text(item)
+            if text is None:
+                return None
+            parts.append(text)
+        return "".join(parts)
+    return None
+
+
 def _lower_script(
     script: Any, ctx: _LoweringContext, origin: str, state: str, idx: int
 ) -> Union[List["ActionNode"], "CapabilityCallNode"]:
@@ -1587,24 +1604,12 @@ def _lower_script(
     script_name = getattr(script, "name", None)
     block_type = origin.split(":")[-1] if ":" in origin else origin
 
-    # Gather the raw body text.  Script body storage varies by representation:
-    # - pydantic model: ``value`` (str) or ``content`` (str)
-    # - dataclasses model (from SCXMLDocumentHandler): ``content`` is a list
-    #   of text segments (one element per text node in the SCXML).  Join them.
     body_text: Optional[str] = None
     for attr in ("value", "content", "_value"):
-        v = getattr(script, attr, None)
-        if v is None:
-            continue
-        if isinstance(v, str):
-            body_text = v.strip()
+        text = _script_text(getattr(script, attr, None))
+        if text and text.strip():
+            body_text = text.strip()
             break
-        if isinstance(v, (list, tuple)):
-            # SCXMLDocumentHandler stores text content as a list of strings.
-            joined = "".join(str(s) for s in v).strip()
-            if joined:
-                body_text = joined
-                break
 
     # If the machine is in ECMAScript mode and we have body text, attempt
     # to lower as an admitted statement sequence (D-M1P6-2).

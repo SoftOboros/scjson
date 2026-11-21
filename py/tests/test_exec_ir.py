@@ -5,12 +5,12 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-Tests for the M1 Executable IR module (exec_ir.py) and the SCJSON→IR lowerer.
+Tests for the M1 Executable IR module (exec_ir.py) and the SCJSONâ†’IR lowerer.
 
 Coverage:
-- All admitted ECMAScript expression forms (D-M1P6-2) → ExpressionNode
+- All admitted ECMAScript expression forms (D-M1P6-2) â†’ ExpressionNode
 - All ActionNode kinds (M1-EXECUTABLE-IR Area 2)
-- At least one unsupported-ecmascript diagnostic case (arrow fn) → no crash
+- At least one unsupported-ecmascript diagnostic case (arrow fn) â†’ no crash
 - Dining Philosophers lowering proof (keystone)
 """
 
@@ -102,7 +102,7 @@ def _parse_dp() -> object:
 
 
 # ---------------------------------------------------------------------------
-# Expression lowering — admitted ECMAScript subset (D-M1P6-2)
+# Expression lowering â€” admitted ECMAScript subset (D-M1P6-2)
 # ---------------------------------------------------------------------------
 
 class TestExpressionLowering:
@@ -277,7 +277,7 @@ class TestExpressionLowering:
         assert not diags
 
     def test_string_concatenation_with_expr(self):
-        """i_DELAY_THINK_EAT + 'ms' — string concat with coercion."""
+        """i_DELAY_THINK_EAT + 'ms' â€” string concat with coercion."""
         node, diags = lower_expression("i_DELAY_THINK_EAT + 'ms'", "test")
         # The normalizer wraps the non-string side in str(); we should get
         # a BinOp with a CallNode(str) on the lhs.
@@ -335,7 +335,7 @@ class TestExpressionLowering:
         assert not diags
 
     def test_t_inputs_indexed_by_event_name(self):
-        """t_INPUTS[_event.name] — the DP dispatch key expression."""
+        """t_INPUTS[_event.name] â€” the DP dispatch key expression."""
         node, diags = lower_expression("t_INPUTS[_event.name]", "test")
         assert isinstance(node, IndexAccess)
         assert isinstance(node.index, MemberAccess)
@@ -343,7 +343,7 @@ class TestExpressionLowering:
         assert not diags
 
     def test_complianceindex_add(self):
-        """complianceIndex + 1 — arithmetic in the DP foreach."""
+        """complianceIndex + 1 â€” arithmetic in the DP foreach."""
         node, diags = lower_expression("complianceIndex + 1", "test")
         assert isinstance(node, BinOp)
         assert node.op == "+"
@@ -351,7 +351,7 @@ class TestExpressionLowering:
 
 
 # ---------------------------------------------------------------------------
-# Unsupported expression forms (D-M1P6-8) — diagnostic, no crash
+# Unsupported expression forms (D-M1P6-8) â€” diagnostic, no crash
 # ---------------------------------------------------------------------------
 
 class TestUnsupportedExpressions:
@@ -1062,72 +1062,46 @@ class TestDiningPhilosophersLowering:
         # Machine must be a valid MachineIR regardless of diagnostic count
         assert isinstance(machine, MachineIR)
 
-    def test_script_lowers_to_capability_call(self, dp_ir):
-        """<script> elements in the child machine must lower to CapabilityCallNode."""
-        machine, _ = dp_ir
-        root = machine.children[0]
-        # Find a Philosopher child
-        phil_state = next(
-            (c for c in root.children if isinstance(c, StateIR) and c.id == "Philosopher1"),
-            None,
-        )
-        assert phil_state is not None
-        cm = phil_state.invokes[0].child_machine
-        assert cm is not None
+    def test_original_inline_scripts_lower_the_same_from_xml_and_scjson(self, dp_ir):
+        """Check both serializers against the actual admitted Dining script bodies."""
+        from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 
-        def _has_cap_call(node):
-            if isinstance(node, MachineIR):
-                for c in node.children:
-                    if _has_cap_call(c):
-                        return True
-            elif isinstance(node, (StateIR, ParallelIR)):
-                for a in node.onentry + node.onexit:
-                    if isinstance(a, CapabilityCallNode):
-                        return True
-                for t in node.transitions:
-                    for a in t.actions:
-                        if isinstance(a, CapabilityCallNode):
-                            return True
-                for c in node.children:
-                    if _has_cap_call(c):
-                        return True
-            return False
+        native, _ = lower_document(SCXMLDocumentHandler().load(DP_SCXML_PATH))
+        for machine in (native, dp_ir[0]):
+            philosophers = [state for state in machine.children[0].children if state.invokes]
+            assert len(philosophers) == 5
+            for state in philosophers:
+                child = state.invokes[0].child_machine.children[0]
+                assert [type(a) for a in child.onentry] == [IfNode, AssignNode, AssignNode]
+                assert [a.loc for a in child.onentry[0].branches[0].body] == ["i_ID_LEFT", "i_ID_RIGHT"]
+                assert [type(a) for a in child.transitions[0].actions] == [AssignNode, SendNode]
+                assert child.transitions[0].actions[0].loc == "t_INPUTS[_event.name]"
 
-        assert _has_cap_call(cm), "No CapabilityCallNode found in Philosopher1's child machine"
+    def test_capability_call_name_synthesis(self):
+        """An opaque script in a derived copy gets exactly one stable capability call."""
+        from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+        from scjson.pydantic import Scxml
+        from xml.etree import ElementTree as ET
 
-    def test_capability_call_name_synthesis(self, dp_ir):
-        """CapabilityCallNode names must follow the script_<block>_<state>_<idx>_<count> pattern."""
-        machine, _ = dp_ir
-        root = machine.children[0]
-        phil_state = next(
-            (c for c in root.children if isinstance(c, StateIR) and c.id == "Philosopher1"),
-            None,
-        )
-        cm = phil_state.invokes[0].child_machine
-
-        cap_names = []
-
-        def _collect_cap(node):
-            if isinstance(node, MachineIR):
-                for c in node.children:
-                    _collect_cap(c)
-            elif isinstance(node, (StateIR, ParallelIR)):
-                for a in node.onentry + node.onexit:
-                    if isinstance(a, CapabilityCallNode):
-                        cap_names.append(a.name)
-                for t in node.transitions:
-                    for a in t.actions:
-                        if isinstance(a, CapabilityCallNode):
-                            cap_names.append(a.name)
-                for c in node.children:
-                    _collect_cap(c)
-
-        _collect_cap(cm)
-        assert cap_names, "No CapabilityCallNode found"
-        for name in cap_names:
-            assert name.startswith("script_"), \
-                "Cap name {!r} does not start with 'script_'".format(name)
-            assert name.endswith(".success") is False  # names, not events
+        tree = ET.parse(DP_SCXML_PATH)
+        parent = tree.find(".//{*}state[@id='Philosopher1']/{*}invoke/{*}content/{*}scxml/{*}state/{*}onentry")
+        original = parent.find("{*}script")
+        # Keep the original admitted script. Its sibling contains a mixed
+        # block with an opaque call, so it must not lower its first assignment.
+        opaque = ET.SubElement(parent, original.tag)
+        opaque.text = "side = 1; callHost(side);"
+        doc = Scxml.model_validate_json(SCXMLDocumentHandler().xml_to_json(ET.tostring(tree.getroot(), encoding="unicode")))
+        machine, _ = lower_document(doc)
+        state = next(s for s in machine.children[0].children if s.id == "Philosopher1")
+        child = state.invokes[0].child_machine
+        onentry = child.children[0].onentry
+        assert [type(a) for a in onentry] == [IfNode, AssignNode, AssignNode, CapabilityCallNode]
+        cap = onentry[-1]
+        assert cap.name == "script_onentry_Philospher_1_0"
+        assert cap.origin == OriginRef(type="script", state="Philospher", idx=1)
+        assert cap.success_event == cap.name + ".success"
+        assert cap.error_event == cap.name + ".error"
+        assert any(d.code == "unsupported-ecmascript" and d.outcome == "capability-only" for d in child.diagnostics)
 
 
 # ---------------------------------------------------------------------------
@@ -1348,6 +1322,17 @@ class TestScriptBodyLowering:
         # Location should represent the subscript assignment target.
         assert "t_INPUTS" in result[0].loc
 
+    def test_legacy_wrapped_script_text_keeps_the_canonical_lowering(self):
+        """A stored legacy wrapper carries the same authored source as plain text."""
+        from types import SimpleNamespace
+        from scjson.exec_ir import _lower_script
+
+        wrapped = SimpleNamespace(content=[{"content": ["value", " = 7"]}])
+        result = _lower_script(wrapped, self._make_ecmascript_ctx(), "s:onentry", "s", 0)
+        assert isinstance(result, list) and len(result) == 1
+        assert isinstance(result[0], AssignNode) and result[0].loc == "value"
+        assert result[0].expr.num == 7
+
 
 # ---------------------------------------------------------------------------
 # Fix 2: inline child-machine detection via SCXMLDocumentHandler
@@ -1442,7 +1427,7 @@ class TestInlineChildMachineDetection:
         onentry = philospher_state.onentry
         assert len(onentry) >= 3, (
             "Expected at least 3 onentry actions (IfNode + 2 AssignNodes), "
-            "got {} — Fix 1 may have failed (script still CapabilityCallNode)".format(len(onentry))
+            "got {} â€” Fix 1 may have failed (script still CapabilityCallNode)".format(len(onentry))
         )
 
         # First action: IfNode (the if (i_ID !== 0) { ... } block)
