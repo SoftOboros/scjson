@@ -45,8 +45,9 @@ Decision notes (invoke/finalize ordering)
 - [x] Compare literal state membership across regions, ancestors, lifecycle
   handlers and invoked sessions against generated Rust. Verify the 15 original
   Alex Z charts with membership guards through XML and SCJSON (ERRATA-003).
-- [ ] Preserve the authored order of structural children across element kinds
-  so an entry guard sees preceding parallel regions in order (ERRATA-011).
+- [x] Preserve the authored order of sibling `state` and `parallel` regions.
+  Verify the preceding-region entry guard and the legacy state-first read
+  rule in Python and generated Rust. [ERRATA-011](concepts/ERRATA.md#errata-011--structural-order-of-mixed-parallel-regions)
 
 3) Executable Content Phase 1
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.

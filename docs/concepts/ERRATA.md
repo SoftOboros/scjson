@@ -45,7 +45,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-008 | 🟢 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
 | ERRATA-009 | 🟢 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
-| ERRATA-011 | 🟡 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
+| ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 
 ---
 
@@ -684,22 +684,79 @@ rerun used the same Python wheel for its returned-file execution checks.
 
 **Diagnosed on 2026-11-21 at Python 0.4.3 candidate `2a9c9eb`.**
 Two XML charts reverse a nested `<parallel id="first">` and a sibling
-`<state id="second">`. Their canonical SCJSON is byte-identical,
+`<state id="second">`. The old converter emitted byte-identical SCJSON,
 SHA-256 `ffb067a26c81a34af68536195446b46c200276c54649161d743b659603c10c59`.
-The structural model collects children by kind. Both file loaders enter
+The structural model collected children by kind. Both file loaders entered
 `second` before `first`, including when the author placed `first` first.
-Consequently an entry action in `second` that tests `In('first')` misses
-its authored effect. Both charts reach the same final set of active states.
+An entry action in `second` that tested `In('first')` consequently missed
+its authored effect. Both charts reached the same final set of active states.
 
-In the Alex Z corpus, the original `testDoneParallelThreeLevels.scxml`
-still reaches its authored `pass` outcome through both loaders. Detecting
-the defect requires checking the order of effects during entry.
-The repair needs lossless structural document order in conversion, model
-loading and execution, plus a read rule for existing SCJSON. ERRATA-007
-covers the order of executable children. The new order witness, both
-serializations and the original's observations are recorded in the
-ERRATA-003 review packet under `review-extras/mixed-structural-order/`.
+The original Alex Z `testDoneParallelThreeLevels.scxml` still reached `pass`
+through both loaders. Its terminal state alone concealed the entry-order
+error. The original witnesses and observations are in the ERRATA-003 review
+packet under `review-extras/mixed-structural-order/`.
 Host result SHA-256 `91a22a9a1268029db55029c533fef3ebe061a783c65efa989f44fb718b8a0b0e`.
+
+### Verified repair on v0.4.3
+
+Mixed `<parallel>` elements now record each direct region in `region_order`.
+Each `state` or `parallel` entry consumes the next child in the matching
+array. Nested parents carry independent lists. Comments, history, handlers,
+and foreign elements do not consume a region. ERRATA-007's `execution_order`
+continues to describe executable children. [Conversion contract](SCJSON-CONV-00-CONCEPTS.md#parallel-region-order-errata-011)
+
+Unmarked SCJSON still reads each `state` in array order, then each `parallel`.
+The original XML is needed to recover an interleaving that the old converter
+discarded. The standalone native Rust XML exporter previously used lexical
+key order, which put `parallel` first. It now follows the common state-first
+rule. Authors can specify a parallel-first list to reproduce that output.
+
+On docker-vm, the Python engine and independently compiled iState Rust
+agreed with the authored results on 45 routes per engine across 16 charts.
+The mixed cases ran from original XML, saved SCJSON, and re-exported XML.
+Six permutations covered repeated children of the same kind. The two
+unchanged Alex Z mixed-region originals both reached `pass`. An instrumented
+copy of the three-level original exposed the intermediate results below.
+
+| Input | Expected entry effects | Baseline | Fixed Python and Rust |
+| --- | --- | --- | --- |
+| Nested `first` before sibling `second` | `first`, `second` with `In('first')` true | `second`, `first` (false) | `first`, `second` (true) |
+| Sibling `second` before nested `first` | `second`, `first` with `In('first')` false | `second`, `first` (false) | `second`, `first` (false) |
+| Three-level instrumented Alex Z chart | Outer `12`, inner `34`, preceding region active | `21`, `34`, `0` | `12`, `34`, `1` |
+
+The exact unmarked legacy witness retained its state-first entry log through
+SCJSON and restored XML in both engines. All 21 malformed input checks
+refused the supplied sequence. Deliberately swapping the expected order
+failed in both engines on all three input routes. The native SoS suite
+passed all seven vectors. A separate Windows replay compared 113 scenarios
+over 25 previously saved SCJSON files with their earlier observations. All
+matched, as did three additional legacy order fixtures.
+
+The Alex Z catalog contained 440 files, including 13 helpers. Direct
+canonical-model validation admitted the same 425 of 427 roots before and
+after the repair. The context loader's input preparation also admitted
+Python 401, for 426 of 427 on each revision. The execution matrix covered
+the two originals with mixed regions. The rest of the census checked intake.
+
+The standalone Rust converter passed all 24 locked tests on docker-vm.
+Its CLI round-tripped both original Alex Z charts and both order witnesses,
+and exported the exact legacy file with states first. The review ZIP
+contains the qualified wheel and npm tarball, generated sources for all 47
+candidate Rust runs, the input charts, per-route traces, and raw receipts.
+
+| Evidence | Revision or SHA-256 |
+| --- | --- |
+| SCJSON Python, schema and JavaScript candidate | `891373068f9a5f913e8cfbb41c94c0b7530c2307` |
+| iState generated Rust emitter | `1997bb599daafe5f2da270a11e81c0c52d08d9be` |
+| Standalone native Rust converter and CLI | `c59a31f3a011734142a4ef7c618ddaaf9aa2ae33` |
+| VM mixed-region matrix, generated crates and observations | `1aa128ddff16fec9d59fbe151f7b3b61958d15d4cd27a7d3412f720b51ed75ed` |
+| Installed Python 0.4.3 wheel | `48d019b2bbba76dcab6037a79b2a1d61408d72afe2a6737219c21faa259b3149` |
+| VM full wheel suite, 809 passed, two SCION skips | `513146aa69b61af551cb6e18d9ce7b278565a80bfab0dd4183f6e532685182dc` |
+| VM focused wire/runtime suite (30) and iState Rust emitter suite (27) | `7a9475956cac80850cfe301e117d860c026f18ade1d873129263d0826e5ead72` |
+| VM baseline and candidate canonical-model intake census | `8cc6227e8d7e46759e307d1eadc70486ee1b4665964e9b383729382ec6107cfe` |
+| VM packed npm and Swift Codable checks | `2558ff6b5af3503b9b64df72227b454f500555f558717af116cc3eb19ba7d5b4` |
+| VM native Rust locked suite and CLI conversions | `58c047411453b48a0da7abd24f360471c412c3d72605f68b8230b66cd9a55f6e` |
+| `structural-region-order-generated-rust-review.zip` (929 members) | `75e21a545f7531a24ac5c57ef6791226ec9e6f6b1c9bf17bc2c3bde023b89b8b` |
 
 ---
 
