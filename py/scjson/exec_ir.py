@@ -69,6 +69,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
+from .inline_data import inline_data_value
+
 
 # ---------------------------------------------------------------------------
 # Diagnostic
@@ -1146,7 +1148,26 @@ def _lower_data_slot(data: Any, ctx: _LoweringContext) -> DataSlotIR:
         ir_node = ctx.lower_expr(expr_str, "data:{}".format(slot_id))
         # Convert simple literal IR nodes to Value tags
         initial = _expr_to_value(ir_node)
+    elif not getattr(data, "src", None):
+        content = getattr(data, "content", [])
+        if content and all(isinstance(part, str) for part in content):
+            initial = _json_value(inline_data_value(content))
     return DataSlotIR(id=slot_id, initial_value=initial, expr_source=expr_src)
+
+
+def _json_value(value: Any) -> Value:
+    """Translate a decoded inline initializer to the corresponding tagged IR value."""
+    if value is None:
+        return UndefinedValue()
+    if isinstance(value, bool):
+        return BoolValue(v=value)
+    if isinstance(value, (int, float)):
+        return NumberValue(v=value)
+    if isinstance(value, str):
+        return StrValue(v=value)
+    if isinstance(value, list):
+        return ArrayValue(items=[_json_value(item) for item in value])
+    return MapValue(entries=[(key, _json_value(item)) for key, item in value.items()])
 
 
 def _expr_to_value(node: ExpressionNode) -> Optional[Value]:
@@ -1167,16 +1188,25 @@ def _expr_to_value(node: ExpressionNode) -> Optional[Value]:
         return BoolValue(v=node.b)
     if isinstance(node, UndefinedValue):
         return UndefinedValue()
+    if isinstance(node, UnaryOp) and node.op == "neg":
+        operand = _expr_to_value(node.operand)
+        return NumberValue(v=-operand.v) if isinstance(operand, NumberValue) else None
     if isinstance(node, ArrayLiteral):
-        items = [_expr_to_value(e) for e in node.items]
-        return ArrayValue(items=[v for v in items if v is not None])
+        items = []
+        for item in node.items:
+            value = _expr_to_value(item)
+            if value is None:
+                return None
+            items.append(value)
+        return ArrayValue(items=items)
     if isinstance(node, MapLiteral):
         entries = []
         for k, v in node.entries:
             kv = _expr_to_value(k)
             vv = _expr_to_value(v)
-            if isinstance(kv, StrValue):
-                entries.append((kv.v, vv))
+            if not isinstance(kv, StrValue) or vv is None:
+                return None
+            entries.append((kv.v, vv))
         return MapValue(entries=entries)
     return None
 

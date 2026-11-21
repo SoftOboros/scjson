@@ -6,7 +6,7 @@ single version stream.
 
 | Language | Path                  | Latest version  | Per-package log |
 |----------|-----------------------|-----------------|------------------|
-| Python   | `py/`                 | 0.4.2           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
+| Python   | `py/`                 | 0.4.3           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
 | Ruby     | `ruby/`               | 0.4.1           | (in `git log`)   |
 | JS       | `js/`                 | 0.4.1           | (in `git log`)   |
 | Rust     | `rust/`               | 0.4.1           | (in `git log`)   |

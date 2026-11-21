@@ -47,6 +47,8 @@ Decision notes (invoke/finalize ordering)
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.
 - [x] Implement if/elseif/else.
 - [x] Implement foreach.
+- [x] Initialize collections from inline JSON character data through both file
+  entry points and carry the same constants into executable IR data slots.
 - [x] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
 
 4) Events, Timers, and External I/O

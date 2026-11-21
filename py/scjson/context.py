@@ -33,6 +33,7 @@ from .pydantic import (
     State,
 )
 from .events import Event, EventQueue
+from .inline_data import inline_data_value
 from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
 from .invoke import InvokeRegistry, InvokeHandler
@@ -559,7 +560,10 @@ class DocumentContext(BaseModel):
                     except Exception:
                         value = None
                 elif data.content:
-                    value = "".join(str(x) for x in data.content)
+                    if all(isinstance(part, str) for part in data.content):
+                        value = inline_data_value(data.content)
+                    else:
+                        value = "".join(str(x) for x in data.content)
                 result[data.id] = value
         return result
 
@@ -2263,11 +2267,16 @@ class DocumentContext(BaseModel):
                     new_items.append(walk(item))
             return new_items
 
-        def walk(node: Any, skip_content: bool = False) -> Any:
+        def walk(node: Any, skip_content: bool = False, field_name: str = "") -> Any:
             if isinstance(node, dict):
                 updated: Dict[str, Any] = {}
                 for key, value in node.items():
                     if key == "content" and isinstance(value, list) and not skip_content:
+                        # Data.content is a mixed wildcard. Its character data
+                        # already has the shape expected by the validated model.
+                        if field_name == "data" and all(isinstance(part, str) for part in value):
+                            updated[key] = value
+                            continue
                         processed = wrap_content_list(value)
                         updated[key] = [
                             walk(elem, skip_content=True) if isinstance(elem, (dict, list)) else elem
@@ -2287,10 +2296,10 @@ class DocumentContext(BaseModel):
                             else:
                                 updated[key].append(walk(item))
                         continue
-                    updated[key] = walk(value)
+                    updated[key] = walk(value, field_name=key)
                 return updated
             if isinstance(node, list):
-                return [walk(item) for item in node]
+                return [walk(item, field_name=field_name) for item in node]
             return node
 
         return walk(data)

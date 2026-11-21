@@ -7,6 +7,8 @@ Licensed under the BSD 1-Clause License.
 """
 
 from decimal import Decimal
+import json
+from pathlib import Path
 import pytest
 from xsdata.exceptions import ParserError
 
@@ -14,6 +16,58 @@ from scjson.pydantic import Scxml, State, Transition, Datamodel, Data, Parallel
 from scjson.context import DocumentContext, ExecutionMode
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from scjson.invoke import InvokeRegistry, RecordHandler
+
+
+@pytest.mark.parametrize("dialect", ["ecma", "python"])
+def test_inline_foreach_original_155(dialect, tmp_path):
+    """Run the unmodified W3C chart and its ordinary SCJSON conversion."""
+    tests = Path(__file__).resolve().parents[2] / "tutorial" / "Tests"
+    if not tests.is_dir():
+        pytest.skip("Initialize the tutorial submodule to run the original chart")
+    xml_path = tests / dialect / "W3C" / "Mandatory" / "Auto" / "test155.scxml"
+    xml = xml_path.read_text(encoding="utf-8")
+    handler = SCXMLDocumentHandler()
+    scjson = handler.xml_to_json(xml)
+    json_path = tmp_path / "test155.scjson"
+    json_path.write_text(scjson, encoding="utf-8")
+    model = Scxml.model_validate_json(scjson)
+    original = next(d.content for d in model.datamodel[0].data if d.id == "Var3")
+    assert "".join(original).strip() == "[1,2,3]"
+    restored = Scxml.model_validate_json(handler.xml_to_json(handler.json_to_xml(scjson)))
+    assert next(d.content for d in restored.datamodel[0].data if d.id == "Var3") == original
+
+    for machine in (DocumentContext.from_xml_file(xml_path),
+                    DocumentContext.from_xml_string(xml),
+                    DocumentContext.from_json_file(json_path),
+                    DocumentContext.from_doc(model)):
+        assert machine.configuration - {"__scxml_root__"} == {"pass"}
+        assert [machine.data_model[k] for k in ("Var1", "Var2", "Var3")] == [6, 3, [1, 2, 3]]
+
+
+def test_inline_data_literals_and_authored_text(tmp_path):
+    """Decode JSON exactly once and keep fallback text and expr precedence."""
+    data = [
+        {"id": "nested", "content": ['{"a": [false,', ' null, -3, "x"]}']},
+        {"id": "items", "content": ["[]"]},
+        {"id": "zero", "content": ["0"]},
+        {"id": "quoted", "content": ['"[1,2,3]"']},
+        {"id": "text", "content": ["  keep", "  this  "]},
+        {"id": "expression", "content": ["1 + 2"]},
+        {"id": "invalid", "content": ["[1,]"]},
+        {"id": "nan", "content": ["NaN"]},
+        {"id": "attr", "expr": "2", "content": ["[4]"]},
+        {"id": "absent"},
+    ]
+    raw = {"version": "1.0", "initial": ["s"], "state": [{"id": "s"}],
+           "datamodel": [{"data": data}]}
+    path = tmp_path / "values.scjson"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    expected = {"nested": {"a": [False, None, -3, "x"]}, "items": [], "zero": 0,
+                "quoted": "[1,2,3]", "text": "  keep  this  ", "expression": "1 + 2",
+                "invalid": "[1,]", "nan": "NaN", "attr": 2, "absent": None}
+    for machine in (DocumentContext.from_doc(Scxml.model_validate(raw)),
+                    DocumentContext.from_json_file(path)):
+        assert {name: machine.data_model[name] for name in expected} == expected
 
 
 def _make_doc():

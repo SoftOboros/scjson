@@ -21,6 +21,14 @@ For cross-language parity and [SCION](https://www.npmjs.com/package/scion) compa
 
 ## Overview
 
+In the Python and ECMAScript datamodels, an inline character-data initializer
+such as `<data id="items">[1,2,3]</data>` supplies an array. The engine decodes
+JSON literals at initialization and keeps other character data as authored
+text. The XML and SCJSON loaders use the same rule. The converter preserves
+the original character data for round trips. The executable IR records the
+decoded constant in the data slot and reserves `expr_source` for an authored
+`expr` attribute.
+
 The Python engine executes SCXML/SCJSON statecharts and can emit deterministic JSONL traces of execution. A set of CLI utilities help you:
 
 - Run the Python engine and collect traces

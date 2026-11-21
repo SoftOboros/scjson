@@ -6,6 +6,13 @@ The Python package version is independent of the JS, Ruby, Rust, Java, Swift,
 Lua, Go, and C# package versions; cross-language work is coordinated through
 the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
+## 0.4.3 — Unreleased
+
+- Initialize inline JSON data through the XML, SCJSON, and validated-model
+  entry points. A `foreach` over the inline array in W3C test 155 now visits
+  its three numbers in order. Conversion retains the authored text.
+- Preserve inline constants in executable IR data slots.
+
 ## 0.4.2 — 2026-06-20
 
 Python-only release; no cross-language (JS/Ruby/Rust/Java) changes. Adds the

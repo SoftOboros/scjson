@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 import pytest
 
 # Ensure the py/ package is on the path when running from the repo root.
@@ -502,6 +503,66 @@ class TestValueModel:
     def test_undefined_value(self):
         v = UndefinedValue()
         assert isinstance(v, UndefinedValue)
+
+
+def _lower_slot(data):
+    from scjson.pydantic import Scxml
+
+    model = Scxml.model_validate({
+        "version": "1.0", "datamodel_attribute": "ecmascript",
+        "datamodel": [{"data": [{"id": "slot", **data}]}],
+    })
+    machine, _ = lower_document(model)
+    return machine.datamodel[0]
+
+
+@pytest.mark.parametrize("dialect", ["ecma", "python"])
+def test_original_155_lowers_inline_collection_and_loop(dialect):
+    from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+    from scjson.pydantic import Scxml
+
+    path = Path(_SCJSON_ROOT, "tutorial", "Tests", dialect, "W3C", "Mandatory", "Auto", "test155.scxml")
+    if not path.is_file():
+        pytest.skip("Alex Z tutorial submodule is unavailable")
+    raw = SCXMLDocumentHandler().xml_to_json(path.read_text(encoding="utf-8-sig"))
+    machine, diagnostics = lower_document(Scxml.model_validate_json(raw))
+    assert diagnostics == []
+    slot = next(slot for slot in machine.datamodel if slot.id == "Var3")
+    assert slot.expr_source is None
+    assert slot.initial_value == ArrayValue([NumberValue(1), NumberValue(2), NumberValue(3)])
+    loop, = machine.children[0].onentry
+    assert isinstance(loop, ForeachNode) and loop.array_expr == VarRead("Var3")
+    assert loop.item == "Var2"
+    action, = loop.body
+    assert isinstance(action, AssignNode) and action.loc == "Var1"
+    assert action.expr == BinOp("+", VarRead("Var1"), VarRead("Var2"))
+
+
+@pytest.mark.parametrize("source", ["content", "expr"])
+def test_constant_collections_preserve_signed_numbers_and_types(source):
+    literal = '[9007199254740993, -2, -0.25, {"ok": true, "empty": [], "value": null}]'
+    slot = _lower_slot({source: [literal] if source == "content" else literal})
+    expected = ArrayValue([NumberValue(9007199254740993), NumberValue(-2), NumberValue(-0.25),
+                           MapValue([("ok", BoolValue(True)), ("empty", ArrayValue([])),
+                                     ("value", UndefinedValue())])])
+    assert slot.initial_value == expected
+    assert type(slot.initial_value.items[0].v) is int
+    assert slot.expr_source == (None if source == "content" else literal)
+
+
+@pytest.mark.parametrize("data,expected", [
+    ({"content": [" text ", "unchanged "]}, StrValue(" text unchanged ")),
+    ({"content": [" [] "]}, ArrayValue([])),
+    ({"content": ["null"]}, UndefinedValue()),
+    ({"content": ["before", {"qname": "{urn:test}tag", "text": "3"}]}, None),
+    ({"src": "external.json", "content": ["[3]"]}, None),
+    ({"expr": "1", "content": ["[3]"]}, NumberValue(1)),
+    ({"expr": "[1, lookup, 3]"}, None),
+    ({"expr": '{"before": 1, "nested": [lookup, 3]}'}, None),
+    ({"expr": "{1: 2}"}, None),
+])
+def test_inline_fallback_precedence_and_nonconstant_collections(data, expected):
+    assert _lower_slot(data).initial_value == expected
 
 
 # ---------------------------------------------------------------------------
