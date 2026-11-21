@@ -1656,6 +1656,10 @@ class ScxmlStateType:
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    state_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )
+
 
 @dataclass
 class State(ScxmlStateType):
@@ -1857,6 +1861,10 @@ class ScxmlScxmlType:
     )
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
+    )
+
+    state_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
     )
 
 

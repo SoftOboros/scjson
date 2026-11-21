@@ -1017,6 +1017,8 @@ pub struct ScxmlProps {
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
     pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for ScxmlProps {
@@ -1036,6 +1038,7 @@ impl Default for ScxmlProps {
             exmode: Option::<ExmodeDatatypeProps>::default(),
             other_attributes: Map::<String, Value>::default(),
             help_text: Vec::<String>::default(),
+            state_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -1148,6 +1151,8 @@ pub struct StateProps {
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
     pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for StateProps {
@@ -1168,6 +1173,7 @@ impl Default for StateProps {
             initial_attribute: Vec::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
             help_text: Vec::<String>::default(),
+            state_order: Option::<Vec::<String>>::default(),
         }
     }
 }

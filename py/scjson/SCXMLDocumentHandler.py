@@ -32,8 +32,8 @@ from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
 from .execution_order import (
-    InvalidRegionOrder, MisplacedExecutionOrder, canonical_json, capture_order,
-    ordered_regions, restore_order, validate_order_location,
+    InvalidRegionOrder, InvalidStructuralOrder, MisplacedExecutionOrder, canonical_json, capture_order,
+    ordered_state_children, restore_order, validate_order_location,
 )
 from xml.etree import ElementTree as ET
 from xml.etree import ElementInclude
@@ -270,7 +270,7 @@ class SCXMLDocumentHandler:
                     continue
                 try:
                     return self._to_dataclass(self._resolve(arg), data)
-                except (MisplacedExecutionOrder, InvalidRegionOrder):
+                except (MisplacedExecutionOrder, InvalidStructuralOrder):
                     raise
                 except Exception:
                     pass
@@ -290,7 +290,7 @@ class SCXMLDocumentHandler:
             if isinstance(data, dict):
                 try:
                     return self._to_dataclass(self._resolve("Scxml"), data)
-                except (MisplacedExecutionOrder, InvalidRegionOrder):
+                except (MisplacedExecutionOrder, InvalidStructuralOrder):
                     raise
                 except Exception:
                     pass
@@ -322,6 +322,8 @@ class SCXMLDocumentHandler:
                 raw = data[f.name]
                 if f.name == "region_order" and not isinstance(raw, list):
                     raise InvalidRegionOrder("region_order must be an array of region kinds")
+                if f.name == "state_order" and not isinstance(raw, list):
+                    raise InvalidStructuralOrder("state_order must be an array of direct child kinds")
                 if f.name == "execution_order":
                     if not isinstance(raw, list) or not all(isinstance(k, str) for k in raw):
                         raise ValueError("execution_order must be an array of child-kind strings")
@@ -344,8 +346,8 @@ class SCXMLDocumentHandler:
             obj = cls(**kwargs)
             for name, value in post.items():
                 setattr(obj, name, value)
-            if "region_order" in data:
-                ordered_regions(obj)
+            if "region_order" in data or "state_order" in data:
+                ordered_state_children(obj)
             return obj
         if isinstance(cls, type) and issubclass(cls, Enum):
             try:

@@ -5,7 +5,7 @@ from pydantic import ConfigDict, field_serializer, model_serializer, model_valid
 from xsdata_pydantic.fields import field
 from ..xml_payload import NestedChart, XmlPayloadElement
 
-from ..execution_order import ScxmlModel, ordered_children, ordered_regions
+from ..execution_order import ScxmlModel, ordered_children, ordered_regions, ordered_state_children
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
 
@@ -1252,6 +1252,22 @@ class ScxmlStateType(ScxmlModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    state_order: list[Literal["state", "parallel", "final"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_state_order(self):
+        ordered_state_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_state_order(self, handler):
+        data = handler(self)
+        if self.state_order is None:
+            data.pop("state_order", None)
+        return data
+
 
 class State(ScxmlStateType):
     """basic state node."""
@@ -1392,6 +1408,22 @@ class ScxmlScxmlType(ScxmlModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    state_order: list[Literal["state", "parallel", "final"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_state_order(self):
+        ordered_state_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_state_order(self, handler):
+        data = handler(self)
+        if self.state_order is None:
+            data.pop("state_order", None)
+        return data
 
 
 class Scxml(ScxmlScxmlType):

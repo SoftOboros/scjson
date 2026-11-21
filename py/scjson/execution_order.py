@@ -5,7 +5,7 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-Preserve executable child order and parallel region order across grouped SCJSON fields.
+Preserve executable and structural child order across grouped SCJSON fields.
 """
 
 from collections import Counter, defaultdict, deque
@@ -29,13 +29,18 @@ ACTION_FIELDS = {
 }
 MARKER_FIELDS = {"elseif": "elseif", "else": "else_value"}
 REGION_KINDS = ("state", "parallel")
+STATE_KINDS = (*REGION_KINDS, "final")
 
 
 class MisplacedExecutionOrder(ValueError):
     """An SCJSON executable-order field appeared on a structural node."""
 
 
-class InvalidRegionOrder(ValueError):
+class InvalidStructuralOrder(ValueError):
+    """A structural child sequence is invalid or misplaced."""
+
+
+class InvalidRegionOrder(InvalidStructuralOrder):
     """A parallel region sequence is invalid or appears on another SCXML node."""
 
 
@@ -45,6 +50,8 @@ def validate_order_location(data, fields):
         raise MisplacedExecutionOrder("execution_order is valid only on an executable container")
     if isinstance(data, dict) and "region_order" in data and "region_order" not in fields:
         raise InvalidRegionOrder("region_order is valid only on a parallel")
+    if isinstance(data, dict) and "state_order" in data and "state_order" not in fields:
+        raise InvalidStructuralOrder("state_order is valid only on scxml and state")
 
 
 class ScxmlModel(BaseModel):
@@ -107,35 +114,60 @@ def ordered_children(container):
     return children
 
 
-def ordered_regions(container):
-    """Return validated (kind, region) pairs, or None for a legacy parallel."""
-    order = getattr(container, "region_order", None)
+def _ordered_structural(container, field, kinds):
+    order = getattr(container, field, None)
     if order is None:
         return None
+    error = InvalidRegionOrder if field == "region_order" else InvalidStructuralOrder
     if not isinstance(order, list):
-        raise InvalidRegionOrder("region_order must be an array of region kinds")
-    queues = {kind: deque(getattr(container, kind)) for kind in REGION_KINDS}
-    regions = []
+        raise error(f"{field} must be an array of child kinds")
+    queues = {kind: deque(getattr(container, kind)) for kind in kinds}
+    children = []
     for kind in order:
-        if kind not in REGION_KINDS:
-            raise InvalidRegionOrder(f"region_order has an invalid kind {kind!r}")
+        if kind not in kinds:
+            raise error(f"{field} has an invalid kind {kind!r}")
         if not queues[kind]:
-            raise InvalidRegionOrder(f"region_order has an excess occurrence of {kind!r}")
-        regions.append((kind, queues[kind].popleft()))
+            raise error(f"{field} has an excess occurrence of {kind!r}")
+        children.append((kind, queues[kind].popleft()))
     if any(queues.values()):
-        raise InvalidRegionOrder("region_order omits one or more direct regions")
-    return regions
+        raise error(f"{field} omits one or more direct children")
+    return children
+
+
+def ordered_regions(container):
+    """Return validated (kind, region) pairs, or None for a legacy parallel."""
+    return _ordered_structural(container, "region_order", REGION_KINDS)
+
+
+def _structural_fields(container):
+    if hasattr(container, "region_order"):
+        return "region_order", REGION_KINDS
+    return "state_order", STATE_KINDS
+
+
+def ordered_state_children(container):
+    """Return explicit structural order, or None for legacy grouped input."""
+    return _ordered_structural(container, *_structural_fields(container))
+
+
+def _iter_structural(container, field, kinds):
+    children = _ordered_structural(container, field, kinds)
+    if children is not None:
+        yield from children
+    else:
+        for kind in kinds:
+            for child in getattr(container, kind, ()):
+                yield kind, child
 
 
 def iter_regions(container):
     """Yield (kind, region) in explicit order or the legacy grouped order."""
-    regions = ordered_regions(container)
-    if regions is not None:
-        yield from regions
-    else:
-        for kind in REGION_KINDS:
-            for region in getattr(container, kind, ()):
-                yield kind, region
+    yield from _iter_structural(container, "region_order", REGION_KINDS)
+
+
+def iter_state_children(container):
+    """Yield direct state children in authored order or legacy grouped order."""
+    yield from _iter_structural(container, *_structural_fields(container))
 
 
 def _walk(element, model):
@@ -164,12 +196,13 @@ def capture_order(model, xml):
     parser = etree.XMLParser(recover=True, resolve_entities=False, no_network=True)
     root = etree.fromstring(xml if isinstance(xml, bytes) else xml.encode("utf-8"), parser)
     for element, container in _walk(root, model):
-        if hasattr(container, "region_order"):
-            regions = [_kind(c.tag) for c in element if isinstance(c.tag, str)]
-            regions = [kind for kind in regions if kind in REGION_KINDS]
-            if len(set(regions)) > 1:
-                container.region_order = regions
-                ordered_regions(container)
+        field, kinds = _structural_fields(container)
+        if hasattr(container, field):
+            direct = [_kind(c.tag) for c in element if isinstance(c.tag, str)]
+            order = [kind for kind in direct if kind in kinds]
+            if len(set(order)) > 1:
+                setattr(container, field, order)
+                ordered_state_children(container)
         if hasattr(container, "execution_order"):
             kinds = [_kind(child.tag) for child in element if isinstance(child.tag, str)]
             if len(set(kinds)) > 1 or any(kind in MARKER_FIELDS for kind in kinds):
@@ -183,10 +216,10 @@ def restore_order(model, xml):
     root = etree.fromstring(xml.encode("utf-8"), etree.XMLParser(resolve_entities=False, no_network=True))
     changed = False
     for element, container in _walk(root, model):
-        sequence = ordered_regions(container)
+        sequence = ordered_state_children(container)
         if sequence is not None:
-            slots = [i for i, child in enumerate(element) if _kind(child.tag) in REGION_KINDS]
-            field = "region_order"
+            field, kinds = _structural_fields(container)
+            slots = [i for i, child in enumerate(element) if _kind(child.tag) in kinds]
         else:
             sequence = ordered_children(container)
             slots = range(len(element))
@@ -219,8 +252,9 @@ def restore_order(model, xml):
 
 def canonical_json(model, data):
     """Remove absent order fields and retain the original singleton elseif wire shape."""
-    if hasattr(model, "region_order") and model.region_order is None:
-        data.pop("region_order", None)
+    field, _ = _structural_fields(model)
+    if hasattr(model, field) and getattr(model, field) is None:
+        data.pop(field, None)
     if hasattr(model, "execution_order"):
         if model.execution_order is None:
             data.pop("execution_order", None)

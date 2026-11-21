@@ -502,6 +502,7 @@ export interface ParallelProps {
     id: string | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    regionOrder?: ('state' | 'parallel')[];
 }
 
 /** Instantiate a default object of type ParallelProps */
@@ -589,6 +590,7 @@ export interface ScxmlProps {
     exmode: typeof ExmodeDatatypeProps | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type ScxmlProps */
@@ -644,6 +646,7 @@ export interface StateProps {
     initialAttribute: string[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type StateProps */

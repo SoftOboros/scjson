@@ -1533,6 +1533,18 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "state_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel",
+                            "final"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "State Order",
+                    "type": "array"
                 }
             },
             "title": "Scxml",
@@ -1799,6 +1811,18 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "state_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel",
+                            "final"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "State Order",
                     "type": "array"
                 }
             },
@@ -2105,6 +2129,18 @@
                 "type": "string"
             },
             "title": "Help Text",
+            "type": "array"
+        },
+        "state_order": {
+            "items": {
+                "enum": [
+                    "state",
+                    "parallel",
+                    "final"
+                ],
+                "type": "string"
+            },
+            "title": "State Order",
             "type": "array"
         }
     }

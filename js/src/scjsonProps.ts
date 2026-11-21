@@ -748,6 +748,7 @@ export interface ScxmlProps {
     exmode: ExmodeDatatypeProps | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type ScxmlProps */
@@ -835,6 +836,7 @@ export interface StateProps {
     initialAttribute: string[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type StateProps */

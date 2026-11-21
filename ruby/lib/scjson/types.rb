@@ -1694,7 +1694,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class ScxmlProps
-      attr_accessor :state, :parallel, :final, :datamodel, :script, :other_element, :initial, :name, :version, :datamodel_attribute, :binding, :exmode, :other_attributes, :help_text
+      attr_accessor :state, :parallel, :final, :datamodel, :script, :other_element, :initial, :name, :version, :datamodel_attribute, :binding, :exmode, :other_attributes, :help_text, :state_order
       # Instantiate a new ScxmlProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1712,6 +1712,7 @@ module Scjson
         @exmode = kwargs.fetch(:exmode, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
         @help_text = kwargs.fetch(:help_text, [])
+        @state_order = kwargs.fetch(:state_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1736,6 +1737,7 @@ module Scjson
         kwargs[:exmode] = normalized.key?('exmode') ? ExmodeDatatypeProps.coerce(normalized['exmode'], allow_nil: true) : nil
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
         kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:state_order] = normalized['state_order']
         new(**kwargs)
       end
 
@@ -1765,7 +1767,7 @@ module Scjson
           'exmode' => @exmode,
           'other_attributes' => @other_attributes,
           'help_text' => @help_text
-        }
+        }.tap { |result| result['state_order'] = @state_order unless @state_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1871,7 +1873,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class StateProps
-      attr_accessor :onentry, :onexit, :transition, :initial, :state, :parallel, :final, :history, :datamodel, :invoke, :other_element, :id, :initial_attribute, :other_attributes, :help_text
+      attr_accessor :onentry, :onexit, :transition, :initial, :state, :parallel, :final, :history, :datamodel, :invoke, :other_element, :id, :initial_attribute, :other_attributes, :help_text, :state_order
       # Instantiate a new StateProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1890,6 +1892,7 @@ module Scjson
         @initial_attribute = kwargs.fetch(:initial_attribute, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
         @help_text = kwargs.fetch(:help_text, [])
+        @state_order = kwargs.fetch(:state_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1915,6 +1918,7 @@ module Scjson
         kwargs[:initial_attribute] = Array(normalized.fetch('initial_attribute', []))
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
         kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:state_order] = normalized['state_order']
         new(**kwargs)
       end
 
@@ -1945,7 +1949,7 @@ module Scjson
           'initial_attribute' => @initial_attribute,
           'other_attributes' => @other_attributes,
           'help_text' => @help_text
-        }
+        }.tap { |result| result['state_order'] = @state_order unless @state_order.nil? }
       end
 
       # Serialize the object to JSON.

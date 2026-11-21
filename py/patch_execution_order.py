@@ -87,38 +87,47 @@ def patch(path):
     path.write_text(source, encoding="utf-8", newline="\n")
 
 
-def patch_parallel(path):
-    """Append the optional region sequence to the generated parallel model."""
+def patch_structural_order(path):
+    """Generate optional, validated order on the three structural owners."""
     source = path.read_text(encoding="utf-8")
-    if "    region_order:" in source:
-        return
-    if "from pydantic import" in source:
-        source = source.replace("from typing import ", "from typing import Literal, ", 1)
-        source = source.replace("from ..execution_order import ScxmlModel, ordered_children",
-                                "from ..execution_order import ScxmlModel, ordered_children, ordered_regions")
-        addition = '''    region_order: list[Literal["state", "parallel"]] = field(
-        default_factory=lambda: None, metadata={"type": "Ignore"}
+    is_pydantic = "from pydantic import" in source
+    if is_pydantic:
+        if "from typing import Literal," not in source:
+            source = source.replace("from typing import ", "from typing import Literal, ", 1)
+        source = re.sub(r"^from \.\.execution_order import .*",
+                        "from ..execution_order import ScxmlModel, ordered_children, ordered_regions, ordered_state_children",
+                        source, count=1, flags=re.M)
+    for owner in ("Parallel", "State", "Scxml"):
+        block = re.search(rf"^class Scxml{owner}Type\b.*?(?=^class |^@dataclass|\Z)", source, re.M | re.S)
+        if not block:
+            raise ValueError(f"Missing Scxml{owner}Type in {path}")
+        if owner == "Parallel":
+            name, validator, kinds = "region_order", "ordered_regions", '"state", "parallel"'
+        else:
+            name, validator, kinds = "state_order", "ordered_state_children", '"state", "parallel", "final"'
+        if f"    {name}:" in block.group():
+            continue
+        if is_pydantic:
+            addition = f'''    {name}: list[Literal[{kinds}]] = field(
+        default_factory=lambda: None, metadata={{"type": "Ignore"}}
     )
 
     @model_validator(mode="after")
-    def _validate_region_order(self):
-        ordered_regions(self)
+    def _validate_{name}(self):
+        {validator}(self)
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_region_order(self, handler):
+    def _serialize_{name}(self, handler):
         data = handler(self)
-        if self.region_order is None:
-            data.pop("region_order", None)
+        if self.{name} is None:
+            data.pop("{name}", None)
         return data'''
-    else:
-        addition = '''    region_order: Optional[list[str]] = field(
-        default=None, metadata={"type": "Ignore"}
+        else:
+            addition = f'''    {name}: Optional[list[str]] = field(
+        default=None, metadata={{"type": "Ignore"}}
     )'''
-    block = re.search(r"^class ScxmlParallelType\b.*?(?=^class |^@dataclass|\Z)", source, re.M | re.S)
-    if not block:
-        raise ValueError(f"Missing ScxmlParallelType in {path}")
-    source = source[:block.end()].rstrip() + "\n\n" + addition + "\n\n\n" + source[block.end():]
+        source = source[:block.end()].rstrip() + "\n\n" + addition + "\n\n\n" + source[block.end():]
     path.write_text(source, encoding="utf-8", newline="\n")
 
 
@@ -127,8 +136,10 @@ def patch_schema(path):
     from scjson.pydantic import Scxml
 
     schema = json.loads(path.read_bytes())
-    region_order = Scxml.model_json_schema()["$defs"]["Parallel"]["properties"]["region_order"]
-    schema["$defs"]["Parallel"]["properties"]["region_order"] = region_order
+    defs = Scxml.model_json_schema()["$defs"]
+    for owner, field in (("Parallel", "region_order"), ("State", "state_order"), ("Scxml", "state_order")):
+        schema["$defs"][owner]["properties"][field] = defs[owner]["properties"][field]
+    schema["properties"]["state_order"] = defs["Scxml"]["properties"]["state_order"]
     path.write_bytes((json.dumps(schema, indent=4) + "\n").encode("utf-8"))
 
 
@@ -143,4 +154,4 @@ if __name__ == "__main__":
         for variant in ("dataclasses", "dataclasses_strict", "pydantic", "pydantic_strict"):
             path = root / "scjson" / variant / "generated.py"
             patch(path)
-            patch_parallel(path)
+            patch_structural_order(path)
