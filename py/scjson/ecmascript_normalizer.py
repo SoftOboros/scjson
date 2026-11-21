@@ -29,7 +29,9 @@ Inadmissible forms that produce unsupported-ecmascript:
 
 from __future__ import annotations
 
+import ast
 import re
+import textwrap
 from typing import List, Tuple
 
 
@@ -93,6 +95,7 @@ _INADMISSIBLE_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\bwith\s*\("), "with statement"),
     # Template literals (backtick strings)
     (re.compile(r"`"), "template literal"),
+    (re.compile(r"~"), "bitwise complement"),
 ]
 
 
@@ -215,10 +218,9 @@ def _apply_token_substitutions(text: str) -> str:
     text = re.sub(r"&&", " and ", text)
     text = re.sub(r"\|\|", " or ", text)
 
-    # Logical not: !expr -> not expr
-    # ! not followed by = (after the !== -> != substitution above, any remaining
-    # ! is a logical not).
-    text = re.sub(r"!(?!=)", "not ", text)
+    # Use a Python prefix operator with the same precedence while parsing.
+    # _restore_logical_not writes the Boolean operator around that operand.
+    text = re.sub(r"!(?!=)", "~", text)
 
     # Boolean / null / undefined literals (word-boundary safe)
     text = re.sub(r"\btrue\b", "True", text)
@@ -236,6 +238,29 @@ def _apply_token_substitutions(text: str) -> str:
     text = re.sub(r"\bNumber\b(?=\s*\()", "float", text)
 
     return text
+
+
+def _restore_logical_not(masked: str, strings: List[str], mode: str) -> str:
+    text = _restore_strings(masked, strings)
+    if "~" not in masked:
+        return text
+    text = textwrap.dedent(text).strip()
+    try:
+        tree = ast.parse(text, mode=mode)
+    except SyntaxError as exc:
+        raise ECMAScriptNormalizationError(f"Invalid expression containing '!': {exc.msg}") from exc
+
+    # AST columns are UTF-8 byte offsets. Edit only the operator and operand
+    # boundary so quoted IDs and neighboring source tokens keep their spelling.
+    lines = text.encode("utf-8").splitlines(keepends=True)
+    edits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Invert):
+            edits.append((node.lineno - 1, node.col_offset, 1, b"(not "))
+            edits.append((node.end_lineno - 1, node.end_col_offset, 0, b")"))
+    for line, column, width, replacement in sorted(edits, reverse=True):
+        lines[line] = lines[line][:column] + replacement + lines[line][column + width:]
+    return b"".join(lines).decode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -429,8 +454,7 @@ def normalize(expr: str) -> str:
     masked = _normalize_object_literal(masked)
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
-    result = _restore_strings(masked, strings)
-    return result
+    return _restore_logical_not(masked, strings, mode="eval")
 
 
 def normalize_script(script_body: str) -> str:
@@ -463,5 +487,4 @@ def normalize_script(script_body: str) -> str:
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
     masked = _normalize_if_statements(masked)
-    result = _restore_strings(masked, strings)
-    return result
+    return _restore_logical_not(masked, strings, mode="exec")
