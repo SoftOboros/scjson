@@ -11,6 +11,7 @@ Runtime execution context with onentry/onexit and history support.
 """
 
 import json
+import math
 import re
 import time
 from pathlib import Path
@@ -624,16 +625,18 @@ class DocumentContext(BaseModel):
                 self._enter_target(child)
 
     def _eval_condition(self, expr: str, act: ActivationRecord) -> bool:
-        """Evaluate a transition condition in the context of *act*."""
+        """Evaluate a condition using the active datamodel's truth semantics."""
         env = self._scope_env(act)
         try:
             value = self._evaluate_expr(expr, env)
-            if isinstance(value, bool):
-                return value
-            # Non-boolean cond: treat as false and raise error.execution
-            self._emit_error("error.execution", front=True)
-            return False
-        except (SafeEvaluationError, Exception):
+            if self._ecmascript_mode:
+                # ECMAScript objects (including empty arrays) are truthy.
+                if value is not None and not isinstance(value, (bool, int, float, str)):
+                    return True
+                if isinstance(value, float) and math.isnan(value):
+                    return False
+            return bool(value)
+        except Exception:
             # Signal evaluation failure via error.execution and treat as false
             self._emit_error("error.execution", front=True)
             return False
@@ -835,10 +838,7 @@ class DocumentContext(BaseModel):
             kind = branch["kind"]
             if kind in {"if", "elseif"}:
                 cond_expr = branch.get("cond") or "False"
-                try:
-                    branch_active = bool(self._evaluate_expr(cond_expr, self._scope_env(act)))
-                except (SafeEvaluationError, Exception):
-                    branch_active = False
+                branch_active = self._eval_condition(cond_expr, act)
             else:  # else
                 branch_active = not executed
 

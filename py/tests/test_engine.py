@@ -44,6 +44,50 @@ def test_inline_foreach_original_155(dialect, tmp_path):
         assert [machine.data_model[k] for k in ("Var1", "Var2", "Var3")] == [6, 3, [1, 2, 3]]
 
 
+@pytest.mark.parametrize("dialect", ["ecma", "python"])
+@pytest.mark.parametrize("number", [150, 151])
+def test_first_use_foreach_binding_in_later_state(dialect, number, tmp_path):
+    """Declared and first-use bindings must survive the transition to s2."""
+    tests = Path(__file__).resolve().parents[2] / "tutorial" / "Tests"
+    if not tests.is_dir():
+        pytest.skip("Initialize the tutorial submodule to run the original chart")
+    original = tests / dialect / "W3C" / "Mandatory" / "Auto" / f"test{number}.scxml"
+    chart = tmp_path / "chart.scjson"
+    chart.write_text(SCXMLDocumentHandler().xml_to_json(original.read_text(encoding="utf-8")),
+                     encoding="utf-8")
+    for machine in (DocumentContext.from_xml_file(original), DocumentContext.from_json_file(chart)):
+        machine.run(steps=20)
+        assert machine.configuration - {"__scxml_root__"} == {"pass"}
+        assert [machine.data_model[f"Var{i}"] for i in (1, 2, 4, 5)] == [3, 2, 3, 2]
+
+
+@pytest.mark.parametrize("dialect", ["python", "ecmascript"])
+@pytest.mark.parametrize(("value", "python_expected", "js_expected"), [
+    (2, True, True), (0, False, False), ("", False, False), (None, False, False),
+    ([], False, True), ({}, False, True), (float("nan"), True, False),
+])
+def test_datamodel_truth_for_transition_and_executable_conditions(dialect, value, python_expected, js_expected):
+    """A valid falsy guard takes the fallback without queuing an error."""
+    machine = DocumentContext.from_xml_string(f"""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="{dialect}" initial="s">
+        <datamodel><data id="flag"/><data id="hit" expr="0"/></datamodel>
+        <state id="s"><transition event="go" target="next">
+          <if cond="0"><assign location="hit" expr="-1"/><elseif cond="flag"/><assign location="hit" expr="1"/></if>
+        </transition></state>
+        <state id="next"><transition cond="flag" target="yes"/><transition target="no"/></state>
+        <final id="yes"/><final id="no"/>
+      </scxml>
+    """)
+    machine.data_model["flag"] = value
+    machine.enqueue("go")
+    machine.microstep()
+    machine.drain_internal()
+    expected = js_expected if dialect == "ecmascript" else python_expected
+    assert machine.data_model["hit"] == int(expected)
+    assert ("yes" if expected else "no") in machine.configuration
+    assert all(event.name != "error.execution" for event in iter(machine.events.pop, None))
+
+
 def test_inline_data_literals_and_authored_text(tmp_path):
     """Decode JSON exactly once and keep fallback text and expr precedence."""
     data = [

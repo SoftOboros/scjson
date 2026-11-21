@@ -240,7 +240,8 @@ out-of-the-box. For external services, prefer emitting parent events with
 
 ### Errors
 
-- Conditions that fail to evaluate, or that produce non-boolean results, enqueue
+- Conditions use Python truth testing in the Python datamodel and ECMAScript
+  ToBoolean in the ECMAScript datamodel. Failed evaluations enqueue
   `error.execution` and evaluate to false.
 - `<foreach>` evaluation failures also enqueue `error.execution` and iterate
   over an empty sequence.
