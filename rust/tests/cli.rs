@@ -21,6 +21,22 @@ fn create_scjson() -> String {
 }
 
 #[test]
+fn region_order_refusal_sets_failure_status_for_file_and_directory() {
+    let temp = TempDir::new().unwrap();
+    let invalid = temp.path().join("a.scjson");
+    let good = temp.path().join("b.scjson");
+    fs::write(&invalid, r#"{"parallel":[{"state":[{"id":"s"}],"region_order":[]}]}"#).unwrap();
+    fs::write(&good, create_scjson()).unwrap();
+    for source in [invalid.as_path(), temp.path()] {
+        let mut cmd = assert_cmd::Command::cargo_bin("scjson_rust").unwrap();
+        cmd.arg("xml").arg(source);
+        cmd.assert().failure().stderr(predicate::str::contains("region_order"));
+        assert!(!invalid.with_extension("scxml").exists());
+    }
+    assert!(good.with_extension("scxml").exists());
+}
+
+#[test]
 fn keep_empty_json_conversion() {
     let dir = TempDir::new().unwrap();
     let xml_path = dir.path().join("sample.scxml");

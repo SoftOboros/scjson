@@ -62,7 +62,7 @@ enum Commands {
     },
 }
 
-fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty: bool) {
+fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty: bool) -> bool {
     let xml = fs::read_to_string(src).expect("read xml");
     match xml_to_json(&xml, !keep_empty) {
         Ok(json) => {
@@ -71,6 +71,7 @@ fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty:
                     println!("Verified {}", src.display());
                 } else {
                     eprintln!("Failed to verify {}", src.display());
+                    return false;
                 }
             } else if let Some(d) = dest {
                 if let Some(parent) = d.parent() {
@@ -80,8 +81,12 @@ fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty:
                 println!("Wrote {}", d.display());
             }
         }
-        Err(e) => eprintln!("Failed to convert {}: {}", src.display(), e),
+        Err(e) => {
+            eprintln!("Failed to convert {}: {}", src.display(), e);
+            return false;
+        }
     }
+    true
 }
 
 /// Convert a scjson file to SCXML.
@@ -91,7 +96,7 @@ fn convert_scxml_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty:
 /// - `dest`: Optional output file path.
 /// - `verify`: When `true`, only validate the round trip.
 /// - `keep_empty`: Preserve empty fields when `true`.
-fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty: bool) {
+fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty: bool) -> bool {
     let json = fs::read_to_string(src).expect("read json");
     match json_to_xml_opts(&json, !keep_empty) {
         Ok(xml) => {
@@ -100,6 +105,7 @@ fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty
                     println!("Verified {}", src.display());
                 } else {
                     eprintln!("Failed to verify {}", src.display());
+                    return false;
                 }
             } else if let Some(d) = dest {
                 if let Some(parent) = d.parent() {
@@ -109,19 +115,24 @@ fn convert_scjson_file(src: &Path, dest: Option<&Path>, verify: bool, keep_empty
                 println!("Wrote {}", d.display());
             }
         }
-        Err(e) => eprintln!("Failed to convert {}: {}", src.display(), e),
+        Err(e) => {
+            eprintln!("Failed to convert {}: {}", src.display(), e);
+            return false;
+        }
     }
+    true
 }
 
-fn convert_directory<F>(dir: &Path, output: &Path, pattern: &str, recursive: bool, func: F)
+fn convert_directory<F>(dir: &Path, output: &Path, pattern: &str, recursive: bool, func: F) -> bool
 where
-    F: Fn(&Path, Option<&Path>, bool, bool),
+    F: Fn(&Path, &Path) -> bool,
 {
     let glob_pattern = if recursive {
         format!("**/{}", pattern)
     } else {
         pattern.to_string()
     };
+    let mut success = true;
     for entry in glob::glob(&format!("{}/{}", dir.display(), glob_pattern))
         .unwrap()
         .filter_map(Result::ok)
@@ -135,9 +146,12 @@ where
                 } else {
                     "scxml"
                 });
-            func(&entry, Some(&dest), false, false);
+            if !func(&entry, &dest) {
+                success = false;
+            }
         }
     }
+    success
 }
 
 fn validate_file(path: &Path) -> bool {
@@ -159,7 +173,7 @@ fn validate_file(path: &Path) -> bool {
 
 fn main() {
     let cli = Cli::parse();
-    match cli.command {
+    let success = match cli.command {
         Commands::Json {
             path,
             output,
@@ -169,14 +183,14 @@ fn main() {
         } => {
             if path.is_dir() {
                 let out = output.as_deref().unwrap_or(&path);
-                convert_directory(&path, out, "*.scxml", recursive, |s, d, _, _| {
-                    convert_scxml_file(s, d, verify, keep_empty)
-                });
+                convert_directory(&path, out, "*.scxml", recursive, |s, d| {
+                    convert_scxml_file(s, Some(d), verify, keep_empty)
+                })
             } else {
                 let dest = output
                     .clone()
                     .unwrap_or_else(|| path.with_extension("scjson"));
-                convert_scxml_file(&path, Some(&dest), verify, keep_empty);
+                convert_scxml_file(&path, Some(&dest), verify, keep_empty)
             }
         }
         Commands::Xml {
@@ -188,14 +202,14 @@ fn main() {
         } => {
             if path.is_dir() {
                 let out = output.as_deref().unwrap_or(&path);
-                convert_directory(&path, out, "*.scjson", recursive, |s, d, _, _| {
-                    convert_scjson_file(s, d, verify, keep_empty)
-                });
+                convert_directory(&path, out, "*.scjson", recursive, |s, d| {
+                    convert_scjson_file(s, Some(d), verify, keep_empty)
+                })
             } else {
                 let dest = output
                     .clone()
                     .unwrap_or_else(|| path.with_extension("scxml"));
-                convert_scjson_file(&path, Some(&dest), verify, keep_empty);
+                convert_scjson_file(&path, Some(&dest), verify, keep_empty)
             }
         }
         Commands::Validate { path, recursive } => {
@@ -215,9 +229,10 @@ fn main() {
             } else {
                 success = validate_file(&path);
             }
-            if !success {
-                std::process::exit(1);
-            }
+            success
         }
+    };
+    if !success {
+        std::process::exit(1);
     }
 }
