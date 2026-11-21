@@ -26,6 +26,7 @@ from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
+from .execution_order import canonical_json, capture_order, restore_order
 from xml.etree import ElementTree as ET
 from xml.etree import ElementInclude
 from .comment_promotion import (
@@ -105,15 +106,18 @@ class SCXMLDocumentHandler:
 
     def load(self, xml_path: str):
         with open(xml_path, "rb") as f:
-            return self.parser.from_bytes(f.read(), self.model_class)
+            data = f.read()
+        model = self.parser.from_bytes(data, self.model_class)
+        capture_order(model, data)
+        return model
 
     def dump(self, instance, output_path: str):
-        xml_string = self.serializer.render(instance)
+        xml_string = self.to_string(instance)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(xml_string)
 
     def to_string(self, instance) -> str:
-        return self.serializer.render(instance)
+        return restore_order(instance, self.serializer.render(instance))
 
     def _fix_decimal(obj):
         if isinstance(obj, Enum):
@@ -188,13 +192,14 @@ class SCXMLDocumentHandler:
             ElementInclude.include(root, base_url=base_url)
             xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
+        capture_order(model, xml_str)
         # Attach help_text to the model nodes addressed by the pre-pass.
         attach_help_text_to_model(model, address_help)
         if hasattr(model, "model_dump"):
             data = model.model_dump()
         else:
             data = asdict(model)
-        data = SCXMLDocumentHandler._fix_decimal(data)
+        data = SCXMLDocumentHandler._fix_decimal(canonical_json(model, data))
         if self.omit_empty:
             data = SCXMLDocumentHandler._remove_empty(data)
         return json.dumps(data, indent=2)
@@ -256,7 +261,15 @@ class SCXMLDocumentHandler:
             for f in fields(cls):
                 if f.name not in data:
                     continue
-                value = self._to_dataclass(f.type, data[f.name])
+                raw = data[f.name]
+                if f.name == "execution_order":
+                    if not isinstance(raw, list) or not all(isinstance(k, str) for k in raw):
+                        raise ValueError("execution_order must be an array of child-kind strings")
+                if f.name == "elseif" and isinstance(raw, dict):
+                    raw = [raw]
+                if f.name == "elseif" and raw is None:
+                    raw = []
+                value = self._to_dataclass(f.type, raw)
                 if f.type is Decimal or f.name == "version":
                     try:
                         value = Decimal(str(value))

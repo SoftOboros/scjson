@@ -1320,7 +1320,7 @@ def _lower_foreach(
     )
 
 
-def _lower_if(block: Any, ctx: _LoweringContext, origin: str) -> IfNode:
+def _lower_if(block: Any, ctx: _LoweringContext, origin: str, foreach_depth: int = 0) -> IfNode:
     """Lower an ``<if>`` block to an IfNode.
 
     :param block: Pydantic If model instance.
@@ -1335,6 +1335,27 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str) -> IfNode:
     guard_ir: Optional[ExpressionNode] = None
     if cond_str:
         guard_ir = ctx.lower_expr(str(cond_str), origin + ":if.cond")
+
+    from .execution_order import MARKER_FIELDS, ordered_children
+
+    children = ordered_children(block)
+    if children is not None:
+        items = []
+        guard = guard_ir
+        script_counter = [0]
+        for kind, item in children:
+            if kind in MARKER_FIELDS:
+                body = _lower_action_block(block, ctx, origin + ":if", foreach_depth,
+                                           ordered_items=items, script_counter=script_counter)
+                branches.append(IfBranch(guard=guard, body=body))
+                guard = ctx.lower_expr(str(item.cond), origin + ":elseif.cond") if kind == "elseif" else None
+                items = []
+            else:
+                items.append((kind, item))
+        body = _lower_action_block(block, ctx, origin + ":if", foreach_depth,
+                                   ordered_items=items, script_counter=script_counter)
+        branches.append(IfBranch(guard=guard, body=body))
+        return IfNode(branches=branches, origin=OriginRef(type="if", state=origin))
 
     # Reconstruct the branch body by looking at the sub-actions
     # We gather the initial if body items from the transition / block's
@@ -1352,8 +1373,8 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str) -> IfNode:
         # all sub-action items from the block itself as the primary branch body.
         branches.append(IfBranch(guard=guard_ir, body=primary_body))
         # Add elseif branch
-        if elseif is not None:
-            elseif_cond = getattr(elseif, "cond", None)
+        for marker in (elseif if isinstance(elseif, list) else [elseif] if elseif is not None else []):
+            elseif_cond = getattr(marker, "cond", None)
             elseif_guard: Optional[ExpressionNode] = None
             if elseif_cond:
                 elseif_guard = ctx.lower_expr(
@@ -1624,6 +1645,9 @@ def _lower_action_block(
     ctx: _LoweringContext,
     origin: str,
     foreach_depth: int = 0,
+    *,
+    ordered_items=None,
+    script_counter=None,
 ) -> List[ActionNode]:
     """Lower all executable-content children of *container* in document order.
 
@@ -1643,7 +1667,8 @@ def _lower_action_block(
     # For onentry/onexit types the attribute bag is the same.
 
     state_id = _extract_state_from_origin(origin)
-    script_counter = [0]  # mutable to allow closure increment
+    if script_counter is None:
+        script_counter = [0]
 
     def _push_assign(item: Any) -> None:
         loc = getattr(item, "location", None) or ""
@@ -1701,7 +1726,7 @@ def _lower_action_block(
         )
 
     def _push_if(item: Any) -> None:
-        actions.append(_lower_if(item, ctx, origin))
+        actions.append(_lower_if(item, ctx, origin, foreach_depth))
 
     def _push_foreach(item: Any) -> None:
         depth = foreach_depth + 1
@@ -1728,6 +1753,17 @@ def _lower_action_block(
         ("foreach", _push_foreach),
         ("script", _push_script),
     ]
+
+    from .execution_order import ACTION_FIELDS, ordered_children
+
+    if ordered_items is None:
+        ordered_items = ordered_children(container)
+    if ordered_items is not None:
+        handlers = dict(_handlers)
+        for kind, item in ordered_items:
+            if kind in ACTION_FIELDS:
+                handlers[ACTION_FIELDS[kind]](item)
+        return actions
 
     # Collect all items from each list, then sort by document order.
     # We attempt to use XML round-trip order when available; otherwise

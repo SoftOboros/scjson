@@ -1,8 +1,10 @@
 from decimal import Decimal
 from enum import Enum
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, model_validator
 from xsdata_pydantic.fields import field
+
+from ..execution_order import ordered_children
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
 
@@ -523,7 +525,7 @@ class ScxmlIfType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    elseif: Optional[Elseif] = field(
+    elseif: Optional[Elseif | list[Elseif]] = field(
         default=None,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
@@ -542,6 +544,21 @@ class ScxmlIfType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @field_serializer("elseif", mode="wrap")
+    def _serialize_elseif(self, value, handler):
+        payload = handler(value)
+        return payload[0] if isinstance(payload, list) and len(payload) == 1 else payload
 
 
 class If(ScxmlIfType):
@@ -612,6 +629,17 @@ class ScxmlForeachType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
 
 
 class Foreach(ScxmlForeachType):
@@ -690,6 +718,17 @@ class ScxmlFinalizeType(BaseModel):
             )
         return self
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+
 
 class ScxmlOnentryType(BaseModel):
 
@@ -747,6 +786,17 @@ class ScxmlOnentryType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+
 
 class ScxmlOnexitType(BaseModel):
 
@@ -803,6 +853,17 @@ class ScxmlOnexitType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
 
 
 class ScxmlTransitionType(BaseModel):
@@ -874,6 +935,17 @@ class ScxmlTransitionType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    execution_order: list[str] = field(
+        default_factory=lambda: None, exclude_if=lambda value: value is None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
 
 
 class Finalize(ScxmlFinalizeType):

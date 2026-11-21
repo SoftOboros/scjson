@@ -485,6 +485,13 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Finalize",
@@ -611,6 +618,13 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
                     "type": "array"
                 }
             },
@@ -752,10 +766,17 @@
                             "$ref": "#/$defs/Elseif"
                         },
                         {
+                            "items": {
+                                "$ref": "#/$defs/Elseif"
+                            },
+                            "type": "array"
+                        },
+                        {
                             "type": "null"
                         }
                     ],
-                    "default": null
+                    "default": null,
+                    "title": "Elseif"
                 },
                 "else_value": {
                     "anyOf": [
@@ -781,6 +802,13 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
                     "type": "array"
                 }
             },
@@ -1065,6 +1093,13 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Onentry",
@@ -1143,6 +1178,13 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
                     "type": "array"
                 }
             },
@@ -1852,6 +1894,13 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
                     "type": "array"
                 }
             },

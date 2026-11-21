@@ -678,6 +678,11 @@ class DocumentContext(BaseModel):
         return sequence
 
     def _build_action_sequence(self, container: Any) -> List[tuple[str, Any]]:
+        from .execution_order import ACTION_FIELDS, ordered_children
+
+        children = ordered_children(container)
+        if children is not None:
+            return [(kind, item) for kind, item in children if kind in ACTION_FIELDS]
         # Prefer the original XML child order when available
         try:
             order_seq = self.json_order.get(id(container))
@@ -1171,6 +1176,17 @@ class DocumentContext(BaseModel):
         return node
 
     def _split_if_branches(self, block: Any) -> List[Dict[str, Any]]:
+        from .execution_order import ACTION_FIELDS, MARKER_FIELDS, ordered_children
+
+        children = ordered_children(block)
+        if children is not None:
+            branches = [{"kind": "if", "cond": block.cond, "actions": []}]
+            for kind, item in children:
+                if kind in MARKER_FIELDS:
+                    branches.append({"kind": kind, "cond": getattr(item, "cond", None), "actions": []})
+                elif kind in ACTION_FIELDS:
+                    branches[-1]["actions"].append((kind, item))
+            return branches
         order_seq = self.json_order.get(id(block))
         if order_seq is None:
             try:
@@ -1194,7 +1210,10 @@ class DocumentContext(BaseModel):
 
         for local in order_seq:
             if local == "elseif":
-                cond = getattr(block.elseif, "cond", None) if getattr(block, "elseif", None) else None
+                markers = block.elseif if isinstance(block.elseif, list) else [block.elseif]
+                index = counters["elseif"]
+                counters["elseif"] += 1
+                cond = getattr(markers[index], "cond", None) if index < len(markers) else None
                 current = {"kind": "elseif", "cond": cond, "actions": []}
                 branches.append(current)
                 continue

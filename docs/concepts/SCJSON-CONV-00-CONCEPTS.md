@@ -136,6 +136,39 @@ surface to audit and align is:
 Changes to this registry require Standards Action because they affect every
 language converter and generated type surface.
 
+### Executable child order (ERRATA-007)
+
+Ratified November 21, 2026. An `onentry`, `onexit`, `transition`,
+`finalize`, `foreach`, or `if` MAY carry `execution_order`, an array of
+strings (`executionOrder` in camelCase projections). It records direct
+executable children in XML document order. Each SCXML child uses its XML
+local name, including `raise`, `if`, `elseif`, and `else`. Each extension
+child uses its expanded XML name, `{namespace-uri}local` (or `{}local` with
+no namespace). An explicitly supplied null is invalid. Data and action
+payloads remain in their existing fields. Each appearance of a kind consumes
+the next instance of that kind in its payload field. An order list MUST cover
+every direct executable child exactly once. Readers MUST reject unknown,
+missing, or excess references, a marker outside `if`, multiple `else`
+markers, or an `elseif` following `else`.
+
+XML converters MUST emit the list whenever two or more distinct direct
+executable kinds occur. A homogeneous or empty sequence has unambiguous order
+and MAY omit the list. An explicit empty list is valid only on an empty
+executable container. Comments, attributes, and text are not order entries.
+XML export MUST use an explicit list to position the original children,
+including branch markers and extensions. It MUST NOT serialize the order
+list as an XML attribute or element. An unimplemented extension keeps its
+place in interchange without acquiring execution semantics.
+
+For `if`, `elseif` accepts the historical single object and an ordered
+array of marker objects. Canonical writers retain the single-object encoding
+for a single marker and emit an array for multiple markers. An absent
+`execution_order` on existing JSON retains the legacy reader's grouping.
+Re-importing the original SCXML can recover order that a legacy mixed-kind
+document omitted. Implementations MUST NOT infer that order from JSON
+object key insertion order. Canonical schema/types, converters, execution
+and IR lowering share this contract, including nested executable containers.
+
 ## Section 6. Work Packages
 
 ### CONV-A: Schema Field Registry Audit

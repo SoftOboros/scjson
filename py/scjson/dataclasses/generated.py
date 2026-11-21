@@ -735,8 +735,8 @@ class ScxmlIfType:
             "namespace": "http://www.w3.org/2005/07/scxml",
         },
     )
-    elseif: Optional[Elseif] = field(
-        default=None,
+    elseif: list[Elseif] = field(
+        default_factory=list,
         metadata={
             "type": "Element",
             "namespace": "http://www.w3.org/2005/07/scxml",
@@ -766,6 +766,10 @@ class ScxmlIfType:
     )
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
+    )
+
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
     )
 
 
@@ -877,6 +881,10 @@ class ScxmlForeachType:
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )
+
 
 @dataclass
 class Foreach(ScxmlForeachType):
@@ -966,6 +974,10 @@ class ScxmlFinalizeType:
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )
+
 
 @dataclass
 class ScxmlOnentryType:
@@ -1048,6 +1060,10 @@ class ScxmlOnentryType:
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
+    )
+
 
 @dataclass
 class ScxmlOnexitType:
@@ -1128,6 +1144,10 @@ class ScxmlOnexitType:
     )
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
+    )
+
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
     )
 
 
@@ -1237,6 +1257,10 @@ class ScxmlTransitionType:
     )
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
+    )
+
+    execution_order: Optional[list[str]] = field(
+        default=None, metadata={"type": "Ignore"}
     )
 
 
