@@ -35,11 +35,9 @@ import textwrap
 from typing import List, Tuple
 
 
-# Sentinel prefix used to mark string-literal placeholders.  We use a
-# distinctive multi-character prefix that cannot appear in valid JS/Python
-# expressions so that restoring placeholders is unambiguous.
-_STR_SENTINEL = "__SCJSON_STR_"
-_STR_SENTINEL_RE = re.compile(r"__SCJSON_STR_(\d+)__")
+# NUL cannot occur in an authored identifier. This prevents a variable from
+# being restored as a quoted literal when a guard also contains strings.
+_STR_SENTINEL_RE = re.compile(r"\x00\d+\x00")
 
 
 # ---------------------------------------------------------------------------
@@ -126,15 +124,16 @@ def _strip_comments(text: str) -> str:
 def _extract_strings(text: str) -> Tuple[str, List[str]]:
     """Replace string literals with positional placeholders.
 
-    Returns (masked_text, strings) where ``strings[i]`` is the original
-    literal for placeholder ``__SCJSON_STR_i__``.
+    Return the masked text and the original literals in encounter order.
     """
+    if "\0" in text:
+        raise ECMAScriptNormalizationError("NUL in expression source")
     strings: List[str] = []
 
     def _replace(m: re.Match) -> str:
         idx = len(strings)
         strings.append(m.group(0))
-        return "__SCJSON_STR_{}__".format(idx)
+        return "\0{}\0".format(idx)
 
     masked = _STRING_LITERAL_RE.sub(_replace, text)
     return masked, strings
@@ -144,7 +143,7 @@ def _restore_strings(text: str, strings: List[str]) -> str:
     """Restore string placeholders back to their original literals."""
 
     def _restore(m: re.Match) -> str:
-        return strings[int(m.group(1))]
+        return strings[int(m.group()[1:-1])]
 
     return _STR_SENTINEL_RE.sub(_restore, text)
 
@@ -180,10 +179,6 @@ def _normalize_object_literal(text: str) -> str:
         # string literals from _extract_strings) and already-quoted keys.
         def _quote_key(km):
             key_text = km.group(1)
-            # If the key is a string placeholder, leave it unquoted
-            # (it will be restored to its original quoted literal).
-            if key_text.startswith("__SCJSON_STR_"):
-                return km.group(0)
             return '"{}":'.format(key_text)
         rewritten = _UNQUOTED_IDENTIFIER_KEY_RE.sub(_quote_key, inner)
         return "{" + rewritten + "}"
@@ -282,7 +277,7 @@ def _coerce_string_concatenation(text: str, strings: List[str]) -> str:
     if not strings:
         return text
 
-    _placeholder = r"__SCJSON_STR_\d+__"
+    _placeholder = _STR_SENTINEL_RE.pattern
 
     # A "complex token" is a parenthesized expression, a dotted/subscripted
     # identifier chain, a plain identifier, or an integer.

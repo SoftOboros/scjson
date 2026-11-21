@@ -70,6 +70,17 @@ def test_negation_preserves_neighboring_literal_tokens():
         normalize("~0 && !0")
 
 
+def test_identifier_cannot_be_restored_as_a_quoted_state_id():
+    from scjson.exec_ir import UnsupportedExpr, lower_expression
+
+    name = "__SCJSON_STR_0__"
+    for expr in (f"In({name})", f"In({name}) || In('active')"):
+        ir, diagnostics = lower_expression(expr, "transition", guard=True)
+        assert isinstance(ir, UnsupportedExpr)
+        assert [d.outcome for d in diagnostics] == ["reject"]
+    assert normalize(f"In('{name}')") == f"In('{name}')"
+
+
 def test_negation_in_normalized_script():
     namespace = {"a": True, "b": False}
     exec(normalize_script("if (a == !b) { result = !!a }"), {"__builtins__": {}}, namespace)
