@@ -8,6 +8,9 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## 0.4.3 — Unreleased
 
+- Preserve the authored order of `state` and `parallel` regions within a
+  parallel, including the order seen by entry guards and by generated code.
+  Existing SCJSON without `region_order` keeps its grouped execution order.
 - Lower `In('stateId')` in transition, `if`, and `elseif` guards to a
   portable state-membership query. Preserve ECMAScript negation precedence.
   Evaluate parallel transition guards before exits and keep entry, exit,

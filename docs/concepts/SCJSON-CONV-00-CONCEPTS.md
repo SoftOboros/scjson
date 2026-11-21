@@ -194,6 +194,10 @@ If the field is absent, keep the legacy grouping of states followed by
 parallel regions, preserving order within each group. JSON object key order
 has no effect. Recovering an interleaving lost in an older conversion
 requires the original XML or an explicit sequence supplied by the author.
+Earlier standalone Rust XML exports visited JSON keys lexically, placing
+parallel regions first. To reproduce that presentation for an old file,
+list its parallel occurrences first in `region_order`. New exports use
+the same legacy fallback as the Python engine and generated Rust.
 
 ## Section 6. Work Packages
 

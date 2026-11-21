@@ -67,6 +67,12 @@ the selected exits, and each entry handler sees its newly active state.
 The generator reports an unsupported composite guard and disables that
 branch if any operand falls outside the admitted grammar.
 
+When a `<parallel>` mixes `<state>` and `<parallel>` children, entry follows
+their XML order. An entry guard can see regions that have already entered.
+Exit handlers run in reverse order. SCJSON records the sequence in the
+parent's optional `region_order` list. Older files without this list enter
+the `state` array in order, followed by the `parallel` array.
+
 For environments that fully trust the input chart you can opt out of the
 sandbox by passing `--unsafe-eval` to `scjson engine-trace` (or by constructing
 `DocumentContext` with `allow_unsafe_eval=True`). This re-enables CPython’s

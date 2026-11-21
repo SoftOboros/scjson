@@ -18,6 +18,14 @@ single version stream.
 
 ## Cross-language entries
 
+### 2026-11-21 — Mixed parallel regions on v0.4.3 (ERRATA-011)
+
+Python, JavaScript, and native Rust preserve the authored order of sibling
+`state` and `parallel` regions when converting between XML and SCJSON.
+The optional `region_order` list distinguishes charts whose grouped arrays
+are identical. Python execution and generated Rust honor the same order.
+Existing SCJSON without the field loads with `state` regions first.
+
 ### 2026-11-21 — Executable order and mixed content on v0.4.3
 
 The Python and JavaScript converters preserve the order of executable children
