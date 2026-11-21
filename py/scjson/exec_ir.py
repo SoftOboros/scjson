@@ -41,6 +41,7 @@ Mapping from admitted ECMAScript to ExpressionNode (D-M1P6-2):
   a + b  /  a == b  etc.    -> ast.BinOp / ast.Compare -> BinOp
   !x  (normalized to not x) -> ast.UnaryOp(Not)       -> UnaryOp
   -x                        -> ast.UnaryOp(USub)       -> UnaryOp
+  In('stateId') in a guard   -> ast.Call               -> CallNode
   parseInt(x)  String(x) .. -> ast.Call               -> CallNode
   [1, 2, 3]                 -> ast.List               -> ArrayLiteral
   {a: b}                    -> ast.Dict               -> MapLiteral
@@ -65,6 +66,8 @@ Deviations from M1-EXECUTABLE-IR spec (none; full compliance):
 from __future__ import annotations
 
 import ast
+import io
+import tokenize
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
@@ -288,7 +291,7 @@ class UnaryOp:
 
 @dataclass
 class CallNode:
-    """Admitted built-in call (``parseInt``, ``String``, ``Number``, ``.replace``).
+    """Admitted built-in call, including the guard-only state-membership predicate.
 
     D-M1P6-2 whitelist only; any other call produces ``unsupported-ecmascript``.
 
@@ -612,6 +615,7 @@ class TransitionIR:
     :param guard: Guard expression (``None`` means always enabled).
     :param actions: Executable content in document order.
     :param origin: Block-level origin reference.
+    :param type: Internal or external transition domain.
     :param diagnostics: Per-transition diagnostic list.
     """
 
@@ -621,6 +625,7 @@ class TransitionIR:
     actions: List[ActionNode] = field(default_factory=list)
     origin: Optional[OriginRef] = None
     diagnostics: List[ExecutableDiagnostic] = field(default_factory=list)
+    type: str = "external"
 
 
 @dataclass
@@ -683,6 +688,8 @@ class FinalIR:
 
     id: str
     diagnostics: List[ExecutableDiagnostic] = field(default_factory=list)
+    onentry: List[ActionNode] = field(default_factory=list)
+    onexit: List[ActionNode] = field(default_factory=list)
 
 
 @dataclass
@@ -691,12 +698,14 @@ class HistoryIR:
 
     :param id: History pseudostate identifier.
     :param type: ``"shallow"`` or ``"deep"``.
+    :param transition: Default transition used when no configuration is saved.
     :param diagnostics: Diagnostics collected for this element.
     """
 
     id: str
     type: str = "shallow"
     diagnostics: List[ExecutableDiagnostic] = field(default_factory=list)
+    transition: Optional[TransitionIR] = None
 
 
 #: Union of all state-level IR node types.
@@ -780,15 +789,27 @@ _BOOLOP_MAP: Dict[type, str] = {
 }
 
 
-def _ast_to_expr(node: ast.expr, origin: str) -> ExpressionNode:
-    """Convert a Python AST expression node to an IR ExpressionNode.
+class _UnsupportedForm(ValueError):
+    """Propagate an inadmissible subexpression to the enclosing expression."""
 
-    :param node: Python AST expression node produced by ``ast.parse``.
-    :param origin: Source-origin label (state id / block type) for diagnostics.
-    :returns: An ExpressionNode; never raises; unsupported forms return
-        ``UnsupportedExpr`` with a diagnostic.
-    """
-    # Constant
+
+def _ast_to_expr(node: ast.expr, origin: str, *, guard: bool = False,
+                 source: Optional[str] = None, ecmascript: bool = False) -> ExpressionNode:
+    try:
+        return _lower_ast_expr(node, guard=guard, source=source, ecmascript=ecmascript)
+    except _UnsupportedForm as exc:
+        return _unsupported_expr(source if source is not None else ast.unparse(node),
+                                 origin, str(exc))
+
+
+def _lower_ast_expr(node: ast.expr, *, guard: bool, source: Optional[str], ecmascript: bool) -> ExpressionNode:
+    """Lower one AST; only the operators in a guard may compose membership calls."""
+    def operand(child: ast.expr) -> ExpressionNode:
+        return _lower_ast_expr(child, guard=guard, source=source, ecmascript=ecmascript)
+
+    def value(child: ast.expr) -> ExpressionNode:
+        return _lower_ast_expr(child, guard=False, source=source, ecmascript=ecmascript)
+
     if isinstance(node, ast.Constant):
         v = node.value
         if v is None:
@@ -799,140 +820,76 @@ def _ast_to_expr(node: ast.expr, origin: str) -> ExpressionNode:
             return NumericLiteral(num=v)
         if isinstance(v, str):
             return StringLiteral(s=v)
-        return _unsupported_expr(
-            ast.unparse(node), origin,
-            "unsupported constant type: {}".format(type(v).__name__),
-        )
+        raise _UnsupportedForm(f"unsupported constant type: {type(v).__name__}")
 
-    # Name (variable read)
     if isinstance(node, ast.Name):
         return VarRead(var=node.id)
-
-    # Attribute access (a.b)
     if isinstance(node, ast.Attribute):
-        obj = _ast_to_expr(node.value, origin)
-        return MemberAccess(obj=obj, attr=node.attr)
-
-    # Subscript (a[expr])
+        return MemberAccess(obj=value(node.value), attr=node.attr)
     if isinstance(node, ast.Subscript):
-        obj = _ast_to_expr(node.value, origin)
-        # Python 3.9+ wraps the index in an Index node; 3.9+ uses the value directly.
-        idx_node = node.slice
-        if isinstance(idx_node, ast.Index):  # type: ignore[attr-defined]
-            idx_node = idx_node.value  # type: ignore[attr-defined]
-        idx = _ast_to_expr(idx_node, origin)
-        return IndexAccess(obj=obj, index=idx)
-
-    # BinOp (arithmetic)
+        return IndexAccess(obj=value(node.value), index=value(node.slice))
     if isinstance(node, ast.BinOp):
-        op_str = _BINOP_MAP.get(type(node.op))
-        if op_str is None:
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "unsupported binary operator: {}".format(type(node.op).__name__),
-            )
-        lhs = _ast_to_expr(node.left, origin)
-        rhs = _ast_to_expr(node.right, origin)
-        return BinOp(op=op_str, lhs=lhs, rhs=rhs)
-
-    # Compare (a == b, a < b, etc.)
+        op = _BINOP_MAP.get(type(node.op))
+        if op is None:
+            raise _UnsupportedForm(f"unsupported binary operator: {type(node.op).__name__}")
+        return BinOp(op=op, lhs=operand(node.left), rhs=operand(node.right))
     if isinstance(node, ast.Compare):
-        if len(node.ops) != 1 or len(node.comparators) != 1:
-            # Chained comparisons not in admitted subset
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "chained comparison not in admitted subset",
-            )
-        op_str = _CMPOP_MAP.get(type(node.ops[0]))
-        if op_str is None:
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "unsupported comparison operator: {}".format(type(node.ops[0]).__name__),
-            )
-        lhs = _ast_to_expr(node.left, origin)
-        rhs = _ast_to_expr(node.comparators[0], origin)
-        return BinOp(op=op_str, lhs=lhs, rhs=rhs)
-
-    # BoolOp (and / or)
+        if len(node.ops) != 1:
+            raise _UnsupportedForm("chained comparison not in admitted subset")
+        op = _CMPOP_MAP.get(type(node.ops[0]))
+        if op is None:
+            raise _UnsupportedForm(f"unsupported comparison operator: {type(node.ops[0]).__name__}")
+        return BinOp(op=op, lhs=operand(node.left), rhs=operand(node.comparators[0]))
     if isinstance(node, ast.BoolOp):
-        op_str = _BOOLOP_MAP.get(type(node.op))
-        if op_str is None:
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "unsupported boolean operator: {}".format(type(node.op).__name__),
-            )
-        # Fold left-associatively
-        result = _ast_to_expr(node.values[0], origin)
-        for val in node.values[1:]:
-            result = BinOp(op=op_str, lhs=result, rhs=_ast_to_expr(val, origin))
+        op = _BOOLOP_MAP[type(node.op)]
+        result = operand(node.values[0])
+        for child in node.values[1:]:
+            result = BinOp(op=op, lhs=result, rhs=operand(child))
         return result
-
-    # UnaryOp (not / -)
     if isinstance(node, ast.UnaryOp):
         if isinstance(node.op, ast.Not):
-            operand = _ast_to_expr(node.operand, origin)
-            return UnaryOp(op="not", operand=operand)
+            return UnaryOp(op="not", operand=operand(node.operand))
         if isinstance(node.op, ast.USub):
-            operand = _ast_to_expr(node.operand, origin)
-            return UnaryOp(op="neg", operand=operand)
-        return _unsupported_expr(
-            ast.unparse(node), origin,
-            "unsupported unary operator: {}".format(type(node.op).__name__),
-        )
-
-    # Call (free function or method)
+            return UnaryOp(op="neg", operand=operand(node.operand))
+        raise _UnsupportedForm(f"unsupported unary operator: {type(node.op).__name__}")
     if isinstance(node, ast.Call):
-        # Free function calls: int(), str(), float()
+        if node.keywords:
+            raise _UnsupportedForm("keyword arguments are outside the admitted call syntax")
         if isinstance(node.func, ast.Name):
-            fname = node.func.id
-            if fname in _ADMITTED_BUILTINS:
-                args = [_ast_to_expr(a, origin) for a in node.args]
-                return CallNode(func=fname, args=args)
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "non-admitted free function call: {}".format(fname),
-            )
-        # Method calls: <str>.replace(a, b)
+            name = node.func.id
+            if name == "In":
+                if not guard:
+                    raise _UnsupportedForm("In is admitted only as a state-membership predicate in a guard")
+                if len(node.args) != 1 or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+                    raise _UnsupportedForm("In requires one quoted state ID literal")
+                # Python's parser folds adjacent quoted literals to one Constant.
+                text = ast.get_source_segment(source, node.args[0])
+                if ecmascript and (text[0] not in {"'", '"'} or text.startswith(text[0] * 3)):
+                    raise _UnsupportedForm("In requires a single- or double-quoted ECMAScript string literal")
+                tokens = tokenize.generate_tokens(io.StringIO(text).readline)
+                if sum(token.type == tokenize.STRING for token in tokens) != 1:
+                    raise _UnsupportedForm("In requires one quoted state ID literal")
+                return CallNode(func=name, args=[StringLiteral(s=node.args[0].value)])
+            if name in _ADMITTED_BUILTINS:
+                return CallNode(func=name, args=[value(a) for a in node.args])
+            raise _UnsupportedForm(f"non-admitted free function call: {name}")
         if isinstance(node.func, ast.Attribute):
-            mname = node.func.attr
-            if mname in _ADMITTED_METHODS:
-                receiver = _ast_to_expr(node.func.value, origin)
-                args = [_ast_to_expr(a, origin) for a in node.args]
-                return CallNode(func=mname, args=args, receiver=receiver)
-            return _unsupported_expr(
-                ast.unparse(node), origin,
-                "non-admitted method call: {}".format(mname),
-            )
-        return _unsupported_expr(
-            ast.unparse(node), origin,
-            "unsupported call form",
-        )
-
-    # List literal ([a, b, c])
+            name = node.func.attr
+            if name in _ADMITTED_METHODS:
+                return CallNode(func=name, args=[value(a) for a in node.args],
+                                receiver=value(node.func.value))
+            raise _UnsupportedForm(f"non-admitted method call: {name}")
+        raise _UnsupportedForm("unsupported call form")
     if isinstance(node, ast.List):
-        items = [_ast_to_expr(elt, origin) for elt in node.elts]
-        return ArrayLiteral(items=items)
-
-    # Dict literal ({k: v, ...})
+        return ArrayLiteral(items=[value(item) for item in node.elts])
     if isinstance(node, ast.Dict):
         entries = []
-        for k, v in zip(node.keys, node.values):
-            if k is None:
-                return _unsupported_expr(
-                    ast.unparse(node), origin,
-                    "dict unpacking (**) not in admitted subset",
-                )
-            key_expr = _ast_to_expr(k, origin)
-            val_expr = _ast_to_expr(v, origin)
-            entries.append((key_expr, val_expr))
+        for key, item in zip(node.keys, node.values):
+            if key is None:
+                raise _UnsupportedForm("dict unpacking (**) not in admitted subset")
+            entries.append((value(key), value(item)))
         return MapLiteral(entries=entries)
-
-    # Tuple (not admitted)
-    return _unsupported_expr(
-        ast.unparse(node) if hasattr(ast, "unparse") else repr(node),
-        origin,
-        "unsupported expression form: {}".format(type(node).__name__),
-    )
+    raise _UnsupportedForm(f"unsupported expression form: {type(node).__name__}")
 
 
 def _unsupported_expr(source: str, origin: str, message: str) -> UnsupportedExpr:
@@ -953,13 +910,14 @@ def _unsupported_expr(source: str, origin: str, message: str) -> UnsupportedExpr
     return UnsupportedExpr(source=source, diagnostic=diag)
 
 
-def lower_expression(expr_str: str, origin: str) -> tuple:
+def lower_expression(expr_str: str, origin: str, *, guard: bool = False) -> tuple:
     """Lower an ECMAScript expression string to an ExpressionNode.
 
     Uses the ecmascript_normalizer to translate to Python, then parses the
     Python AST and converts to the IR.
 
     :param expr_str: Raw ECMAScript expression string.
+    :param guard: True for the cond of a transition, if, or elseif.
     :param origin: Source origin label for diagnostics.
     :returns: ``(ExpressionNode, diagnostics)`` where ``diagnostics`` is a
         (possibly empty) list of ``ExecutableDiagnostic`` items.  Never raises.
@@ -1009,8 +967,9 @@ def lower_expression(expr_str: str, origin: str) -> tuple:
         diagnostics.append(diag)
         return UnsupportedExpr(source=expr_str, diagnostic=diag), diagnostics
 
-    ir_node = _ast_to_expr(tree.body, origin)
+    ir_node = _ast_to_expr(tree.body, origin, guard=guard, source=py_expr, ecmascript=True)
     if isinstance(ir_node, UnsupportedExpr):
+        ir_node.source = expr_str
         diagnostics.append(ir_node.diagnostic)
     return ir_node, diagnostics
 
@@ -1042,7 +1001,7 @@ class _LoweringContext:
         """
         self.diagnostics.append(diag)
 
-    def lower_expr(self, expr_str: str, origin: str) -> ExpressionNode:
+    def lower_expr(self, expr_str: str, origin: str, *, guard: bool = False) -> ExpressionNode:
         """Lower an expression string to an ExpressionNode, collecting diagnostics.
 
         If the machine is NOT in ECMAScript mode, treat the expression as a
@@ -1053,13 +1012,8 @@ class _LoweringContext:
         :param origin: Source origin label.
         :returns: ExpressionNode (never raises).
         """
-        if self.ecmascript_mode:
-            node, diags = lower_expression(expr_str, origin)
-            self.diagnostics.extend(diags)
-            return node
-        # Python-datamodel: do a best-effort lowering via the Python AST
-        # directly (no ECMAScript normalizer needed).
-        node, diags = _lower_python_expr(expr_str, origin)
+        lower = lower_expression if self.ecmascript_mode else _lower_python_expr
+        node, diags = lower(expr_str, origin, guard=guard)
         self.diagnostics.extend(diags)
         return node
 
@@ -1085,7 +1039,7 @@ class _LoweringContext:
         return "script_{}_{}_{}_{}".format(block_type, state, idx, count)
 
 
-def _lower_python_expr(expr_str: str, origin: str) -> tuple:
+def _lower_python_expr(expr_str: str, origin: str, *, guard: bool = False) -> tuple:
     """Best-effort Python-datamodel expression lowering.
 
     Parses the expression as Python directly (no JS normalizer step).
@@ -1119,8 +1073,9 @@ def _lower_python_expr(expr_str: str, origin: str) -> tuple:
         diagnostics.append(diag)
         return UnsupportedExpr(source=expr_str, diagnostic=diag), diagnostics
 
-    ir_node = _ast_to_expr(tree.body, origin)
+    ir_node = _ast_to_expr(tree.body, origin, guard=guard, source=expr_str)
     if isinstance(ir_node, UnsupportedExpr):
+        ir_node.source = expr_str
         diagnostics.append(ir_node.diagnostic)
     return ir_node, diagnostics
 
@@ -1334,7 +1289,7 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str, foreach_depth: int
     cond_str = getattr(block, "cond", None)
     guard_ir: Optional[ExpressionNode] = None
     if cond_str:
-        guard_ir = ctx.lower_expr(str(cond_str), origin + ":if.cond")
+        guard_ir = ctx.lower_expr(str(cond_str), origin + ":if.cond", guard=True)
 
     from .execution_order import MARKER_FIELDS, ordered_children
 
@@ -1348,7 +1303,7 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str, foreach_depth: int
                 body = _lower_action_block(block, ctx, origin + ":if", foreach_depth,
                                            ordered_items=items, script_counter=script_counter)
                 branches.append(IfBranch(guard=guard, body=body))
-                guard = ctx.lower_expr(str(item.cond), origin + ":elseif.cond") if kind == "elseif" else None
+                guard = ctx.lower_expr(str(item.cond), origin + ":elseif.cond", guard=True) if kind == "elseif" else None
                 items = []
             else:
                 items.append((kind, item))
@@ -1378,7 +1333,7 @@ def _lower_if(block: Any, ctx: _LoweringContext, origin: str, foreach_depth: int
             elseif_guard: Optional[ExpressionNode] = None
             if elseif_cond:
                 elseif_guard = ctx.lower_expr(
-                    str(elseif_cond), origin + ":elseif.cond"
+                    str(elseif_cond), origin + ":elseif.cond", guard=True
                 )
             branches.append(IfBranch(guard=elseif_guard, body=[]))
         # Add else branch
@@ -1470,6 +1425,8 @@ def _lower_ast_assign(
     if len(stmt.targets) != 1:
         return None  # Multiple assignment targets are not admitted.
     target = stmt.targets[0]
+    if _calls_membership(target):
+        return None
 
     # Compute the location string for AssignNode.loc.
     if isinstance(target, ast.Name):
@@ -1483,8 +1440,9 @@ def _lower_ast_assign(
         return None  # Complex destructuring is not admitted.
 
     # Lower the right-hand side expression.
-    rhs_source = ast.unparse(stmt.value) if hasattr(ast, "unparse") else repr(stmt.value)
     rhs_ir = _ast_to_expr(stmt.value, origin + ":script:assign")
+    if isinstance(rhs_ir, UnsupportedExpr):
+        return None
 
     return AssignNode(
         loc=loc,
@@ -1561,6 +1519,12 @@ def _lower_ast_if(
     )
 
 
+def _calls_membership(node: ast.AST) -> bool:
+    """Check parsed syntax without matching comments or quoted text."""
+    return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id == "In" for n in ast.walk(node))
+
+
 def _script_text(value: Any) -> Optional[str]:
     """Read canonical character data or its historical nested content wrapper."""
     if isinstance(value, str):
@@ -1624,19 +1588,24 @@ def _lower_script(
         script_name=script_name, block_type=block_type, state=state, idx=idx
     )
     origin_ref = OriginRef(type="script", state=state, idx=idx)
-    if ctx.ecmascript_mode and body_text:
-        # The body was present but not admitted; emit a diagnostic.
-        diag = ExecutableDiagnostic(
-            code="unsupported-ecmascript",
-            outcome="capability-only",
-            tier="restricted",
-            source_origin=origin,
-            message=(
-                "script body contains unadmitted ECMAScript forms; "
-                "lowered to CapabilityCallNode '{}' (M0-D10 / D-M1P6-8)".format(name)
-            ),
-        )
-        ctx.push_diag(diag)
+    if body_text:
+        message = None
+        if ctx.ecmascript_mode:
+            message = "script body contains unadmitted ECMAScript forms"
+        else:
+            try:
+                tree = ast.parse(body_text)
+            except SyntaxError:
+                pass  # An opaque Python script is already a capability.
+            else:
+                if _calls_membership(tree):
+                    message = "In is admitted only in an SCXML guard, outside script bodies"
+        if message:
+            ctx.push_diag(ExecutableDiagnostic(
+                code="unsupported-ecmascript", outcome="capability-only", tier="restricted",
+                source_origin=origin,
+                message=f"{message}; lowered to CapabilityCallNode '{name}' (M0-D10 / D-M1P6-8)",
+            ))
     return CapabilityCallNode(
         name=name,
         origin=origin_ref,
@@ -2093,7 +2062,7 @@ def _lower_transition(trans: Any, ctx: _LoweringContext, state_id: str) -> Trans
     diags: List[ExecutableDiagnostic] = []
     if cond:
         origin = "{}:trans".format(state_id)
-        guard_ir = ctx.lower_expr(str(cond), origin)
+        guard_ir = ctx.lower_expr(str(cond), origin, guard=True)
         # Collect diagnostics from the lowered guard
         if isinstance(guard_ir, UnsupportedExpr):
             diags.append(guard_ir.diagnostic)
@@ -2106,7 +2075,9 @@ def _lower_transition(trans: Any, ctx: _LoweringContext, state_id: str) -> Trans
     )
     actions = _lower_action_block(trans, ctx, "{}:trans".format(state_id))
 
+    kind = getattr(trans, "type_value", None)
     return TransitionIR(
+        type=getattr(kind, "value", kind) or "external",
         event=event,
         targets=targets,
         guard=guard_ir,
@@ -2173,6 +2144,22 @@ def _lower_onexit(node: Any, ctx: _LoweringContext, state_id: str) -> List[Actio
     return actions
 
 
+def _lower_history(node: Any, ctx: _LoweringContext) -> HistoryIR:
+    """Retain the chart's default transition and executable actions."""
+    state_id = getattr(node, "id", None) or f"hist_{id(node)}"
+    kind = getattr(node, "type_value", None)
+    transition = getattr(node, "transition", None)
+    return HistoryIR(id=state_id, type=getattr(kind, "value", kind) or "shallow",
+                     transition=_lower_transition(transition, ctx, state_id) if transition else None)
+
+
+def _lower_final(node: Any, ctx: _LoweringContext) -> FinalIR:
+    """Preserve both executable handlers on a final state."""
+    state_id = getattr(node, "id", None) or f"final_{id(node)}"
+    return FinalIR(id=state_id, onentry=_lower_onentry(node, ctx, state_id),
+                   onexit=_lower_onexit(node, ctx, state_id))
+
+
 def _lower_state(node: Any, ctx: _LoweringContext, parent_id: str) -> StateIR:
     """Lower a ``<state>`` element recursively.
 
@@ -2210,12 +2197,9 @@ def _lower_state(node: Any, ctx: _LoweringContext, parent_id: str) -> StateIR:
     for child in getattr(node, "parallel", []) or []:
         children.append(_lower_parallel(child, ctx, state_id))
     for child in getattr(node, "final", []) or []:
-        child_id = getattr(child, "id", None) or "final_{}".format(id(child))
-        children.append(FinalIR(id=child_id))
+        children.append(_lower_final(child, ctx))
     for child in getattr(node, "history", []) or []:
-        child_id = getattr(child, "id", None) or "hist_{}".format(id(child))
-        hist_type = getattr(child, "type_value", "shallow") or "shallow"
-        children.append(HistoryIR(id=child_id, type=str(hist_type)))
+        children.append(_lower_history(child, ctx))
 
     return StateIR(
         id=state_id,
@@ -2256,12 +2240,9 @@ def _lower_parallel(node: Any, ctx: _LoweringContext, parent_id: str) -> Paralle
     for child in getattr(node, "parallel", []) or []:
         children.append(_lower_parallel(child, ctx, parallel_id))
     for child in getattr(node, "final", []) or []:
-        child_id = getattr(child, "id", None) or "final_{}".format(id(child))
-        children.append(FinalIR(id=child_id))
+        children.append(_lower_final(child, ctx))
     for child in getattr(node, "history", []) or []:
-        child_id = getattr(child, "id", None) or "hist_{}".format(id(child))
-        hist_type = getattr(child, "type_value", "shallow") or "shallow"
-        children.append(HistoryIR(id=child_id, type=str(hist_type)))
+        children.append(_lower_history(child, ctx))
 
     return ParallelIR(
         id=parallel_id,
@@ -2296,8 +2277,7 @@ def _lower_scxml(doc: Any, ctx: _LoweringContext) -> MachineIR:
     for child in getattr(doc, "parallel", []) or []:
         children.append(_lower_parallel(child, ctx, "__root__"))
     for child in getattr(doc, "final", []) or []:
-        child_id = getattr(child, "id", None) or "final_{}".format(id(child))
-        children.append(FinalIR(id=child_id))
+        children.append(_lower_final(child, ctx))
 
     return MachineIR(
         name=name,

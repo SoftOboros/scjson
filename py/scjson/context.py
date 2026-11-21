@@ -164,6 +164,18 @@ class DocumentContext(BaseModel):
         event_consumed = evt is not None
         triggered = False
 
+        def execute(event: Event | None) -> bool:
+            self._current_event = event
+            try:
+                result = self._execute_transitions(event)
+            finally:
+                self._current_event = None
+            if result:
+                for act, trans in result[0]:
+                    logger.info("[microstep] %s -> %s on %s", act.id, ",".join(trans.target),
+                                event.name if event else "<epsilon>")
+            return result is not None
+
         # Autoforward external events to active invocations before processing
         if evt is not None:
             self._autoforward_event(evt)
@@ -179,48 +191,14 @@ class DocumentContext(BaseModel):
                 head_evt = self.events.pop()
                 if head_evt is None:
                     break
-                self._current_event = head_evt
-                result = self._execute_transition(head_evt)
-                self._current_event = None
-                if result:
-                    act, trans, _, _ = result
-                    triggered = True
-                    logger.info(
-                        "[microstep] %s -> %s on %s",
-                        act.id,
-                        ",".join(trans.target),
-                        head_evt.name,
-                    )
+                triggered = execute(head_evt) or triggered
         except Exception:
             pass
 
         if evt is not None:
-            # Expose _event to expressions during processing
-            self._current_event = evt
-            result = self._execute_transition(evt)
-            self._current_event = None
-            if result:
-                act, trans, _, _ = result
-                triggered = True
-                logger.info(
-                    "[microstep] %s -> %s on %s",
-                    act.id,
-                    ",".join(trans.target),
-                    evt.name,
-                )
-
-        while True:
-            result = self._execute_transition(None)
-            if not result:
-                break
+            triggered = execute(evt) or triggered
+        while execute(None):
             triggered = True
-            act, trans, _, _ = result
-            logger.info(
-                "[microstep] %s -> %s on %s",
-                act.id,
-                ",".join(trans.target),
-                trans.event or "<epsilon>",
-            )
 
         if event_consumed and not triggered and evt is not None:
             logger.info("[microstep] consumed event: %s", evt.name)
@@ -243,53 +221,72 @@ class DocumentContext(BaseModel):
             return [self._wrap_event_payload(v) for v in value]
         return value
 
-    def _select_transition(self, evt: Event | None) -> tuple[ActivationRecord, TransitionSpec] | None:
-        """Return the first enabled transition for ``evt`` respecting document order."""
+    def _select_transitions(self, evt: Event | None) -> list[tuple[ActivationRecord, TransitionSpec]]:
+        """Select enabled, nonconflicting transitions from one configuration."""
+        def matches(trans: TransitionSpec) -> bool:
+            if evt is None:
+                return trans.event is None
+            if evt.name is None:
+                return False
+            descriptor = trans.event or ""
+            for token in descriptor.split() or [descriptor]:
+                if token == "*" or token == evt.name:
+                    return True
+                if token.endswith(".*"):
+                    prefix = token[:-2]
+                    if evt.name == prefix or evt.name.startswith(prefix + "."):
+                        return True
+            return False
 
-        event_name = evt.name if evt is not None else None
-        for state_id in sorted(self.configuration, key=self._activation_order_key):
-            act = self.activations.get(state_id)
-            if not act:
+        enabled = {}
+        candidates = {}
+        for sid in sorted(self.configuration, key=self._activation_order_key):
+            leaf = self.activations[sid]
+            if any(c.id in self.configuration for c in leaf.children):
                 continue
-            for trans in act.transitions:
-                if evt is None:
-                    if trans.event is not None:
-                        continue
-                else:
-                    te = trans.event or ""
-                    # SCXML allows space-separated event names and wildcard patterns
-                    # Supported tokens:
-                    #  - exact: "foo"
-                    #  - any: "*" (matches any external event)
-                    #  - prefix: "error.*" (matches e.g., error.execution)
-                    def _matches(token: str, name: str | None) -> bool:
-                        if name is None:
-                            return False
-                        if token == "*":
-                            return True
-                        if token.endswith(".*"):
-                            prefix = token[:-2]
-                            return name == prefix or name.startswith(prefix + ".")
-                        return token == name
+            for owner in reversed(leaf.path()):
+                if owner.id not in enabled:
+                    enabled[owner.id] = next((t for t in owner.transitions
+                        if matches(t) and (t.cond is None or self._eval_condition(t.cond, owner))), None)
+                chosen = enabled[owner.id]
+                if chosen is not None:
+                    candidates[owner.id] = (owner, chosen)
+                    break
 
-                    names = [n for n in te.split() if n]
-                    if names and not any(_matches(token, event_name) for token in names):
-                        continue
-                    if not names and not _matches(te, event_name):
-                        continue
-                if trans.cond is None or self._eval_condition(trans.cond, act):
-                    return act, trans
-        return None
+        # Two candidates conflict when their exit sets overlap. A descendant
+        # source preempts its ancestor. Otherwise the earlier candidate wins.
+        selected = []
+        for owner, trans in candidates.values():
+            roots = {a.id for a in self._compute_exit_roots(owner, trans)}
+            exited = {sid for sid in self.configuration
+                      if any(a.id in roots for a in self.activations[sid].path())}
+            conflicts = [item for item in selected if item[2] & exited]
+            ancestors = {a.id for a in owner.path()[:-1]}
+            if any(other.id not in ancestors for other, _, _ in conflicts):
+                continue
+            preempted = {other.id for other, _, _ in conflicts}
+            selected = [item for item in selected if item[0].id not in preempted]
+            selected.append((owner, trans, exited))
+        return sorted(((a, t) for a, t, _ in selected), key=lambda item: self._activation_order_key(item[0].id))
 
-    def _execute_transition(
-        self, evt: Event | None
-    ) -> Optional[Tuple[ActivationRecord, TransitionSpec, Set[str], Set[str]]]:
-        sel = self._select_transition(evt)
-        if not sel:
+    def _execute_transitions(self, evt: Event | None):
+        """Run all exits, then all transition actions, then all entries."""
+        selected = self._select_transitions(evt)
+        if not selected:
             return None
-        act, trans = sel
-        entered, exited = self._fire_transition(act, trans)
-        return act, trans, entered, exited
+        exit_roots = {root.id for owner, trans in selected
+                      for root in self._compute_exit_roots(owner, trans)}
+        exited = set()
+        for sid in sorted(exit_roots, key=self._activation_order_key, reverse=True):
+            exited.update(self._exit_state(self.activations[sid]))
+        targets = []
+        for owner, trans in selected:
+            if trans.container is not None:
+                self._run_actions(trans.container, owner)
+            targets.extend(trans.target)
+        before_enter = set(self.configuration)
+        self._enter_target_paths(self.root_activation, targets)
+        return selected, self.configuration - before_enter, exited
 
     def trace_step(self, evt: Event | None = None) -> dict:
         """Execute one microstep and return a standardized trace entry."""
@@ -307,38 +304,26 @@ class DocumentContext(BaseModel):
         entered: Set[str] = set()
         exited: Set[str] = set()
 
-        if event_obj is not None:
-            self._current_event = event_obj
-            result = self._execute_transition(event_obj)
-            self._current_event = None
-            if result:
-                act, trans, ent, ex = result
-                fired.append(
-                    {
-                        "source": act.id,
-                        "targets": list(trans.target),
-                        "event": trans.event,
-                        "cond": trans.cond,
-                    }
-                )
-                entered.update(ent)
-                exited.update(ex)
-
-        while True:
-            result = self._execute_transition(None)
-            if not result:
-                break
-            act, trans, ent, ex = result
-            fired.append(
-                {
-                    "source": act.id,
-                    "targets": list(trans.target),
-                    "event": trans.event,
-                    "cond": trans.cond,
-                }
-            )
+        def record(event: Event | None) -> bool:
+            self._current_event = event
+            try:
+                result = self._execute_transitions(event)
+            finally:
+                self._current_event = None
+            if result is None:
+                return False
+            selected, ent, ex = result
+            for act, trans in selected:
+                fired.append({"source": act.id, "targets": list(trans.target),
+                              "event": trans.event, "cond": trans.cond})
             entered.update(ent)
             exited.update(ex)
+            return True
+
+        if event_obj is not None:
+            record(event_obj)
+        while record(None):
+            pass
 
         dm_delta: Dict[str, Any] = {
             k: self.data_model[k]
@@ -642,16 +627,14 @@ class DocumentContext(BaseModel):
             elif act.children:
                 targets = [act.children[0].id]
         elif isinstance(node, ScxmlParallelType):
-            targets = [c.id for c in act.children]
+            targets = [c.id for c in act.children if not isinstance(c.node, History)]
 
-        for tid in targets:
-            child = self.activations.get(tid)
-            if child and tid not in self.configuration:
-                self._enter_target(child)
+        self._enter_target_paths(act, targets)
 
     def _eval_condition(self, expr: str, act: ActivationRecord) -> bool:
         """Evaluate a condition using the active datamodel's truth semantics."""
         env = self._scope_env(act)
+        env["In"] = self._in_state
         try:
             value = self._evaluate_expr(expr, env)
             if self._ecmascript_mode:
@@ -869,21 +852,12 @@ class DocumentContext(BaseModel):
 
     def _do_if(self, block: Any, act: ActivationRecord) -> None:
         branches = self._split_if_branches(block)
-        executed = False
         for branch in branches:
-            kind = branch["kind"]
-            if kind in {"if", "elseif"}:
-                cond_expr = branch.get("cond") or "False"
-                branch_active = self._eval_condition(cond_expr, act)
-            else:  # else
-                branch_active = not executed
-
-            if not branch_active:
+            if branch["kind"] != "else" and not self._eval_condition(branch.get("cond") or "False", act):
                 continue
-
-            executed = True
             for action_kind, payload in branch["actions"]:
                 self._dispatch_action(action_kind, payload, act)
+            break
 
     def _do_foreach(self, block: Any, act: ActivationRecord) -> None:
         env = self._scope_env(act)
@@ -1424,7 +1398,7 @@ class DocumentContext(BaseModel):
                     # Only consume now when a transition for this event exists; otherwise
                     # keep the event queued for normal processing.
                     self._current_event = head_evt
-                    sel = self._select_transition(head_evt)
+                    sel = self._select_transitions(head_evt)
                     if not sel:
                         # If an id-specific event is at the head but only a
                         # generic done.invoke transition exists, consume the
@@ -1436,12 +1410,12 @@ class DocumentContext(BaseModel):
                             if getattr(nxt, "name", "") == "done.invoke":
                                 # Check if generic would fire
                                 gen_evt = Event(name="done.invoke", data=head_evt.data, send_id=getattr(head_evt, "send_id", None))
-                                sel_gen = self._select_transition(gen_evt)
+                                sel_gen = self._select_transitions(gen_evt)
                                 if sel_gen:
                                     # Pop the generic event and process it
                                     _ = self.events.pop()
                                     self._current_event = gen_evt
-                                    self._execute_transition(gen_evt)
+                                    self._execute_transitions(gen_evt)
                                     self._current_event = None
                                     # Restore id-specific to the front
                                     self.events.push_front(head_evt)
@@ -1454,13 +1428,13 @@ class DocumentContext(BaseModel):
                         if name == "done.invoke" and getattr(self.events, "_q", None):
                             nxt = self.events._q[0]
                             if isinstance(getattr(nxt, "name", None), str) and nxt.name.startswith("done.invoke."):
-                                sel_id = self._select_transition(nxt)
+                                sel_id = self._select_transitions(nxt)
                                 if sel_id:
                                     # Pop the id-specific now, then restore generic
                                     _ = self.events.pop()
                                     self.events.push_front(head_evt)
                                     self._current_event = nxt
-                                    self._execute_transition(nxt)
+                                    self._execute_transitions(nxt)
                                     self._current_event = None
                                     continue
                         # put back at front and stop consuming
@@ -1469,7 +1443,7 @@ class DocumentContext(BaseModel):
                         finally:
                             self._current_event = None
                         break
-                    self._execute_transition(head_evt)
+                    self._execute_transitions(head_evt)
                     self._current_event = None
             except Exception:
                 pass
@@ -1741,7 +1715,10 @@ class DocumentContext(BaseModel):
     def _in_state(self, state_id: str) -> bool:
         """Return ``True`` when ``state_id`` is currently active."""
 
-        return state_id in self.configuration
+        activation = self.activations.get(state_id)
+        return (state_id in self.configuration and activation is not None
+                and getattr(activation.node, "id", None) == state_id
+                and not isinstance(activation.node, History))
 
     def _do_assign(self, assign: Any, act: ActivationRecord) -> None:
         env = self._scope_env(act)
@@ -1899,20 +1876,6 @@ class DocumentContext(BaseModel):
         exited.add(act.id)
         return exited
 
-    def _snapshot_active_histories(self) -> None:
-        """Refresh shallow and deep history caches for active states."""
-
-        for state_id in list(self.configuration):
-            act = self.activations.get(state_id)
-            if not act or not getattr(act.node, "history", []):
-                continue
-            active_children = [c.id for c in act.children if c.id in self.configuration]
-            self.history[act.id] = list(active_children)
-            try:
-                self.history_deep[act.id] = self._active_leaves_under(act)
-            except Exception:
-                self.history_deep[act.id] = list(active_children)
-
     def _enter_history(self, act: ActivationRecord) -> None:
         parent = act.parent
         if not parent:
@@ -1945,22 +1908,9 @@ class DocumentContext(BaseModel):
             else:
                 targets = []
 
-        if hist_type == HistoryTypeDatatype.DEEP and targets:
-            for tid in targets:
-                target_act = self.activations.get(tid)
-                if not target_act:
-                    continue
-                for node in self._path_from_parent(parent, target_act):
-                    if node.id not in self.configuration:
-                        self._enter_state_exact(node)
-        else:
-            # Shallow history: optionally execute default transition actions
-            if default_transition is not None:
-                self._run_actions(default_transition, parent)
-            for tid in targets:
-                child = self.activations.get(tid)
-                if child:
-                    self._enter_state(child)
+        if default_transition is not None:
+            self._run_actions(default_transition, parent)
+        self._enter_target_paths(parent, targets or [])
 
     def _enter_target(self, act: ActivationRecord) -> None:
         if isinstance(act.node, History):
@@ -1968,117 +1918,63 @@ class DocumentContext(BaseModel):
         else:
             self._enter_state(act)
 
-    def _fire_transition(
-        self, source: ActivationRecord, trans: TransitionSpec
-    ) -> tuple[Set[str], Set[str]]:
-        self._snapshot_active_histories()
-        exit_list = self._compute_exit_roots(source, trans.target)
-        exited_ids: Set[str] = set()
-        for act in exit_list:
-            if act.id in self.configuration:
-                exited_ids.update(self._exit_state(act))
-
-        # Execute transition body (executable content) in document order
-        container = getattr(trans, "container", None)
-        if container is not None:
-            self._run_actions(container, source)
-
-        enter_list = self._compute_entry_list(source, trans.target)
-        entered_ids: Set[str] = set()
-        for act in enter_list:
-            before_enter = set(self.configuration)
-            self._enter_target(act)
-            after_enter = set(self.configuration)
-            entered_ids.update(after_enter - before_enter)
-
-        return entered_ids, exited_ids
-
-    def _least_common_ancestor(
-        self, first: ActivationRecord, second: ActivationRecord
-    ) -> Optional[ActivationRecord]:
-        ancestors: Set[str] = set()
-        cur = first
-        while cur:
-            ancestors.add(cur.id)
-            cur = cur.parent
-        cur = second
-        while cur:
-            if cur.id in ancestors:
-                return cur
-            cur = cur.parent
-        return None
-
     def _compute_exit_roots(
-        self, source: ActivationRecord, targets: List[str]
+        self, source: ActivationRecord, trans: TransitionSpec
     ) -> List[ActivationRecord]:
-        exit_set: Dict[str, ActivationRecord] = {}
-
-        # Targetless transitions are internal and must not exit any state.
+        """Exit active descendants of the transition domain in reverse document order."""
+        targets = [self.activations[tid] for tid in trans.target if tid in self.activations]
         if not targets:
             return []
+
+        ancestors = [{a.id for a in target.path()[:-1]} for target in targets]
+        transition_type = getattr(trans.container, "type_value", None)
+        is_internal = getattr(transition_type, "value", transition_type) == "internal"
+        if (is_internal and isinstance(source.node, State)
+                and all(source.id in path for path in ancestors)):
+            domain = source
         else:
-            for tid in targets:
-                target_act = self.activations.get(tid)
-                if not target_act:
-                    continue
-                normalized_target = (
-                    target_act.parent
-                    if isinstance(target_act.node, History)
-                    else target_act
-                )
-                if (
-                    isinstance(target_act.node, History)
-                    and target_act.parent is not None
-                    and source.id == target_act.parent.id
-                ):
-                    for child in target_act.parent.children:
-                        if child.id in self.configuration:
-                            exit_set[child.id] = child
-                lca = self._least_common_ancestor(source, normalized_target or self.root_activation)
-                cur = source
-                while cur and cur is not lca:
-                    exit_set[cur.id] = cur
-                    cur = cur.parent
+            # An external transition reenters its source if it targets itself
+            # or a descendant. A parallel is not a compound transition domain.
+            domain = next((a for a in reversed(source.path()[:-1])
+                           if isinstance(a.node, (Scxml, State))
+                           and all(a.id in path for path in ancestors)), self.root_activation)
+        return [child for child in reversed(domain.children) if child.id in self.configuration]
 
-        # _exit_state traverses whole active subtrees. Starting at a leaf on
-        # the transition source path would exit that region before later siblings.
-        roots = [node for node in exit_set.values()
-                 if not any(ancestor.id in exit_set for ancestor in node.path()[:-1])]
-        return sorted(roots, key=lambda node: self._activation_order_key(node.id), reverse=True)
-
-    def _compute_entry_list(
-        self, source: ActivationRecord, targets: List[str]
-    ) -> List[ActivationRecord]:
-        enter_order: List[ActivationRecord] = []
-        seen: Set[str] = set()
-
-        for tid in targets or []:
-            target_act = self.activations.get(tid)
-            if not target_act:
+    def _enter_target_paths(self, parent: ActivationRecord, targets: List[str]) -> None:
+        """Enter ancestors and explicit targets before choosing defaults for untargeted regions."""
+        selected: dict[str, set[str]] = defaultdict(set)
+        for tid in targets:
+            target = self.activations.get(tid)
+            if target is None:
                 continue
-            normalized_target = (
-                target_act.parent
-                if isinstance(target_act.node, History)
-                else target_act
-            )
-            lca = self._least_common_ancestor(source, normalized_target or self.root_activation)
-            path: List[ActivationRecord] = []
-            cur = target_act
-            while cur and cur is not lca:
-                path.append(cur)
-                cur = cur.parent
-            for act in reversed(path):
-                if act.id not in seen:
-                    seen.add(act.id)
-                    enter_order.append(act)
+            path = target.path()
+            for index, ancestor in enumerate(path):
+                if ancestor.id == parent.id:
+                    for owner, child in zip(path[index:], path[index + 1:]):
+                        selected[owner.id].add(child.id)
+                    break
 
-        return enter_order
+        def enter_child(child: ActivationRecord) -> None:
+            if child.id not in selected:
+                self._enter_target(child)
+                return
+            newly_active = child.id not in self.configuration
+            self._enter_state_exact(child)
+            for region in child.children:
+                if (region.id in selected[child.id]
+                        or (newly_active and isinstance(child.node, ScxmlParallelType)
+                            and not isinstance(region.node, History))):
+                    enter_child(region)
+
+        for child in parent.children:
+            if child.id in selected.get(parent.id, ()):
+                enter_child(child)
 
     def drain_internal(self) -> None:
         """Execute eventless transitions until quiescent."""
 
         while True:
-            result = self._execute_transition(None)
+            result = self._execute_transitions(None)
             if not result:
                 break
 
@@ -2227,6 +2123,13 @@ class DocumentContext(BaseModel):
         ctx.json_order = cls._build_order_map(raw_data, path_map, source_xml)
         ctx.data_model = root_state.local_data
         ctx._index_activations(root_state)
+        if ctx.activations[root_state.id] is not root_state:
+            # "__scxml_root__" is a legal authored state ID. Move the
+            # synthetic root when that ID belongs to a chart state.
+            root_state.id = "$generated-scxml-root"
+            ctx.activations.clear()
+            ctx.activation_order.clear()
+            ctx._index_activations(root_state)
         try:
             ctx._leaf_ids = ctx.leaf_state_ids()
         except Exception:
@@ -2491,21 +2394,6 @@ class DocumentContext(BaseModel):
             if getattr(act, "id", None) and not has_child_states:
                 leaves.append(act.id)
         return set(sorted(set(leaves), key=self._activation_order_key))
-
-    def _path_from_parent(self, parent: ActivationRecord, target: ActivationRecord) -> List[ActivationRecord]:
-        """Compute the entry chain from ``parent`` to ``target`` (exclusive of parent).
-
-        :param parent: Ancestor activation that is already active.
-        :param target: Descendant activation to restore.
-        :returns: List of activations from the child of ``parent`` down to ``target``.
-        """
-        path: List[ActivationRecord] = []
-        cur = target
-        while cur is not None and cur is not parent:
-            path.append(cur)
-            cur = cur.parent
-        path.reverse()
-        return path
 
     def _enter_state_exact(self, act: ActivationRecord) -> None:
         if act.id in self.configuration:
