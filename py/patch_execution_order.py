@@ -35,7 +35,9 @@ def patch(path):
         source = source.replace("from pydantic import BaseModel, ConfigDict, model_validator",
                                 "from pydantic import BaseModel, ConfigDict, field_serializer, model_serializer, model_validator")
         source = source.replace("from xsdata_pydantic.fields import field",
-                                "from xsdata_pydantic.fields import field\n\nfrom ..execution_order import ordered_children")
+                                "from xsdata_pydantic.fields import field\n\nfrom ..execution_order import ScxmlModel, ordered_children")
+        source = source.replace("(BaseModel):", "(ScxmlModel):")
+        source = source.replace("from pydantic import BaseModel, ", "from pydantic import ")
     for kind in CONTAINERS:
         match = re.search(rf"^class Scxml{kind}Type\b.*?(?=^class |^@dataclass|\Z)", source, re.M | re.S)
         if not match:

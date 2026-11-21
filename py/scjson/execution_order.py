@@ -11,6 +11,7 @@ Preserve direct SCXML executable child order across grouped SCJSON fields.
 from collections import Counter, defaultdict, deque
 
 from lxml import etree
+from pydantic import BaseModel, model_validator
 
 from .comment_promotion import _resolve_child
 
@@ -27,6 +28,26 @@ ACTION_FIELDS = {
     "cancel": "cancel",
 }
 MARKER_FIELDS = {"elseif": "elseif", "else": "else_value"}
+
+
+class MisplacedExecutionOrder(ValueError):
+    """An SCJSON executable-order field appeared on a structural node."""
+
+
+def validate_order_location(data, fields):
+    """Reject reserved order metadata on typed nodes unable to own it."""
+    if isinstance(data, dict) and "execution_order" in data and "execution_order" not in fields:
+        raise MisplacedExecutionOrder("execution_order is valid only on an executable container")
+
+
+class ScxmlModel(BaseModel):
+    """Base of typed SCXML nodes. Opaque wildcard and attribute data are separate."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _locate_execution_order(cls, data):
+        validate_order_location(data, cls.model_fields)
+        return data
 
 
 def _kind(qname):

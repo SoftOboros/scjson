@@ -30,7 +30,9 @@ from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
-from .execution_order import canonical_json, capture_order, restore_order
+from .execution_order import (
+    MisplacedExecutionOrder, canonical_json, capture_order, restore_order, validate_order_location,
+)
 from xml.etree import ElementTree as ET
 from xml.etree import ElementInclude
 from .comment_promotion import (
@@ -264,6 +266,8 @@ class SCXMLDocumentHandler:
                     continue
                 try:
                     return self._to_dataclass(self._resolve(arg), data)
+                except MisplacedExecutionOrder:
+                    raise
                 except Exception:
                     pass
             return data
@@ -282,6 +286,8 @@ class SCXMLDocumentHandler:
             if isinstance(data, dict):
                 try:
                     return self._to_dataclass(Scxml, data)
+                except MisplacedExecutionOrder:
+                    raise
                 except Exception:
                     pass
             if isinstance(data, list):
@@ -303,6 +309,7 @@ class SCXMLDocumentHandler:
                 return [self._to_dataclass(object, x) for x in data]
             return data
         if is_dataclass(cls):
+            validate_order_location(data, cls.__dataclass_fields__)
             kwargs = {}
             post = {}
             for f in fields(cls):

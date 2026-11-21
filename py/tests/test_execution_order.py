@@ -205,6 +205,34 @@ def test_canonical_schemas_declare_the_field_and_both_marker_forms():
     assert definitions["If"]["properties"]["elseif"] == comparable["If"]["properties"]["elseif"]
 
 
+@pytest.mark.parametrize("location", ["root", "state", "assign", "nested"])
+def test_misplaced_order_rejected_only_on_typed_nodes(location):
+    """Root, nested and action payload objects cannot own the reserved order field."""
+    raw = json.loads(HANDLER.xml_to_json(chart(assigned(1))))
+    state = raw["state"][0]
+    if location == "nested":
+        nested = {"version": 1, "state": [{"id": "inside", "execution_order": []}]}
+        state["invoke"] = [{"content": [{"content": [nested]}]}]
+    else:
+        target = {"root": raw, "state": state, "assign": entry(raw)["assign"][0]}[location]
+        target["execution_order"] = []
+    for ctor in (pydantic.Scxml.model_validate, pydantic_strict.Scxml.model_validate,
+                 lambda data: HANDLER.json_to_xml(json.dumps(data))):
+        with pytest.raises(ValueError, match="execution_order"):
+            ctor(raw)
+
+
+def test_execution_order_named_attribute_remains_opaque():
+    """A foreign XML attribute keeps its local name inside its own attribute map."""
+    raw = json.loads(HANDLER.xml_to_json(chart('<e:mark xmlns:e="urn:e" execution_order="payload"/>')))
+    raw["state"][0]["other_attributes"] = {"{urn:ext}execution_order": "annotation"}
+    for ctor in (pydantic.Scxml.model_validate, pydantic_strict.Scxml.model_validate):
+        assert ctor(raw).state[0].other_attributes == {"{urn:ext}execution_order": "annotation"}
+    round_trip = json.loads(HANDLER.xml_to_json(HANDLER.json_to_xml(json.dumps(raw))))
+    assert round_trip["state"][0]["other_attributes"] == raw["state"][0]["other_attributes"]
+    assert entry(round_trip)["other_element"][0]["attributes"] == {"execution_order": "payload"}
+
+
 @pytest.mark.parametrize("schema", ["scxml.xsd", "scxml-strict.xsd"])
 def test_xml_schema_permits_several_elseif_then_one_else(schema):
     import xmlschema

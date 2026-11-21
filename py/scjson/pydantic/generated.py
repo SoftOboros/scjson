@@ -1,11 +1,11 @@
 from decimal import Decimal
 from enum import Enum
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, field_serializer, model_serializer, model_validator
+from pydantic import ConfigDict, field_serializer, model_serializer, model_validator
 from xsdata_pydantic.fields import field
 from ..xml_payload import NestedChart, XmlPayloadElement
 
-from ..execution_order import ordered_children
+from ..execution_order import ScxmlModel, ordered_children
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
 
@@ -74,7 +74,7 @@ class TransitionTypeDatatype(Enum):
     EXTERNAL = "external"
 
 
-class ScxmlCancelType(BaseModel):
+class ScxmlCancelType(ScxmlModel):
 
     class Meta:
         name = "scxml.cancel.type"
@@ -93,7 +93,7 @@ class ScxmlCancelType(BaseModel):
     )
 
 
-class ScxmlContentType(BaseModel):
+class ScxmlContentType(ScxmlModel):
     content: Optional[List["str | XmlPayloadElement | NestedChart[Scxml]"]] = None
     expr: Optional[str] = None
     other_attributes: dict[str, Any] = field(
@@ -109,7 +109,7 @@ class ScxmlContentType(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlDataType(BaseModel):
+class ScxmlDataType(ScxmlModel):
 
     class Meta:
         name = "scxml.data.type"
@@ -130,7 +130,7 @@ class ScxmlDataType(BaseModel):
     )
 
 
-class ScxmlElseType(BaseModel):
+class ScxmlElseType(ScxmlModel):
 
     class Meta:
         name = "scxml.else.type"
@@ -144,7 +144,7 @@ class ScxmlElseType(BaseModel):
     )
 
 
-class ScxmlElseifType(BaseModel):
+class ScxmlElseifType(ScxmlModel):
 
     class Meta:
         name = "scxml.elseif.type"
@@ -159,7 +159,7 @@ class ScxmlElseifType(BaseModel):
     )
 
 
-class ScxmlLogType(BaseModel):
+class ScxmlLogType(ScxmlModel):
 
     class Meta:
         name = "scxml.log.type"
@@ -178,7 +178,7 @@ class ScxmlLogType(BaseModel):
     )
 
 
-class ScxmlParamType(BaseModel):
+class ScxmlParamType(ScxmlModel):
 
     class Meta:
         name = "scxml.param.type"
@@ -198,7 +198,7 @@ class ScxmlParamType(BaseModel):
     )
 
 
-class ScxmlRaiseType(BaseModel):
+class ScxmlRaiseType(ScxmlModel):
 
     class Meta:
         name = "scxml.raise.type"
@@ -213,7 +213,7 @@ class ScxmlRaiseType(BaseModel):
     )
 
 
-class ScxmlScriptType(BaseModel):
+class ScxmlScriptType(ScxmlModel):
 
     class Meta:
         name = "scxml.script.type"
@@ -322,7 +322,7 @@ class Script(ScxmlScriptType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlAssignType(BaseModel):
+class ScxmlAssignType(ScxmlModel):
 
     class Meta:
         name = "scxml.assign.type"
@@ -357,7 +357,7 @@ class Assign(ScxmlAssignType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlDatamodelType(BaseModel):
+class ScxmlDatamodelType(ScxmlModel):
 
     class Meta:
         name = "scxml.datamodel.type"
@@ -378,7 +378,7 @@ class ScxmlDatamodelType(BaseModel):
     )
 
 
-class ScxmlDonedataType(BaseModel):
+class ScxmlDonedataType(ScxmlModel):
 
     class Meta:
         name = "scxml.donedata.type"
@@ -400,7 +400,7 @@ class ScxmlDonedataType(BaseModel):
     )
 
 
-class ScxmlSendType(BaseModel):
+class ScxmlSendType(ScxmlModel):
 
     class Meta:
         name = "scxml.send.type"
@@ -474,7 +474,7 @@ class Send(ScxmlSendType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlIfType(BaseModel):
+class ScxmlIfType(ScxmlModel):
 
     class Meta:
         name = "scxml.if.type"
@@ -576,7 +576,7 @@ class If(ScxmlIfType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlForeachType(BaseModel):
+class ScxmlForeachType(ScxmlModel):
 
     class Meta:
         name = "scxml.foreach.type"
@@ -664,7 +664,7 @@ class Foreach(ScxmlForeachType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlFinalizeType(BaseModel):
+class ScxmlFinalizeType(ScxmlModel):
 
     class Meta:
         name = "scxml.finalize.type"
@@ -749,7 +749,7 @@ class ScxmlFinalizeType(BaseModel):
 
 
 
-class ScxmlOnentryType(BaseModel):
+class ScxmlOnentryType(ScxmlModel):
 
     class Meta:
         name = "scxml.onentry.type"
@@ -824,7 +824,7 @@ class ScxmlOnentryType(BaseModel):
 
 
 
-class ScxmlOnexitType(BaseModel):
+class ScxmlOnexitType(ScxmlModel):
 
     class Meta:
         name = "scxml.onexit.type"
@@ -899,7 +899,7 @@ class ScxmlOnexitType(BaseModel):
 
 
 
-class ScxmlTransitionType(BaseModel):
+class ScxmlTransitionType(ScxmlModel):
 
     class Meta:
         name = "scxml.transition.type"
@@ -1028,7 +1028,7 @@ class Transition(ScxmlTransitionType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlFinalType(BaseModel):
+class ScxmlFinalType(ScxmlModel):
 
     class Meta:
         name = "scxml.final.type"
@@ -1058,7 +1058,7 @@ class ScxmlFinalType(BaseModel):
     )
 
 
-class ScxmlHistoryType(BaseModel):
+class ScxmlHistoryType(ScxmlModel):
 
     class Meta:
         name = "scxml.history.type"
@@ -1086,7 +1086,7 @@ class ScxmlHistoryType(BaseModel):
     )
 
 
-class ScxmlInitialType(BaseModel):
+class ScxmlInitialType(ScxmlModel):
 
     class Meta:
         name = "scxml.initial.type"
@@ -1110,7 +1110,7 @@ class ScxmlInitialType(BaseModel):
     )
 
 
-class ScxmlInvokeType(BaseModel):
+class ScxmlInvokeType(ScxmlModel):
 
     class Meta:
         name = "scxml.invoke.type"
@@ -1191,7 +1191,7 @@ class Invoke(ScxmlInvokeType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlStateType(BaseModel):
+class ScxmlStateType(ScxmlModel):
 
     class Meta:
         name = "scxml.state.type"
@@ -1263,7 +1263,7 @@ class State(ScxmlStateType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlParallelType(BaseModel):
+class ScxmlParallelType(ScxmlModel):
 
     class Meta:
         name = "scxml.parallel.type"
@@ -1323,7 +1323,7 @@ class Parallel(ScxmlParallelType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlScxmlType(BaseModel):
+class ScxmlScxmlType(ScxmlModel):
 
     class Meta:
         name = "scxml.scxml.type"
