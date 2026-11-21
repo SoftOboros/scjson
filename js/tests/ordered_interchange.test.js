@@ -14,8 +14,54 @@ function write(doc) {
   const output = jsonToXml(JSON.stringify(doc));
   expect(output.errors).toBeNull();
   expect(output.result).not.toContain('execution_order');
+  expect(output.result).not.toContain('region_order');
   return output.result;
 }
+
+const mixedRegions = `<scxml xmlns="${ns}"><parallel id="p">
+  <parallel id="first"><state id="leaf"/></parallel><onentry><log/></onentry>
+  <state id="second"/><state id="third"/></parallel></scxml>`;
+
+test('restores mixed parallel regions, same-kind occurrences, and legacy grouping', () => {
+  const doc = read(mixedRegions);
+  const p = doc.parallel[0];
+  expect(p.region_order).toEqual(['parallel', 'state', 'state']);
+  expect(read(write(doc)).parallel[0].region_order).toEqual(p.region_order);
+  p.region_order = ['state', 'parallel', 'state'];
+  const xml = write(doc);
+  expect(xml.indexOf('id="second"')).toBeLessThan(xml.indexOf('id="first"'));
+  expect(xml.indexOf('id="first"')).toBeLessThan(xml.indexOf('id="third"'));
+  delete p.region_order;
+  doc.parallel[0] = {parallel: p.parallel, ...p};
+  expect(read(write(doc)).parallel[0].region_order).toEqual(['state', 'state', 'parallel']);
+});
+
+test.each([null, 'state', ['history'], ['state'], ['parallel', 'parallel', 'state']])(
+  'rejects malformed region order %j', order => {
+    const doc = read(mixedRegions);
+    doc.parallel[0].region_order = order;
+    expect(jsonToXml(JSON.stringify(doc))).toMatchObject({valid: false, result: ''});
+  });
+
+test('validates ownership and includes region order inside an invoked document', () => {
+  const doc = read(mixedRegions);
+  doc.parallel[0].state[0].region_order = [];
+  expect(jsonToXml(JSON.stringify(doc)).valid).toBe(false);
+  const nested = read(`<scxml xmlns="${ns}"><state id="s"><invoke><content>${mixedRegions}</content></invoke></state></scxml>`);
+  const child = nested.state[0].invoke[0].content[0].content[0];
+  expect(child.parallel[0].region_order).toEqual(['parallel', 'state', 'state']);
+  expect(read(write(nested))).toEqual(nested);
+});
+
+test('anonymous regions and foreign namesakes retain their identity', () => {
+  const doc = read(`<scxml xmlns="${ns}"><parallel><parallel/><state/>
+    <f:state xmlns:f="urn:test" id="foreign"/><parallel xmlns="" id="opaque"/>
+  </parallel></scxml>`);
+  const p = doc.parallel[0];
+  expect(p.region_order).toEqual(['parallel', 'state']);
+  expect(p.other_element.map(item => item.qname)).toEqual(['{urn:test}state', 'parallel']);
+  expect(read(write(doc)).parallel).toEqual(doc.parallel);
+});
 function orders(obj) {
   if (!obj || typeof obj !== 'object') return [];
   return [ ...(obj.execution_order ? [obj.execution_order] : []), ...Object.values(obj).flatMap(orders) ];

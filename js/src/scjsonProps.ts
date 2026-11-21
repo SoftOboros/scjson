@@ -631,6 +631,7 @@ export interface ParallelProps {
     id: string | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    regionOrder?: ('state' | 'parallel')[];
 }
 
 /** Instantiate a default object of type ParallelProps */

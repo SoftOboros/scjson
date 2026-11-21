@@ -868,6 +868,8 @@ pub struct ParallelProps {
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
     pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for ParallelProps {
@@ -885,6 +887,7 @@ impl Default for ParallelProps {
             id: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
             help_text: Vec::<String>::default(),
+            region_order: Option::<Vec::<String>>::default(),
         }
     }
 }

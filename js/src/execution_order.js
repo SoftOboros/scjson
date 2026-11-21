@@ -1,5 +1,5 @@
 /**
- * Preserve the direct executable child order of SCXML action containers.
+ * Preserve executable child order and parallel region order in SCXML.
  * Part of the scjson project. Developed by Softoboros Technology Inc.
  * Licensed under the BSD 1-Clause License.
  */
@@ -10,9 +10,10 @@ const SCXML = 'http://www.w3.org/2005/07/scxml';
 const XI = 'http://www.w3.org/2001/XInclude';
 const containers = new Set(['transition', 'onentry', 'onexit', 'finalize', 'foreach', 'if']);
 const actions = ['assign', 'log', 'raise', 'if', 'foreach', 'send', 'cancel', 'script'];
+const regionKinds = ['state', 'parallel'];
 const payloadParents = new Set(['send', 'donedata', 'invoke']);
 const field = modelAttrForTag;
-const emptyActions = new Set([...actions, 'elseif', 'else'].flatMap(tag => [tag, field(tag)]));
+const emptyElements = new Set([...actions, 'elseif', 'else', ...regionKinds].flatMap(tag => [tag, field(tag)]));
 const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
 const options = { preserveOrder: true, ignoreAttributes: false, parseTagValue: false,
   trimValues: false, commentPropName: '#comment', suppressEmptyNode: true,
@@ -119,6 +120,20 @@ function orderedChildren(model, tag) {
 function validateModel(model, tag = 'scxml') {
   if (!model || typeof model !== 'object') return false;
   let needsProjection = false;
+  if (Object.hasOwn(model, 'region_order')) {
+    if (tag !== 'parallel') throw new Error('region_order is invalid on ' + tag);
+    if (!Array.isArray(model.region_order)) throw new Error('region_order must be an array');
+    const remaining = new Map(regionKinds.map(kind => [kind, list(model[kind]).length]));
+    for (const kind of model.region_order) {
+      if (!remaining.get(kind)) throw new Error('region_order references an unknown or excess region');
+      remaining.set(kind, remaining.get(kind) - 1);
+    }
+    if ([...remaining.values()].some(count => count)) throw new Error('region_order omits a region');
+    needsProjection = true;
+  } else if (tag === 'parallel' && regionKinds.every(kind => list(model[kind]).length)) {
+    // Restore the historical grouping even when JSON keys were reordered.
+    needsProjection = true;
+  }
   if (Object.hasOwn(model, 'execution_order')) {
     if (!containers.has(tag)) throw new Error('execution_order is invalid on ' + tag);
     orderedChildren(model, tag);
@@ -136,7 +151,7 @@ function validateModel(model, tag = 'scxml') {
       needsProjection = true;
     }
   }
-  return needsProjection || (containers.has(tag) && list(model.other_element).length > 0)
+  return needsProjection || ((containers.has(tag) || tag === 'parallel') && list(model.other_element).length > 0)
     || (payloadParents.has(tag) && list(model.content).length > 0);
 }
 
@@ -208,6 +223,7 @@ function captureOrder(tree, grouped) {
     const original = new Map();
     const structural = new Map();
     const order = [];
+    const regions = [];
     for (const child of node[tag.name].filter(isElementNode)) {
       const name = nodeDataKey(child);
       if (!original.has(name)) original.set(name, { values: list(raw[name]), used: 0 });
@@ -215,12 +231,13 @@ function captureOrder(tree, grouped) {
       const childTag = element(child, tag.ns);
       let value = group.values[group.used++];
       if (executable) order.push(childTag.kind);
-      if (executable && childTag.uri !== SCXML) {
+      if (tag.local === 'parallel' && regionKinds.includes(childTag.kind)) regions.push(childTag.kind);
+      if ((executable || tag.local === 'parallel') && childTag.uri !== SCXML) {
         (raw.other_element ||= []).push(wildcard(child, childTag));
         continue;
       }
       const key = childTag.uri === SCXML ? childTag.local : name;
-      if (executable && value === '') value = {};
+      if ((executable || regionKinds.includes(childTag.kind)) && value === '') value = {};
       walk(child, value, childTag);
       if (!structural.has(key)) structural.set(key, []);
       structural.get(key).push(value);
@@ -236,6 +253,7 @@ function captureOrder(tree, grouped) {
       }
     }
     if (new Set(order).size > 1) raw.execution_order = order;
+    if (new Set(regions).size > 1) raw.region_order = regions;
   }
   const root = tree.find(isElementNode);
   if (root) {
@@ -289,7 +307,8 @@ function restoreOrder(tree, model, writeChart) {
       counts.set(key, index + 1);
       walk(entry.child, list(value)[index], entry.tag);
     }
-    if (!executable) return;
+    if (!executable && tag.local !== 'parallel') return;
+    const orderedEntries = executable ? entries : entries.filter(entry => regionKinds.includes(entry.tag.kind));
     const extensions = new Map();
     for (const value of list(current.other_element)) {
       const kind = value.qname.startsWith('{') ? value.qname : '{}' + value.qname;
@@ -297,23 +316,34 @@ function restoreOrder(tree, model, writeChart) {
       extensions.get(kind).push(value);
     }
     const queues = new Map();
-    for (const entry of entries) {
+    for (const entry of orderedEntries) {
       if (!queues.has(entry.tag.kind)) queues.set(entry.tag.kind, []);
       const queue = queues.get(entry.tag.kind);
       const foreign = extensions.get(entry.tag.kind)?.[queue.length];
       queue.push(foreign ? wildcardNode(foreign) : entry.child);
     }
     const used = new Map();
-    const order = current.execution_order || entries.map(entry => entry.tag.kind);
+    const order = executable ? current.execution_order ?? orderedEntries.map(entry => entry.tag.kind)
+      : current.region_order ?? regionKinds.flatMap(kind => list(current[kind]).map(() => kind));
     const ordered = order.map(kind => {
       const index = used.get(kind) || 0;
       used.set(kind, index + 1);
       const child = queues.get(kind)?.[index];
-      if (!child) throw new Error('Missing serialized child in execution_order: ' + kind);
+      if (!child) throw new Error('Missing serialized child in order list: ' + kind);
       return child;
     });
     let index = 0;
-    node[tag.name] = children.map(child => isElementNode(child) ? ordered[index++] : child);
+    const slots = new Set(orderedEntries.map(entry => entry.child));
+    const foreignSlots = new Set(entries.filter(entry => entry.tag.uri !== SCXML).map(entry => entry.child));
+    const foreign = list(current.other_element);
+    let extension = 0;
+    node[tag.name] = children.map(child => {
+      if (slots.has(child)) return ordered[index++];
+      if (tag.local === 'parallel' && foreignSlots.has(child) && extension < foreign.length) {
+        return wildcardNode(foreign[extension++]);
+      }
+      return child;
+    });
   }
   const root = tree.find(isElementNode);
   if (root) walk(root, model, element(root, new Map([['', SCXML]])));
@@ -334,4 +364,4 @@ function expandIncludes(tree, load, namespaces = new Map([['', SCXML]])) {
   });
 }
 
-module.exports = { captureOrder, capturePayloads, restoreOrder, expandIncludes, parse, serialize, validateModel, emptyActions };
+module.exports = { captureOrder, capturePayloads, restoreOrder, expandIncludes, parse, serialize, validateModel, emptyElements };

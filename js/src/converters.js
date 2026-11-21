@@ -70,6 +70,7 @@ const ARRAY_KEYS = new Set([
 const STRUCTURAL_METADATA_KEYS = new Set([
   'help_text',
   'execution_order',
+  'region_order',
 ]);
 
 /// Known SCXML structural fields that should be pulled out of `content[]`
@@ -1024,7 +1025,7 @@ function fixDataContent(value) {
  * @param {object} node - Canonical content object.
  * @returns {object} XML builder structure keyed by element name.
  */
-function restoreDataNode(node) {
+function restoreDataNode(node, foreign = false) {
   let qname = node.qname;
   const out = {};
   if (node.attributes) {
@@ -1057,13 +1058,15 @@ function restoreDataNode(node) {
       qname = 'ext:' + qname;
       out['@_xmlns:ext'] = namespace;
     }
+  } else if (foreign && !qname.includes(':')) {
+    out['@_xmlns'] = '';
   }
   if (node.text !== undefined && node.text !== '') {
     out['#text'] = node.text;
   }
   if (Array.isArray(node.children)) {
     node.children.forEach(c => {
-      const r = restoreDataNode(c);
+      const r = restoreDataNode(c, foreign);
       const [ck, cv] = Object.entries(r)[0];
       if (out[ck]) {
         if (Array.isArray(out[ck])) {
@@ -1187,7 +1190,7 @@ function removeEmpty(value, key) {
       const r = removeEmpty(v, k);
       if (r !== undefined) obj[k] = r;
     }
-    if (Object.keys(obj).length > 0 || ALWAYS_KEEP.has(key) || key === 'donedata' || execution.emptyActions.has(key)) {
+    if (Object.keys(obj).length > 0 || ALWAYS_KEEP.has(key) || key === 'donedata' || execution.emptyElements.has(key)) {
       return obj;
     }
     return undefined;
@@ -1507,7 +1510,7 @@ function jsonToXml(jsonStr) {
         if (nk === 'other_element') {
           const elements = Array.isArray(v) ? v : [v];
           elements.forEach(item => {
-            const r = restoreDataNode(item);
+            const r = restoreDataNode(item, true);
             const [ck, cv] = Object.entries(r)[0];
             if (out[ck]) {
               if (Array.isArray(out[ck])) {

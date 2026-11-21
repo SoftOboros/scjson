@@ -88,7 +88,7 @@ module Scjson
 {% for field_name, field in schem["properties"].items() %}
 {% set attr = ruby_attr_name(field_name) %}
 {% set default_value = get_field_default(field, schem["$defs"]) %}
-        @{{ attr }} = kwargs.fetch(:{{ attr }}, {{ 'nil' if field_name == 'execution_order' else default_value }})
+        @{{ attr }} = kwargs.fetch(:{{ attr }}, {{ 'nil' if field_name in ('execution_order', 'region_order') else default_value }})
 {% endfor %}
       end
 
@@ -103,7 +103,7 @@ module Scjson
 {% for field_name, field in schem["properties"].items() %}
 {% set attr = ruby_attr_name(field_name) %}
 {% set expr = ruby_from_hash(field_name, field, schem["$defs"]) %}
-        kwargs[:{{ attr }}] = {{ "normalized['execution_order']" if field_name == 'execution_order' else expr }}
+        kwargs[:{{ attr }}] = {{ "normalized['" ~ field_name ~ "']" if field_name in ('execution_order', 'region_order') else expr }}
 {% endfor %}
         new(**kwargs)
       end
@@ -120,7 +120,7 @@ module Scjson
       # @return [Hash]
       def to_hash
 {% set entries = [] %}
-{% for field_name, field in schem["properties"].items() if field_name != 'execution_order' %}
+{% for field_name, field in schem["properties"].items() if field_name not in ('execution_order', 'region_order') %}
 {% set expr = ruby_to_hash(field_name, field, schem["$defs"]) %}
 {% set entry = "'" ~ field_name ~ "' => " ~ expr %}
 {% if not loop.last %}{% set entry = entry + "," %}{% endif %}
@@ -128,7 +128,7 @@ module Scjson
 {% endfor %}
         {
           {{ list_join(entries, sep='\n          ') }}
-        }{% if 'execution_order' in schem['properties'] %}.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }{% endif %}
+        }{% for key in ('execution_order', 'region_order') if key in schem['properties'] %}.tap { |result| result['{{ key }}'] = @{{ key }} unless @{{ key }}.nil? }{% endfor %}
 
       end
 

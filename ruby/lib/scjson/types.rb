@@ -1437,7 +1437,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class ParallelProps
-      attr_accessor :onentry, :onexit, :transition, :state, :parallel, :history, :datamodel, :invoke, :other_element, :id, :other_attributes, :help_text
+      attr_accessor :onentry, :onexit, :transition, :state, :parallel, :history, :datamodel, :invoke, :other_element, :id, :other_attributes, :help_text, :region_order
       # Instantiate a new ParallelProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1453,6 +1453,7 @@ module Scjson
         @id = kwargs.fetch(:id, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
         @help_text = kwargs.fetch(:help_text, [])
+        @region_order = kwargs.fetch(:region_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1475,6 +1476,7 @@ module Scjson
         kwargs[:id] = normalized.fetch('id', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
         kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:region_order] = normalized['region_order']
         new(**kwargs)
       end
 
@@ -1502,7 +1504,7 @@ module Scjson
           'id' => @id,
           'other_attributes' => @other_attributes,
           'help_text' => @help_text
-        }
+        }.tap { |result| result['region_order'] = @region_order unless @region_order.nil? }
       end
 
       # Serialize the object to JSON.
