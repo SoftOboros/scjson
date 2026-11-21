@@ -76,6 +76,17 @@ class _EventDataProxy(dict):
         raise AttributeError(name)
 
 
+SCXML_PROCESSOR = "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+
+
+def _system_variables(session_id: str) -> dict[str, Any]:
+    # Build a fresh view so expression-side mutations cannot alter routing.
+    return {
+        "_sessionid": session_id,
+        "_ioprocessors": {SCXML_PROCESSOR: _EventDataProxy(location=f"#_scxml_{session_id}")},
+    }
+
+
 SCXMLNode = State | ScxmlParallelType | ScxmlFinalType | History | Scxml
 
 
@@ -123,6 +134,7 @@ class DocumentContext(BaseModel):
     _invoke_specs: Dict[str, tuple[Any, ActivationRecord]] = PrivateAttr(default_factory=dict)
     invocations_autoforward: Dict[str, bool] = Field(default_factory=dict)
     _invocations_started_for_state: Set[str] = PrivateAttr(default_factory=set)
+    _session_id: str = PrivateAttr(default_factory=lambda: uuid4().hex)
     _base_dir: Optional[Path] = PrivateAttr(default=None)
     _external_emitter: Optional[Any] = PrivateAttr(default=None)
     # Ordering policy for parent queue emission from child invokes
@@ -465,6 +477,7 @@ class DocumentContext(BaseModel):
     def _build_activation_tree(
         node: SCXMLNode,
         parent: Optional[ActivationRecord],
+        session_id: str,
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
         ecmascript_mode: bool = False,
@@ -487,7 +500,7 @@ class DocumentContext(BaseModel):
         act = ActivationRecord(id=ident, node=node, parent=parent)
         act.local_data.update(
             DocumentContext._extract_datamodel(
-                node, evaluator, allow_unsafe_eval, ecmascript_mode=ecmascript_mode
+                node, session_id, evaluator, allow_unsafe_eval, ecmascript_mode=ecmascript_mode
             )
         )
 
@@ -511,28 +524,28 @@ class DocumentContext(BaseModel):
         for child in getattr(node, "state", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval,
+                    child, act, session_id, evaluator, allow_unsafe_eval,
                     ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "parallel", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval,
+                    child, act, session_id, evaluator, allow_unsafe_eval,
                     ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "final", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval,
+                    child, act, session_id, evaluator, allow_unsafe_eval,
                     ecmascript_mode=ecmascript_mode,
                 )
             )
         for child in getattr(node, "history", []):
             act.add_child(
                 DocumentContext._build_activation_tree(
-                    child, act, evaluator, allow_unsafe_eval,
+                    child, act, session_id, evaluator, allow_unsafe_eval,
                     ecmascript_mode=ecmascript_mode,
                 )
             )
@@ -541,6 +554,7 @@ class DocumentContext(BaseModel):
     @staticmethod
     def _extract_datamodel(
         node: SCXMLNode,
+        session_id: str,
         evaluator: SafeExpressionEvaluator,
         allow_unsafe_eval: bool,
         ecmascript_mode: bool = False,
@@ -559,7 +573,7 @@ class DocumentContext(BaseModel):
                 if data.expr is not None:
                     try:
                         value = DocumentContext._evaluate_static(
-                            data.expr, {}, evaluator, allow_unsafe_eval,
+                            data.expr, _system_variables(session_id), evaluator, allow_unsafe_eval,
                             ecmascript_mode=ecmascript_mode,
                         )
                     except (SafeEvaluationError, Exception):
@@ -956,8 +970,10 @@ class DocumentContext(BaseModel):
                     except Exception:
                         raise _ActionError("error.communication")
             return
+        # An SCXML processor location addresses this session's event queue.
+        self_target = target == f"#_scxml_{self._session_id}"
         # Explicit target to a specific invocation by id: target="#_<id>"
-        if isinstance(target, str) and target.startswith("#_") and target != "#_internal":
+        if isinstance(target, str) and target.startswith("#_") and target != "#_internal" and not self_target:
             inv_id = target[2:]
             payload = self._build_send_payload(send, env, act)
             handler = self.invocations.get(inv_id)
@@ -970,7 +986,7 @@ class DocumentContext(BaseModel):
                 raise _ActionError("error.communication")
             return
 
-        if target and str(target) not in {"#_internal", "_internal"}:
+        if target and not self_target and str(target) not in {"#_internal", "_internal"}:
             logger.warning(
                 "External <send> target '%s' is not supported yet; skipping", target
             )
@@ -999,7 +1015,11 @@ class DocumentContext(BaseModel):
             self._set_variable(send.idlocation, send_id, act)
 
         payload = self._build_send_payload(send, env, act)
-        event_obj = Event(name=str(event_name), data=payload, send_id=send_id)
+        event_obj = Event(
+            name=str(event_name), data=payload, send_id=send_id,
+            origin=target if self_target else None,
+            origintype=SCXML_PROCESSOR if self_target else None,
+        )
         self._schedule_event(event_obj, delay_seconds)
 
     def _do_cancel(self, cancel: Any, act: ActivationRecord) -> None:
@@ -1321,7 +1341,7 @@ class DocumentContext(BaseModel):
                     except Exception:
                         self._emit_error("error.execution", front=False)
             # Normalize well-known SCXML type URI
-            if str(inv_type).strip().lower() in {"http://www.w3.org/tr/scxml/", "w3c:scxml"}:
+            if str(inv_type).strip().lower() in {"http://www.w3.org/tr/scxml", "http://www.w3.org/tr/scxml/", "w3c:scxml"}:
                 inv_type = "scxml"
             inv_src = getattr(inv, "src", None)
             if getattr(inv, "srcexpr", None):
@@ -1382,7 +1402,7 @@ class DocumentContext(BaseModel):
                 # surface a communication error to the parent queue.
                 try:
                     tname = getattr(handler, 'type_name', '')
-                    if tname in {"scxml", "scjson"} and getattr(handler, 'child', None) is None:
+                    if inv_id in self.invocations and tname in {"scxml", "scjson"} and handler.child is None:
                         self._emit_error("error.communication", front=False)
                 except Exception:
                     pass
@@ -1661,6 +1681,7 @@ class DocumentContext(BaseModel):
         env.update(self.data_model)
         for frame in act.path():
             env.update(frame.local_data)
+        env.update(_system_variables(self._session_id))
         env.setdefault("In", self._in_state)
         # Provide _event mapping for expressions
         cur_evt = getattr(self, "_current_event", None)
@@ -2086,6 +2107,7 @@ class DocumentContext(BaseModel):
             evaluator=evaluator,
             execution_mode=mode,
             source_xml=None,
+            base_dir=Path(path).resolve().parent,
         )
 
     @classmethod
@@ -2183,8 +2205,9 @@ class DocumentContext(BaseModel):
         # Detect ecmascript datamodel before building the activation tree so
         # that data expressions are normalized during construction.
         _em_mode = getattr(doc, "datamodel_attribute", "python") == "ecmascript"
+        session_id = uuid4().hex
         root_state = cls._build_activation_tree(
-            doc, None, evaluator, allow_unsafe_eval, ecmascript_mode=_em_mode
+            doc, None, session_id, evaluator, allow_unsafe_eval, ecmascript_mode=_em_mode
         )
         ctx = cls(
             doc=doc,
@@ -2194,6 +2217,7 @@ class DocumentContext(BaseModel):
             evaluator=evaluator,
             json_lookup=lookup,
         )
+        ctx._session_id = session_id
         try:
             ctx._base_dir = base_dir
         except Exception:

@@ -104,15 +104,20 @@ _STRING_LITERAL_RE = re.compile(
     r"""(?P<sq>'(?:[^'\\]|\\.)*')|(?P<dq>"(?:[^"\\]|\\.)*")"""
 )
 
-_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
-_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+# Scan comments and complete quoted literals in the same pass. A comment
+# delimiter inside a quoted URL is data, and quotes inside comments are inert.
+_STRING_OR_COMMENT = re.compile(
+    _STRING_LITERAL_RE.pattern + r"|(?P<comment>//[^\r\n]*|/\*[\s\S]*?\*/)"
+)
 
 
 def _strip_comments(text: str) -> str:
-    """Remove // and /* ... */ comments from *text*."""
-    text = _BLOCK_COMMENT_RE.sub("", text)
-    text = _LINE_COMMENT_RE.sub("", text)
-    return text
+    def replacement(match):
+        if match.lastgroup != "comment":
+            return match.group()
+        return "\n" if "\n" in match.group() else " "
+
+    return _STRING_OR_COMMENT.sub(replacement, text)
 
 
 def _extract_strings(text: str) -> Tuple[str, List[str]]:
@@ -412,16 +417,15 @@ def normalize(expr: str) -> str:
     """
     cleaned = _strip_comments(expr)
 
-    # Check inadmissible forms before masking strings.
+    masked, strings = _extract_strings(cleaned)
     for pattern, description in _INADMISSIBLE_PATTERNS:
-        if pattern.search(cleaned):
+        if pattern.search(masked):
             raise ECMAScriptNormalizationError(
                 "ECMAScript form not in admitted subset (D-M1P6-2): {!r} "
                 "found in expression: {!r}".format(description, expr),
                 diagnostic="unsupported-ecmascript",
             )
 
-    masked, strings = _extract_strings(cleaned)
     masked = _normalize_object_literal(masked)
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
@@ -446,15 +450,15 @@ def normalize_script(script_body: str) -> str:
     """
     cleaned = _strip_comments(script_body)
 
+    masked, strings = _extract_strings(cleaned)
     for pattern, description in _INADMISSIBLE_PATTERNS:
-        if pattern.search(cleaned):
+        if pattern.search(masked):
             raise ECMAScriptNormalizationError(
                 "ECMAScript form not in admitted subset (D-M1P6-2): {!r} "
                 "found in script body".format(description),
                 diagnostic="unsupported-ecmascript",
             )
 
-    masked, strings = _extract_strings(cleaned)
     masked = _normalize_object_literal(masked)
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
