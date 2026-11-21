@@ -46,7 +46,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-009 | 🟢 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
-| ERRATA-012 | 🟡 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
+| ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
 
 ---
 
@@ -763,8 +763,9 @@ candidate Rust runs, the input charts, per-route traces, and raw receipts.
 
 ## ERRATA-012 — Implicit initial state selection across child kinds
 
-**Status.** Diagnosed on the installed Python 0.4.2 package and on the
-0.4.3 candidate `dd4debe3c57e24ba89de0b79d4d0c808671c86b5`.
+**Status.** Verified on the v0.4.3 branch on 2026-11-21. The original
+diagnosis used the installed Python 0.4.2 package and the 0.4.3 candidate
+`dd4debe3c57e24ba89de0b79d4d0c808671c86b5`.
 
 **Symptom.** In the following chart, the first child of the document is
 `p`. Its initial configuration must include `pLeaf`. Both Python file
@@ -806,6 +807,66 @@ The 0.4.3 observation file has SHA-256
 `ace22d626fda53e875bc918a8147d1ba498055ad354c8c669a800f458ee26841`.
 The 0.4.2 replay has SHA-256
 `f8adcbec282b9f234f17dc1d2bc13818cc2aff4bc415e49b37ed7fee970abc4e`.
+
+### Verified repair on v0.4.3
+
+XML conversion records the order of mixed `state`, `parallel`, and `final`
+children in the owning document or compound state's `state_order`. Startup
+uses the first recorded child when the owner has no explicit initial target.
+Children without an authored ID participate in the same order. A legacy
+document without the list reads `state`, then `parallel`, then `final`,
+preserving array order within each kind. Restoring an interleaving that the
+old converter discarded requires the original XML or an author-supplied
+list. [Conversion contract](SCJSON-CONV-00-CONCEPTS.md#document-and-compound-state-child-order-errata-012)
+
+Python and compiled iState Rust on docker-vm produced the following leaves
+from the eight original XML witnesses, their newly saved SCJSON, and XML
+restored from it. The eight frozen legacy SCJSON inputs still selected `s`.
+
+| Authored order | First active leaf at the document root | First active leaf inside the compound state |
+| --- | --- | --- |
+| `parallel p`, `state s` | `pLeaf` | `pLeaf` |
+| `state s`, `parallel p` | `s` | `s` |
+| `final f`, `state s` | `f`, document finished | `f`, compound state completed and document still active |
+| `state s`, `final f` | `s` | `s` |
+
+Explicit initial attributes selected the named state or parallel in either
+owner. On the baseline, a compound `<initial>` transition selected the right
+target but skipped its assignment. Both engines produced `2`. The repair
+runs that assignment after owner entry and before target entry, yielding
+`42`. A two-target transition produced `1234` on startup and ordinary
+re-entry. Direct entry into the same two descendants produced `134` and
+left the initial-transition count unchanged. [Two-target source chart](../../py/tests/fixtures/compound_initial.scxml)
+
+The Docker VM matrix covered 30 charts and 98 runs per engine. It included
+anonymous children, document completion, nested `done.state` delivery, the
+preceding-region guards, Alex Z test 310, and two SoS charts. The separate
+native SoS runner passed all seven vectors. The Alex Z conversion census
+admitted the same 425 of 427 roots and restored the authored order at all
+524 mixed owners in the 424 admitted roots that contained them. A Windows
+replay also matched all 113 saved scenarios from 25 older SCJSON documents
+and three additional historical witnesses.
+
+The generated Rust `Machine::is_finished()` agreed with direct inspection
+of the active top-level final states on all 155 recorded snapshots. The
+deliberately wrong `s` expectation failed in both engines on all three
+current routes for the parallel-first root and passed on the old JSON.
+For all 30 charts, XML, saved SCJSON, and restored XML generated identical
+library sources. The review ZIP contains the crates, inputs, traces, exact
+wheel and npm tarball, and per-route comparisons.
+
+| Evidence | Revision or SHA-256 |
+| --- | --- |
+| Tested scjson v0.4.3 implementation | `09d424b35afa1c8de061bc16023772a5678be7c7` |
+| Tested iState Rust emitter | `2b724c43147e5f60b155cc96a9212c1f5b2b480f` |
+| Installed Python wheel | `7882545eb82fad861e8fe562a3f1302b1cf76d5985e0cd7e7f5a0d53ad537c1e` |
+| VM baseline | `36eb868403e6ecd250aa9716705b42875086c629dde6888079bbcb4cb06b411c` |
+| VM startup matrix with direct Rust completion calls | `ce4ab16bdb611e3c02139416964d1f05b1cf0896c73ed5c916fe78e9ebc62cc0` |
+| VM full wheel suite, 905 passed, two optional SCION tests skipped | `35dea7bacfed0fcd0ac2943a349384e3c164ade7de148015dd38c4845fae8851` |
+| VM focused scjson suite (96) and iState Rust emitter suite (33) | `14a52d74fe70e4797231c604c97f9ac30162628393bcafdf6fbd92ed2370432d` |
+| VM Alex Z canonical intake and order census | `399195193aabc822a031138f6b14817b709da107423ccb4a1b2e7720ecd5b498` |
+| Windows replay of historical SCJSON | `978ae08cd3a8007ea3ab0a8f7d360daf2bd2c6f2a1b4cd1206ddcbe4983ac15a` |
+| `implicit-initial-generated-rust-review.zip` (1,621 members) | `f3fd7f70e87a9fb05fe83ba42acf6a4c36ef55af677bda558abc4147e44ed671` |
 
 ---
 

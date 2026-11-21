@@ -48,6 +48,9 @@ Decision notes (invoke/finalize ordering)
 - [x] Preserve the authored order of sibling `state` and `parallel` regions.
   Verify the preceding-region entry guard and the legacy state-first read
   rule in Python and generated Rust. [ERRATA-011](concepts/ERRATA.md#errata-011--structural-order-of-mixed-parallel-regions)
+- [x] Use authored child order for implicit startup at the root and inside a
+  compound state. Verify explicit initial actions, completion, and legacy
+  SCJSON reads in Python and generated Rust. [ERRATA-012](concepts/ERRATA.md#errata-012--implicit-initial-state-selection-across-child-kinds)
 
 3) Executable Content Phase 1
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.
