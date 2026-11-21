@@ -46,6 +46,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-009 | 🟢 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
+| ERRATA-012 | 🟡 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
 
 ---
 
@@ -757,6 +758,54 @@ candidate Rust runs, the input charts, per-route traces, and raw receipts.
 | VM packed npm and Swift Codable checks | `2558ff6b5af3503b9b64df72227b454f500555f558717af116cc3eb19ba7d5b4` |
 | VM native Rust locked suite and CLI conversions | `58c047411453b48a0da7abd24f360471c412c3d72605f68b8230b66cd9a55f6e` |
 | `structural-region-order-generated-rust-review.zip` (929 members) | `75e21a545f7531a24ac5c57ef6791226ec9e6f6b1c9bf17bc2c3bde023b89b8b` |
+
+---
+
+## ERRATA-012 — Implicit initial state selection across child kinds
+
+**Status.** Diagnosed on the installed Python 0.4.2 package and on the
+0.4.3 candidate `dd4debe3c57e24ba89de0b79d4d0c808671c86b5`.
+
+**Symptom.** In the following chart, the first child of the document is
+`p`. Its initial configuration must include `pLeaf`. Both Python file
+loaders entered `s`. Moving `s` before `p` produced identical SCJSON.
+Putting the same pair inside a compound state, or placing a `<final>`
+before `s`, exposed the same loss. SCXML defines the first child state in
+document order as the implicit initial target for both owners.
+[SCXML root and compound-state rules](https://www.w3.org/TR/scxml/#scxml)
+
+```xml
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+  <parallel id="p"><state id="pLeaf"/></parallel>
+  <state id="s"/>
+</scxml>
+```
+
+**Cause and impact.** At `dd4debe`, `py/scjson/execution_order.py:167`
+captures `region_order` on a parallel owner. A document or compound state
+has grouped `state`, `parallel`, and `final` arrays. With no explicit initial
+target, `py/scjson/context.py:512` builds its children by kind and the
+ordinary state wins in these examples. The change in active leaf precedes
+the first event. A final child can also determine whether the machine
+should finish at startup. ERRATA-011 covers entering all regions of a
+parallel parent and remains resolved.
+
+**Repair and verification criteria.** Preserve the implied first child in
+conversion and execution at both owners, including children without an
+authored ID. Retain explicit initial targets and a documented read rule
+for older SCJSON. Before closing, compare the original, swapped and
+explicit-target controls in Python and generated Rust through XML, saved
+SCJSON and restored XML. Check both the active leaves and completion.
+
+**Reproduction.** Eight host charts covered the two parent kinds, two
+child-kind pairs and both orders. Each Python version chose the wrong
+leaf in four of eight charts through each loader. Within each swapped
+pair, canonical SCJSON was byte-identical. A scan of all 440 Alex Z XML
+files found no parent with this implicit-target ordering inversion.
+The 0.4.3 observation file has SHA-256
+`ace22d626fda53e875bc918a8147d1ba498055ad354c8c669a800f458ee26841`.
+The 0.4.2 replay has SHA-256
+`f8adcbec282b9f234f17dc1d2bc13818cc2aff4bc415e49b37ed7fee970abc4e`.
 
 ---
 
