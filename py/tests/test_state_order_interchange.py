@@ -1,6 +1,9 @@
 """Document and compound-state child order on the Python interchange surface.
 
-Part of the scjson project. Licensed under the BSD 1-Clause License.
+Agent Name: state-order-interchange-tests
+Part of the scjson project.
+Developed by Softoboros Technology Inc.
+Licensed under the BSD 1-Clause License.
 """
 
 import json
