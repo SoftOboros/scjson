@@ -8,6 +8,10 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## 0.4.3 — Unreleased
 
+- Lower `In('stateId')` in transition, `if`, and `elseif` guards to a
+  portable state-membership query. Preserve ECMAScript negation precedence.
+  Evaluate parallel transition guards before exits and keep entry, exit,
+  and transition actions in phase order.
 - Initialize inline JSON data through the XML, SCJSON, and validated-model
   entry points. A `foreach` over the inline array in W3C test 155 now visits
   its three numbers in order. Conversion retains the authored text.

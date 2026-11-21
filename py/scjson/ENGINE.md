@@ -55,6 +55,18 @@ double-underscore attributes, or call `eval`/`exec` raise a
 A failed condition evaluates to false. The helper `In(stateId)` function is injected automatically so charts
 can query active states without opening the sandbox.
 
+For portable generation, use one quoted state ID in the `cond` of a
+transition, `if`, or `elseif`. For example, `In('muteOff')` tests the
+current session, including its other active parallel regions. Active
+ancestors also match. An inactive state, unknown ID, or history
+pseudostate returns false. Each session has its own configuration.
+
+All transition guards in one microstep observe its starting configuration.
+Exit handlers still see their owning states. Transition actions run after
+the selected exits, and each entry handler sees its newly active state.
+The generator reports an unsupported composite guard and disables that
+branch if any operand falls outside the admitted grammar.
+
 For environments that fully trust the input chart you can opt out of the
 sandbox by passing `--unsafe-eval` to `scjson engine-trace` (or by constructing
 `DocumentContext` with `allow_unsafe_eval=True`). This re-enables CPython’s

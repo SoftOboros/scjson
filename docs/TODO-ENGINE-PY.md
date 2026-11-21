@@ -42,6 +42,11 @@ Decision notes (invoke/finalize ordering)
 - [x] History: shallow with default transition fallback.
 - [x] History: deep (restore deep descendants).
 - [x] Parallel: initial entry enters all child regions.
+- [x] Compare literal state membership across regions, ancestors, lifecycle
+  handlers and invoked sessions against generated Rust. Verify the 15 original
+  Alex Z charts with membership guards through XML and SCJSON (ERRATA-003).
+- [ ] Preserve the authored order of structural children across element kinds
+  so an entry guard sees preceding parallel regions in order (ERRATA-011).
 
 3) Executable Content Phase 1
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.

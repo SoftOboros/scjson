@@ -37,7 +37,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 |------------|--------|-------------------------------------------------|------------|--------------|
 | ERRATA-001 | 🟢     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
 | ERRATA-002 | 🟢     | Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines | 2026-06-19 | EXEC-E (`SCJSON-EXEC-00-CONCEPTS.md`) |
-| ERRATA-003 | 🟡     | `In()` cross-region predicate not in the admitted ECMAScript subset — blocks real infotainment control cores | 2026-06-20 | M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2) |
+| ERRATA-003 | 🟢 | Portable state membership in transition and conditional-action guards | 2026-06-20 | M1P6 D-M1P6-2 |
 | ERRATA-004 | 🟢 | Inline JSON data becomes text in the Python engine and disappears from executable IR | 2026-11-21 | Python execution / M1P6 |
 | ERRATA-005 | 🟢 | First-use foreach bindings have the expected values but the chart selects the wrong final | 2026-11-21 | EXEC-C |
 | ERRATA-006 | 🟢 | Execution continues after a failing action inside foreach | 2026-11-21 | EXEC-C |
@@ -45,6 +45,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-008 | 🟢 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
 | ERRATA-009 | 🟢 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
+| ERRATA-011 | 🟡 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 
 ---
 
@@ -303,26 +304,35 @@ a TODO per spec (optional for first landing).
 
 ## ERRATA-003 — `In()` cross-region predicate not in the admitted ECMAScript subset
 
-- **Status**: 🟡 diagnosed 2026-06-20 (workaround prescribed; admitted-subset extension is a future generator phase). Surfaced during the SCTD Media Player feasibility assessment of the Skoda Bolero infotainment machine.
+- **Status**: 🟢 resolved on `v0.4.3` and in the iState executable-IR Rust generator. Docker VM verification completed 2026-11-21.
 - **First seen**: 2026-06-20, lowering `tutorial/Examples/Qt/SkodaBoleroInfotainment/Model/bolero.scxml` through `exec_ir.lower_document`.
 - **Owning phase**: M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` §"Admitted ECMAScript Subset", D-M1P6-2).
 
-### Symptom
+### Original symptom
 
-`bolero.scxml` (a Qt compound document — the `_virtual*.scxml` siblings are editor artifacts already merged inline; the machine has **0** `<invoke>` and 203 states) lowers 87% admitted, but its **media-transport control core is a structural dead end**: `mediaPlayerSourceCheck` decides play-vs-pause via `cond="In('muteOn')"` / `cond="In('muteOff')"`, and `mediaStopped`/`mediaPlaying` onentry choose repeat-vs-next via `In("mediaRepeatTrack")`. `In(...)` is an SCXML **runtime cross-region active-state predicate**, not an ECMAScript expression, so the constrained front-end (D-M1P6-2) lowers each `In()` to `UnsupportedExpr` → falsey at runtime. Net: neither play nor pause ever fires; the control loop cannot run. 10 of the machine's 25 `reject` diagnostics are `In()` calls (plus 9 `parse-error` from radio helper functions stored as `<data expr="function(x){...}">`, which JS-`function` syntax also outside the subset).
+In the original Qt Bolero chart, `mediaPlayerSourceCheck` selects play or
+pause by checking `muteOff` and `muteOn` in another region. On entry,
+`mediaStopped` checks `mediaRepeatTrack` to choose play or next track.
+`mediaPlaying` checks `mediaPlayerScanModeOn` to schedule a delayed forward
+command. The 0.4.2 generator lowered the membership calls to unsupported
+expressions. A bare guard could never take its branch, and negation could
+make an unsupported guard succeed.
 
 ### Root cause
 
-D-M1P6-2 admits expressions/statements but not the SCXML `In(<stateid>)` predicate (it needs the runtime to answer "is state X in the active configuration" — which the IR/runtime *does* track, but the front-end has no admitted form for it). Real infotainment/automotive charts (Bolero, likely Morse and others) lean on `In()` for orthogonal-region-aware dispatch, so this gap blocks faithful lowering of that class of machine.
+The original D-M1P6-2 whitelist omitted the SCXML membership predicate.
+Generated guard evaluation could read the datamodel and event, but had
+no access to the current session's active configuration.
 
-### Fix prescription
+### June 2026 disposition
 
 - **Now (workaround, used for SCTD):** normalize the machine — replace `In(<region-state>)` checks with explicit datamodel state variables that mirror the orthogonal-region intent (e.g. `s_mute`/`s_repeat`/`s_source`), an admitted D-M1P6-2 form. This is the SCTD-00 §5.3 normalized-form path with provenance back to the upstream source; it is how the SCTD "Media Player" machine is produced (a normalized media-player derived from Bolero, lowering with 0 diagnostics).
 - **Future (real fix):** extend the admitted subset to support `In(<stateid>)` as a `cond`-context predicate, lowered to a runtime configuration-membership check (the runtime already tracks the active set). This is the path to lowering the **real** Bolero control core. It is an admitted-subset change → a M1P6 D-M1P6-2 amendment (Specification Required) + a new scjson generator phase; out of scope for v0.4.2.
 
-### Verification
+### Historical verification
 
-Pending the future extension. The workaround is verified: the normalized media-player derived from Bolero lowers with 0 diagnostics, emits, and `cargo check` passes (SCTD demo, 2026-06-20).
+The normalized media-player fixture lowered with zero diagnostics and
+passed `cargo check` for the SCTD demo on 2026-06-20.
 
 **Open at the 0.4.3 package boundary.** At `76ab694`, the original Bolero
 chart has 40 literal `In()` calls across 29 guard sites. A parallel-region
@@ -340,6 +350,49 @@ choices against compiled code on both source routes. Host probe SHA-256
 - Admitted-subset owner: `docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2 (a reciprocal note records the `In()` gap + the normalized-media-player conformance decision).
 - SCTD consumer: rlvgl `docs/concepts/SCTD-00-CONCEPTS.md` §5.1/§5.3 (Media Player = normalized, provenance to bolero).
 - Also surfaced: radio helper functions stored as `<data expr="function(){…}">` (JS function-literals) are likewise outside D-M1P6-2; same normalize-or-extend disposition.
+
+### Verified repair on 2026-11-21
+
+The D-M1P6-2 amendment in parent commit `6a3e06e94` admits
+`In('stateId')` in transition, `if`, and `elseif` conditions.
+The lowerer emits an existing `CallNode` with a single string literal.
+The generated Rust runtime checks the entered states of the instance
+executing the guard. The Python and Rust engines select transitions
+before exits. Their exit handlers, transition actions and entry handlers
+see the configuration at their respective points in the microstep.
+An unsupported operand disables the whole guard, including under negation.
+
+The docker-vm matrix used scjson `2a9c9eb2bc9f98836a961f2294830090f5ec3925`
+and iState `ccbf0b585b7cf1c1897948ca99e98a99c36f56ac`. The XML and
+canonical SCJSON inputs produced byte-identical generated crate members for
+all 25 charts. Each route compiled and executed its own crate.
+
+| Witness | Results on both input routes |
+| --- | --- |
+| Original Alex Z tutorial tests | All 15 charts containing membership guards reached the authored `pass` in Python and Rust. Three single-edit controls reached `fail`. The census covered 440 SCXML files at tutorial commit `a442d41e`. |
+| Bolero guard coverage | 28 admitted guards, 38 calls, 84 combinations. Both engines matched the independently computed truth table. The remaining guard has two calls in an unsupported ternary and was rejected. On the baseline Rust missed 56 of the 84 combinations on each route. |
+| Bolero media source | Three original state elements were copied into an isolated controller. The original valid-source event reached `mediaPlayerDoPlay` when unmuted and `mediaPlayerDoPause` when muted. |
+| Whole Bolero | The original XML and corresponding SCJSON compiled. When pending startup events were serviced before external input, Python consumed `error.execution` and reached `fail`. Rust remained in the five startup leaves and reached the radio configuration on power-on. The raw Qt chart depends on unimplemented host/script behavior. |
+| SoS | The counter and guarded-transition charts matched their five scenarios in both engines. The independent native runner passed its seven vectors and rejected an altered tick count. |
+
+The Python wheel is `scjson-0.4.3-py3-none-any.whl`, SHA-256
+`bea391cba142d5e81ac46bcbf02c160205f5245b7d0c3246b0d40c6168ff578e`.
+The full Python suite passed 779 tests on Linux with two optional skips,
+and 778 tests on Windows with three optional skips. The focused docker-vm
+gate passed 52 upstream tests and 26 iState emitter and compatibility tests.
+The final matrix receipt SHA-256 is `4a938815bdc325868cf891feb66bdf5210ead5f6c1f941031c4513099d15bc3d`.
+Python and Rust each passed all 112 scenarios with expected results on each
+route. The internal-event-first whole-chart trace is recorded separately.
+The generated crates and their run inputs are in the parent project's
+`.aws-release/scjson-ir-membership-20261121/state-membership-generated-rust-review.zip`,
+SHA-256 `bb0b0cb763bf55590bb41339308f89733add51326eec4a4b244d3fd316b69573`.
+
+**Consumer observation.** Interactive Dining's original five `break.N`
+transitions default to external. They can exit and reenter other regions,
+which breaks one of seven existing expectations. A disposable copy declaring
+those five transitions internal passed all seven original tests on docker-vm.
+The review packet includes the exact patch. ERRATA-011 records a separate
+loss of structural region order that can affect membership during entry.
 
 ---
 
@@ -626,6 +679,29 @@ rerun used the same Python wheel for its returned-file execution checks.
 | Final semantic archive | `f23ef65c039072349af10a3a1e4538841e33aa52d59a83275e029d1175b722d2` |
 | Final packed Node archive | `ee58b74a2df668fd509b05394a66997c4c85cc2f0ff3b9b661ef54854cf9f886` |
 | Combined package and review ZIP | `207e2197310324c92ba2e554ab89b20062c57701f6005417cc7484907741cc6e` |
+
+## ERRATA-011 — Structural order of mixed parallel regions
+
+**Diagnosed on 2026-11-21 at Python 0.4.3 candidate `2a9c9eb`.**
+Two XML charts reverse a nested `<parallel id="first">` and a sibling
+`<state id="second">`. Their canonical SCJSON is byte-identical,
+SHA-256 `ffb067a26c81a34af68536195446b46c200276c54649161d743b659603c10c59`.
+The structural model collects children by kind. Both file loaders enter
+`second` before `first`, including when the author placed `first` first.
+Consequently an entry action in `second` that tests `In('first')` misses
+its authored effect. Both charts reach the same final set of active states.
+
+In the Alex Z corpus, the original `testDoneParallelThreeLevels.scxml`
+still reaches its authored `pass` outcome through both loaders. Detecting
+the defect requires checking the order of effects during entry.
+The repair needs lossless structural document order in conversion, model
+loading and execution, plus a read rule for existing SCJSON. ERRATA-007
+covers the order of executable children. The new order witness, both
+serializations and the original's observations are recorded in the
+ERRATA-003 review packet under `review-extras/mixed-structural-order/`.
+Host result SHA-256 `91a22a9a1268029db55029c533fef3ebe061a783c65efa989f44fb718b8a0b0e`.
+
+---
 
 ## How to add an entry
 
