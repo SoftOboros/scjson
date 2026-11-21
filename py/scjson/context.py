@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 import logging
 from enum import Enum
 from collections import defaultdict
+from itertools import chain
 from uuid import uuid4
 from xml.etree import ElementTree as ET
 
@@ -34,6 +35,7 @@ from .pydantic import (
     State,
 )
 from .events import Event, EventQueue
+from .execution_order import iter_regions
 from .inline_data import inline_data_value
 from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
 from .activation import ActivationRecord, TransitionSpec, ActivationStatus
@@ -507,28 +509,8 @@ class DocumentContext(BaseModel):
         except Exception:
             pass
 
-        for child in getattr(node, "state", []):
-            act.add_child(
-                DocumentContext._build_activation_tree(
-                    child, act, session_id, evaluator, allow_unsafe_eval,
-                    ecmascript_mode=ecmascript_mode,
-                )
-            )
-        for child in getattr(node, "parallel", []):
-            act.add_child(
-                DocumentContext._build_activation_tree(
-                    child, act, session_id, evaluator, allow_unsafe_eval,
-                    ecmascript_mode=ecmascript_mode,
-                )
-            )
-        for child in getattr(node, "final", []):
-            act.add_child(
-                DocumentContext._build_activation_tree(
-                    child, act, session_id, evaluator, allow_unsafe_eval,
-                    ecmascript_mode=ecmascript_mode,
-                )
-            )
-        for child in getattr(node, "history", []):
+        regions = (child for _, child in iter_regions(node))
+        for child in chain(regions, getattr(node, "final", ()), getattr(node, "history", ())):
             act.add_child(
                 DocumentContext._build_activation_tree(
                     child, act, session_id, evaluator, allow_unsafe_eval,
@@ -1543,14 +1525,17 @@ class DocumentContext(BaseModel):
         According to spec, invokes are executed at macrostep end for states
         entered and not exited during the step.
         """
-        for sid in list(self.configuration):
-            act = self.activations.get(sid)
-            if not act or not getattr(act, "invokes", None):
-                continue
-            if sid in self._invocations_started_for_state:
-                continue
+        pending = [act for sid in self.configuration
+                   if sid not in self._invocations_started_for_state
+                   and (act := self.activations.get(sid)) is not None and act.invokes]
+        if len(pending) > 1 and any(
+            getattr(ancestor.node, "region_order", None) is not None
+            for act in pending for ancestor in act.path()[:-1]
+        ):
+            pending.sort(key=lambda act: self._activation_order_key(act.id))
+        for act in pending:
             self._start_invocations_for_state(act)
-            self._invocations_started_for_state.add(sid)
+            self._invocations_started_for_state.add(act.id)
 
     def _run_finalize(self, spec: Any, act: ActivationRecord, inv_id: str, data: Any) -> None:
         # Inject _event during finalize execution; use a dict for bracket access

@@ -2221,6 +2221,8 @@ def _lower_parallel(node: Any, ctx: _LoweringContext, parent_id: str) -> Paralle
     :param parent_id: Parent id (for diagnostics).
     :returns: ParallelIR.
     """
+    from .execution_order import iter_regions
+
     parallel_id = getattr(node, "id", None) or "parallel_{}".format(id(node))
     datamodel = _lower_datamodel(node, ctx)
     onentry = _lower_onentry(node, ctx, parallel_id)
@@ -2235,10 +2237,9 @@ def _lower_parallel(node: Any, ctx: _LoweringContext, parent_id: str) -> Paralle
         invokes.append(_lower_invoke(inv, ctx, parallel_id))
 
     children: List[AnyStateIR] = []
-    for child in getattr(node, "state", []) or []:
-        children.append(_lower_state(child, ctx, parallel_id))
-    for child in getattr(node, "parallel", []) or []:
-        children.append(_lower_parallel(child, ctx, parallel_id))
+    for kind, region in iter_regions(node):
+        lower = _lower_state if kind == "state" else _lower_parallel
+        children.append(lower(region, ctx, parallel_id))
     for child in getattr(node, "final", []) or []:
         children.append(_lower_final(child, ctx))
     for child in getattr(node, "history", []) or []:
