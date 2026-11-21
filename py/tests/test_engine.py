@@ -965,7 +965,7 @@ def test_error_event_ordering_precedes_later_events(tmp_path):
 
 
 def test_external_send_error_precedes_raise(tmp_path):
-    """error.communication from external send should preserve document order vs raise."""
+    """An independent handler raises its event after the earlier send fails."""
     chart = tmp_path / "send_error_ordering.scxml"
     chart.write_text(
         """
@@ -973,6 +973,8 @@ def test_external_send_error_precedes_raise(tmp_path):
   <state id="s">
     <onentry>
       <send event="poke" target="#external"/>
+    </onentry>
+    <onentry>
       <raise event="later"/>
     </onentry>
   </state>

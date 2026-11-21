@@ -94,7 +94,7 @@ File: `py/scjson/safe_eval.py`
 - Default sandbox: The engine evaluates expressions via an allow-listed sandbox (`py-sandboxed`) that blocks imports, dunder access, and unsafe builtins. A curated set of pure builtins (and optionally `math.*`) are exposed.
 - CLI controls: `engine-trace` accepts `--unsafe-eval` to bypass the sandbox (trusted charts only); allow/deny patterns and presets can refine exposure when sandboxed.
 - Import surface: prefers `py_sandboxed` (your managed package); falls back to `py_sandboxer` for environments that expose the same API under a different name.
-- Error semantics: sandbox violations or runtime exceptions raise `SafeEvaluationError`; the engine enqueues `error.execution` and treats the condition as false or the expression value as a literal where applicable.
+- Error semantics: when a condition fails evaluation, the engine enqueues `error.execution` and treats the condition as false. When an assignment fails evaluation, the target keeps its previous value and the surrounding executable block stops. See [engine error handling](scjson/ENGINE.md#errors).
 
 ---
 

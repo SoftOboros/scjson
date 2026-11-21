@@ -51,8 +51,8 @@ are evaluated with a sandbox powered by [`py-sandboxed`](https://pypi.org/projec
 Only a curated subset of pure builtins (e.g. `abs`, `len`, `sum`, `sorted`) and
 the `math` module are exposed by default; attempts to import modules, access
 double-underscore attributes, or call `eval`/`exec` raise a
-``SafeEvaluationError`` and fall back to the literal expression string when
-possible. The helper `In(stateId)` function is injected automatically so charts
+``SafeEvaluationError``. A failed assignment leaves its target unchanged.
+A failed condition evaluates to false. The helper `In(stateId)` function is injected automatically so charts
 can query active states without opening the sandbox.
 
 For environments that fully trust the input chart you can opt out of the
@@ -243,14 +243,17 @@ out-of-the-box. For external services, prefer emitting parent events with
 - Conditions use Python truth testing in the Python datamodel and ECMAScript
   ToBoolean in the ECMAScript datamodel. Failed evaluations enqueue
   `error.execution` and evaluate to false.
-- `<foreach>` evaluation failures also enqueue `error.execution` and iterate
-  over an empty sequence.
-- `<assign>`
-  - Expression failures enqueue `error.execution` and store the raw expression
-    string as the value.
-  - Invalid locations (no matching variable in scope) enqueue
-    `error.execution` and do not create a new variable.
-- External `<send>` targets enqueue `error.communication` and are skipped.
+- A failed assignment expression or an invalid assignment location enqueues
+  `error.execution`. The assignment leaves existing data unchanged.
+- An invalid foreach binding or a collection that cannot be evaluated or
+  iterated enqueues `error.execution`. A failure in the body ends the loop
+  immediately, including its remaining iterations.
+- An unsupported external send target enqueues `error.communication`.
+- A reported action failure ends its enclosing executable block. Earlier
+  effects remain visible. Subsequent entry or exit handlers still run, and
+  a transition still enters its target. Raising an event named
+  `error.execution` explicitly is an ordinary successful action. See
+  [SCXML §4.9](https://www.w3.org/TR/scxml/#EvaluationofExecutableContent).
 
 ### Transition Event Matching
 

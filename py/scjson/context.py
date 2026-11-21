@@ -49,6 +49,15 @@ from .ecmascript_normalizer import (
 logger = logging.getLogger(__name__)
 
 
+class _ActionError(Exception):
+    """Stop the current block of executable content and deliver its error event."""
+
+    def __init__(self, event_name: str, *, alias_front: bool = False):
+        super().__init__(event_name)
+        self.event_name = event_name
+        self.alias_front = alias_front
+
+
 class _EventDataProxy(dict):
     """Mapping wrapper that exposes dictionary entries as attributes."""
 
@@ -646,8 +655,14 @@ class DocumentContext(BaseModel):
     # ------------------------------------------------------------------ #
 
     def _run_actions(self, container: Any, act: ActivationRecord) -> None:
-        for kind, payload in self._iter_actions(container):
-            self._dispatch_action(kind, payload, act)
+        # Each handler or transition is one SCXML executable block. Nested
+        # if/foreach actions propagate failures back to this boundary.
+        try:
+            for kind, payload in self._iter_actions(container):
+                self._dispatch_action(kind, payload, act)
+        except _ActionError as error:
+            self._emit_error(error.event_name, front=error.event_name == "error.execution",
+                             alias_front=error.alias_front)
 
     def _iter_actions(self, container: Any) -> List[tuple[str, Any]]:
         cache = getattr(self, "_action_cache", None)
@@ -854,10 +869,7 @@ class DocumentContext(BaseModel):
         try:
             iterable = self._evaluate_expr(block.array or "[]", env)
         except (SafeEvaluationError, Exception):
-            iterable = []
-            self._emit_error("error.execution", front=True)
-        if iterable is None:
-            return
+            raise _ActionError("error.execution")
         # Validate index/item identifiers
         def _valid_ident(name: str) -> bool:
             return isinstance(name, str) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name) is not None
@@ -865,17 +877,12 @@ class DocumentContext(BaseModel):
         index_name = getattr(block, "index", None)
         item_name = getattr(block, "item", None)
         if (index_name and not _valid_ident(index_name)) or (item_name and not _valid_ident(item_name)):
-            self._emit_error("error.execution", front=True)
-            return
+            raise _ActionError("error.execution")
 
         try:
             iterator = list(iterable)
         except TypeError:
-            try:
-                iterator = list(iter(iterable))
-            except TypeError:
-                self._emit_error("error.execution", front=True)
-                return
+            raise _ActionError("error.execution")
         for idx, item in enumerate(iterator):
             if index_name:
                 self._set_variable(index_name, idx, act)
@@ -935,18 +942,17 @@ class DocumentContext(BaseModel):
                 ids = list(self.invocations_by_state.get(cur.id, []))
                 cur = cur.parent
             if not ids:
-                self._emit_error("error.communication", front=False)
-                return
+                raise _ActionError("error.communication")
             for inv_id in ids:
                 handler = self.invocations.get(inv_id)
                 if handler:
                     try:
                         handler.send(str(event_name), payload)
                     except Exception:
-                        self._emit_error("error.communication", front=False)
+                        raise _ActionError("error.communication")
             return
         # Explicit target to a specific invocation by id: target="#_<id>"
-        if target and isinstance(target, str) and target.startswith("#_") and target not in {"#_parent", "#_scxml_parent", "#_child", "#_scxml_child", "#_invokedChild"}:
+        if isinstance(target, str) and target.startswith("#_") and target != "#_internal":
             inv_id = target[2:]
             payload = self._build_send_payload(send, env, act)
             handler = self.invocations.get(inv_id)
@@ -954,9 +960,9 @@ class DocumentContext(BaseModel):
                 try:
                     handler.send(str(event_name), payload)
                 except Exception:
-                    self._emit_error("error.communication", front=False)
+                    raise _ActionError("error.communication")
             else:
-                self._emit_error("error.communication", front=False)
+                raise _ActionError("error.communication")
             return
 
         if target and str(target) not in {"#_internal", "_internal"}:
@@ -964,8 +970,7 @@ class DocumentContext(BaseModel):
                 "External <send> target '%s' is not supported yet; skipping", target
             )
             # Signal communication error per SCXML error event guidance
-            self._emit_error("error.communication", front=False)
-            return
+            raise _ActionError("error.communication")
 
         delay_seconds: Optional[float]
         if getattr(send, "delayexpr", None) is not None:
@@ -1050,8 +1055,7 @@ class DocumentContext(BaseModel):
                 exc.diagnostic,
                 exc,
             )
-            self._emit_error("error.execution", front=True)
-            return
+            raise _ActionError("error.execution")
 
         # Build a mutable local namespace from the current scope so that
         # assignments within the script propagate back to the datamodel.
@@ -1061,8 +1065,7 @@ class DocumentContext(BaseModel):
             exec(py_body, {}, local_ns)  # noqa: S102
         except Exception as exc:
             logger.warning("<script> execution failed: %s", exc)
-            self._emit_error("error.execution", front=True)
-            return
+            raise _ActionError("error.execution")
 
         # Write back any variables that changed to their canonical location.
         # We always write back dicts and lists because they may have been
@@ -1725,8 +1728,7 @@ class DocumentContext(BaseModel):
             try:
                 value = self._evaluate_expr(assign.expr, env)
             except (SafeEvaluationError, Exception):
-                value = assign.expr
-                self._emit_error("error.execution", front=True)
+                raise _ActionError("error.execution")
         elif assign.content:
             value = "".join(str(x) for x in assign.content)
         target = assign.location
@@ -1741,7 +1743,7 @@ class DocumentContext(BaseModel):
             return
         # Invalid location: emit execution error and ensure the alias 'error'
         # is prioritized before any previously enqueued events from onentry.
-        self._emit_error("error.execution", front=True, alias_front=True)
+        raise _ActionError("error.execution", alias_front=True)
 
     def _do_log(self, log: Any, act: ActivationRecord) -> None:
         env = self._scope_env(act)
@@ -1932,8 +1934,7 @@ class DocumentContext(BaseModel):
         else:
             # Shallow history: optionally execute default transition actions
             if default_transition is not None:
-                for kind, payload in self._iter_actions(default_transition):
-                    self._dispatch_action(kind, payload, parent)
+                self._run_actions(default_transition, parent)
             for tid in targets:
                 child = self.activations.get(tid)
                 if child:
@@ -1958,8 +1959,7 @@ class DocumentContext(BaseModel):
         # Execute transition body (executable content) in document order
         container = getattr(trans, "container", None)
         if container is not None:
-            for kind, payload in self._iter_actions(container):
-                self._dispatch_action(kind, payload, source)
+            self._run_actions(container, source)
 
         enter_list = self._compute_entry_list(source, trans.target)
         entered_ids: Set[str] = set()
