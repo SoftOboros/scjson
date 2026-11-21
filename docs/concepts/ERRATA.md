@@ -38,6 +38,13 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-001 | 🟢     | scjson@0.4.0 TypeScript surface missing helpText | 2026-05-28 | CONV-E       |
 | ERRATA-002 | 🟢     | Vector-generation BFS has no candidate/time budget — permanent hang on `<parallel>`+`<invoke>` machines | 2026-06-19 | EXEC-E (`SCJSON-EXEC-00-CONCEPTS.md`) |
 | ERRATA-003 | 🟡     | `In()` cross-region predicate not in the admitted ECMAScript subset — blocks real infotainment control cores | 2026-06-20 | M1P6 (`docs/todo/scjson/TODO-SCJSON-SCRIPT-M1P6.md` D-M1P6-2) |
+| ERRATA-004 | 🟢 | Inline JSON data becomes text in the Python engine and disappears from executable IR | 2026-11-21 | Python execution / M1P6 |
+| ERRATA-005 | 🔴 | First-use foreach bindings have the expected values but the chart selects the wrong final | 2026-11-21 | EXEC-C |
+| ERRATA-006 | 🔴 | Execution continues after a failing action inside foreach | 2026-11-21 | EXEC-C |
+| ERRATA-007 | 🔴 | Converted SCJSON disagrees with XML on foreach action order and data witnesses | 2026-11-21 | EXEC-C / conversion |
+| ERRATA-008 | 🟡 | The canonical Python model rejects authored literal send and donedata payloads | 2026-11-21 | Conversion / Python model |
+| ERRATA-009 | 🔴 | Original ECMA execution cases select the wrong final in the 0.4.2 pilot | 2026-11-21 | EXEC-C |
+| ERRATA-010 | 🔴 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 
 ---
 
@@ -324,6 +331,181 @@ Pending the future extension. The workaround is verified: the normalized media-p
 - Also surfaced: radio helper functions stored as `<data expr="function(){…}">` (JS function-literals) are likewise outside D-M1P6-2; same normalize-or-extend disposition.
 
 ---
+
+## ERRATA-004 — Inline data initialization in the Python engine and executable IR
+
+**Resolved on the Python `v0.4.3` branch.** First reproduced on 2026-11-21
+with published version 0.4.2, tag `1363d3e`. Package publication is a
+separate release action.
+
+**Symptom and root cause.** Original Alex Z test 155 declares an inline array
+at `tutorial/Tests/ecma/W3C/Mandatory/Auto/test155.scxml:8`. The converter
+stores the characters, including indentation, in the declaration's
+`content` list. On 0.4.2, `py/scjson/context.py:2249` wrapped those strings
+on both file routes and `context.py:562` joined the Python representations
+of those wrappers. The direct validated-model route joined the original
+strings. Both paths gave foreach a string to iterate. The file routes
+left `Var2` equal to the closing brace of a dictionary representation.
+Separately, `py/scjson/exec_ir.py:1133` read only the declaration's `expr`
+attribute. The inline slot therefore had no initial value. Expression
+collections could also silently lose unrepresentable members, including
+signed numbers.
+
+**Fix and downstream impact.** Commit `b0a9a372af55e06256bd9a26d9a3e9cfa147a3c0`
+preserves character-data parts on file intake, decodes inline JSON once at
+initialization, and uses the same value in the IR. The IR keeps complete
+constant collections and leaves a collection with a dynamic member unknown.
+Authored character data survives the XML round trip. iState removed its
+inline-to-expression vector rewrite in `2a4f6c4174ce8b3cc536ab2c59d66229394a6250`.
+[Python engine guide](../ENGINE-PY.md#overview)
+
+**Verification.** With the pinned tutorial submodule initialized, run
+`PYTHONPATH=py python -m pytest -q py/tests/test_engine.py py/tests/test_exec_ir.py`.
+The original ECMAScript and Python 155 files both reached `pass` via
+`from_xml_file` and `from_json_file`, with `Var1 = 6`, `Var2 = 3`, and
+`Var3 = [1,2,3]`. Changing the last element to 4 gave `fail`, 7, and 4.
+The 23 conversions in the Docker VM comparison were byte-identical between
+versions. Both SoS charts matched through both routes and all seven native
+SoS vectors passed. See the regression tests
+`test_inline_foreach_original_155` and `test_original_155_lowers_inline_collection_and_loop`.
+
+| Qualification artifact | SHA-256 |
+| --- | --- |
+| Python 0.4.3 wheel | `91aa75003aa3ddee81ad7f50265cced68dcbc905d974cd582d0243cb4f0628f5` |
+| Docker VM 0.4.2 baseline evidence | `c7fea263cf59b64804d2ce154147c4ba85fe5f40c3d44d45262a55c534553262` |
+| Docker VM 0.4.3 upstream evidence | `f45c01d6f5eeeb84dcee5d0e5bf1214177a86a4983e4ee5f40619ca3610e07a2` |
+| iState generated-code review ZIP | `5fc281610a9ec1fe882a7d8c2c70ee61e0b0b6847f9061ee1a6a35bc18b1ceed` |
+
+The three entries below use the same two VM receipts and Alex Z Tests tree
+`aa46a43361f6281a70d0809e45a3ce3dd906c486`. Across 20 original foreach
+charts, counts matching the authored final **and** selected data fields rose
+from 8 to 14 on XML and from 4 to 8 on SCJSON. Each open entry requires a
+fix and a regression test in both dialects.
+
+## ERRATA-005 — First-use item and index bindings reach the wrong final
+
+**Open, EXEC-C.** Tests 150 and 151 fail through XML and SCJSON on 0.4.2
+and on `b0a9a37`. On 0.4.3 the last declared and first-use item/index
+pairs both equal `(3, 2)`, yet both charts select `fail`. Their final
+guards read the newly introduced item and index respectively. Trace the
+bindings across the state change and the eventless guard before assigning
+a root cause. Close when both original charts reach `pass` and retain
+both pairs through both file loaders.
+
+## ERRATA-006 — An action failure inside foreach leaves later iterations running
+
+**Open, EXEC-C.** In original mandatory test 156 the body increments
+`Var1`, then attempts `<assign location="Var5" expr="return"/>`. On
+`b0a9a37` the XML and SCJSON engines finish at `fail` with counter and
+last item both equal to 3. The chart expects the loop to stop on the first
+error. Trace expression failure, error-event delivery, and propagation
+out of the loop. Close when both loaders select `pass` with counter and
+last item equal to 1, alongside a control whose valid body visits all items.
+
+## ERRATA-007 — Converted SCJSON loses behavior in three original foreach charts
+
+**Open, EXEC-C / conversion.** In both original dialects on `b0a9a37`,
+XML matches the expected state and fields. Normal SCJSON conversion followed
+by strict JSON-file execution gives the observations below.
+
+| Alex Z test | XML | Converted SCJSON |
+| --- | --- | --- |
+| 153, conditional assignments inside foreach | `pass`, `Var4 = 1` | `fail`, `Var4 = 0` |
+| 457, invalid bindings followed by a valid loop | `pass`, `Var6 = 6` | `fail`, `Var6 = 0` |
+| 459, ordered values with an index | `pass`, `Var5 = 1` | `pass`, `Var5 = 0` |
+
+Trace the first differing action against the original XML order for each
+chart. Check what survives conversion before assigning the defect to a
+serializer or engine. Close each case when both routes reproduce the
+authored final and data witness. A final-state-only assertion misses 459.
+
+## ERRATA-008 — Literal send and donedata payloads fail canonical validation
+
+**Diagnosed, conversion / Python model.** On 0.4.2 the converter returns
+literal character data for `<send><content>` and `<donedata><content>`.
+At `py/scjson/pydantic/generated.py:93`, `ScxmlContentType.content` expects
+a list of nested charts. Direct validation of the converter's SCJSON therefore
+rejects the first string, including valid ordinary text, digits, multiline
+text, and JSON-shaped text. ERRATA-004 concerns the separate `<data>` type.
+
+The pinned Alex Z census found 17 such roots in the Tests tree identified
+in ERRATA-004. These are the two ECMA Custom/types
+`testConditionalExpressions*` charts, both dialects of mandatory 179,
+354 and 529, ECMA mandatory 294, and both dialects of optional 520, 532,
+562 and 578. The separate malformed Python 401 assignment and the ECMA
+`test-enc-UTF8` root transition account for the other two intake refusals.
+Replaying all 19 on both package versions produced byte-identical intake
+results, SHA-256 `6775c9ffd2b163e0daa7a5d0d81577501c1825ac5d46ba14d95428f9da5199a5`.
+
+**Fix target.** Correct the source definition and generation of mixed payload
+content, regenerate the affected models/schema, and check maintained bindings.
+Replay XML conversion, canonical validation, SCJSON-to-XML, and the actual
+delivered payload. Retain text, whitespace, nested markup, and nested-chart
+controls. Keep the two malformed inputs as explicit refusals.
+
+## ERRATA-009 — Original execution cases select the wrong final
+
+**Open, EXEC-C.** The initial 0.4.2 Docker VM pilot ran 14 original ECMA
+mandatory automatic charts, each in both strict and lax mode. Seven selected
+`fail` where the chart expected `pass`. Case 151 is tracked in ERRATA-005.
+Case 570 passed the subsequent control that drained immediate work before
+advancing the clock. Retain that scheduling order in future runs.
+
+| Case | Executable requirement to reproduce and fix |
+| --- | --- |
+| 159 | An error in a send skips subsequent actions in the executable block. Capture the following assignment and the pending error event. |
+| 173 | A send uses the current value of `targetexpr`. Record the evaluated destination and delivered event. |
+| 216 | Invocation uses the current value of `srcexpr`. Supply the original child file and check completion in the parent. |
+| 404 | Exits run child before parent, with reverse document order for ties. Capture the actions in order. |
+| 500 | The SCXML event I/O processor exposes its location. Record the value read by the authored guard. |
+
+**Closure.** Carry each row independently. Establish the first discrepancy
+with its original companion files, then require the authored final and the
+intermediate observation in the table. Preserve 570 as a passing control.
+The original pilot result has SHA-256
+`8ea277ae7dac00910f5f2d20d28f0e9e7a1936b442bb329f1e3bac1322dad9ce`.
+The bounded Windows replay of both releases on the original schedule ran
+56 checks (14 charts × two modes × two versions). Each group retained
+the same seven passes and seven failures. No process timed out. Replay
+SHA-256 `8ed4e0a83ebf7d063f69e1fb356ba1d3337acb4782ca54f9a5db14a8626facbd`.
+The separate two-schedule replay on each wheel reproduced the distinction
+between 216 and 570. The 0.4.3 timing receipt has SHA-256
+`119ad0e234302bfd0c39fdd28570272ddb992b566f971d9213e9b8e558d6d41e`.
+
+## ERRATA-010 — Qualification fixture, CLI, and platform failures
+
+**Open, Python CLI / harness.** Running `python -m pytest -q py/tests`
+on Windows against `b0a9a37` produced 567 passes, 17 failures and three
+skips. Every failing test reproduced on baseline `d04ae8f` at the same
+assertion with the same failure signature. The eight affected test modules
+matched between revisions. The targeted baseline comparison has SHA-256
+`8bb2fd18ad3f8be85e4fcba32365aaecbf673bf605ba0764e7812439f450fac1`.
+Track these independently of the runtime cases above.
+
+| Affected checks | Reproduction and fix target |
+| --- | --- |
+| Three `test_cli.py` recursive conversion, validation, and verification tests | The first conversion exits 1 with `FileNotFoundError` at the original temp path. A shorter pytest temp root recovered conversion and validation. Verification then reached line 163 and misread the original XML using the host encoding. All five sampled originals parsed with explicit UTF-8 BOM handling. Check both path length and encoding on Windows. |
+| Nine reference-launch cases in `test_exec_compare_advanced.py`, `test_exec_compare_integration.py`, `test_exec_sweep_integration.py`, and `test_uber_conv_corpus.py` | `_build_trace_cmd` loses backslashes when a Windows interpreter path is parsed as unquoted POSIX shell text. Preserve argument boundaries and rerun each comparison, including paths with spaces. |
+| `test_xinclude_resolve_mode_converts_assembled_tree` | A drive-letter parent path resolves to bare `child.scxml`. Resolve relative includes against the actual document directory and check both preserve and resolve modes. |
+| Swift source check in `test_conv_h.py` | The Swift submodule was absent. Initialize the pinned fixture for qualification and distinguish an unavailable checkout from a binding failure. |
+| `test_uber_test_runs_focused_conversion_corpus` | The redirected Windows CLI banner cannot encode the arrow. The harness skips the converter and later misses its output. `PYTHONUTF8=1` made the unchanged test pass. Check CLI output encoding and make converter startup failure visible. |
+| `test_payload_heuristics_chained_range` and `test_exec_sweep_small_corpus` | The inline test fixture and `tests/sweep_corpus/range.scxml` both contain raw less-than signs in an XML attribute. The unit test stops at parsing and the sweep misses its coverage row. Correct the test-owned XML fixtures and require an actual coverage row and payload assertion. |
+
+Close each row with the affected test IDs, platform, interpreter, result,
+and any required test dependency. Keep individual outcomes visible when a
+common fix clears several checks.
+
+Two Windows recovery runs isolated setup effects. The three recursive CLI
+tests passed with a shorter pytest temp root and `PYTHONUTF8=1`. The three
+maintained-binding checks passed after initializing Swift at the recorded
+gitlink `38b5c24d3c7777d9c7287b9020d4e0885685a29c`.
+
+On docker-vm the same wheel passed the full Python suite with both the
+tutorial and Swift gitlinks populated: 585 passed, zero failures, two
+optional SCION comparisons skipped because SCION was unavailable. The
+one failure in the preceding Linux run was the missing Swift fixture.
+All 587 test IDs matched between runs. Full Linux evidence SHA-256
+`fe47b20e7552c574eb8069a9094dd089ce677f81ca2aba9fcc3062c790a2fa6f`.
 
 ## How to add an entry
 

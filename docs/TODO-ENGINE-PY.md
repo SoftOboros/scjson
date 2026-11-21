@@ -49,6 +49,14 @@ Decision notes (invoke/finalize ordering)
 - [x] Implement foreach.
 - [x] Initialize collections from inline JSON character data through both file
   entry points and carry the same constants into executable IR data slots.
+- [ ] Repair the remaining first-use bindings, error interruption, and
+  XML/SCJSON action discrepancies in both dialects (ERRATA-005 through -007).
+- [ ] Repair the canonical literal-payload model with conversion and
+  round-trip coverage (ERRATA-008).
+- [ ] Resolve every remaining authored-outcome discrepancy in the original
+  ECMA pilot (ERRATA-009) and clear the reproducible qualification failures
+  on their affected platforms (ERRATA-010). The
+  [errata register](concepts/ERRATA.md) owns per-case closure checks.
 - [x] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
 
 4) Events, Timers, and External I/O
