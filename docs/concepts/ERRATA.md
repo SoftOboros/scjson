@@ -47,7 +47,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 | ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
-| ERRATA-013 | 🟡 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
+| ERRATA-013 | 🟢 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
 
 ---
 
@@ -883,6 +883,53 @@ loss on the canonical Python paths. The generated schema allowed extra
 properties and both the model and the reverse converter ignored the key.
 The intake rule is recorded under XML Element Name vs. SCJSON Field Name in
 [the converter contract](SCJSON-CONV-00-CONCEPTS.md).
+
+The installed Python **v0.4.2** package reproduced the loss on the host.
+Both `Scxml.model_validate` and `SCXMLDocumentHandler.json_to_xml`
+preserved the `tick` event for `raise_value` and omitted it for `raise` and
+`raiseValue`. The v0.4.2 receipt records these two entry points. The
+v0.4.3 VM receipt also exercises the runtime configuration.
+
+### Resolution and verification
+
+On v0.4.3, canonical readers reject XML and camelCase spellings on modeled
+executable owners and diagnose colliding spellings before normalization.
+Python exposes `validate_executable_keys(data, allow_camel=True)` for
+clients that explicitly project camelCase. The Python schema, strict and
+normal models, and reverse converter enforce the canonical spelling.
+A single-file `scjson xml` refusal exits 1 before writing the destination,
+including when a previous file exists. Wildcard payloads, extension
+metadata, and child-kind strings in `execution_order` retain their own keys
+and values. Rust and Swift native converters now reject ambiguous and
+noncanonical spellings in the exercised inputs. Swift also uses the
+structural field name for untagged canonical children.
+
+| Checked on docker-vm | Result |
+| --- | --- |
+| Python wheel at `6d186ff` | Full suite passed 927 tests. Two optional SCION comparisons skipped. CLI validation and reverse conversion each refused both edited witnesses. Runtime reached `done` on the canonical witness. |
+| JavaScript npm package at `fd009c5` | One canonical reverse conversion and nine rejection controls passed on the packed distribution. |
+| Rust native converter at `54df565` | 27 tests passed. The CLI round-tripped the canonical event and refused eight edited inputs without creating output. |
+| Swift native converter at `06df1b6` | The CLI round-tripped the canonical event and refused all eight edited inputs without creating output. A directly linked runner passed the checked-in XCTest. The VM image lacks SwiftPM's automatic-discovery library `libIndexStore.so`. |
+
+The Swift direct-client comparison also identified two element tables
+initialized only when the executable's main function ran. A trivial XCTest
+passed in the same harness. The converter XCTest crashed on `23dcefd` and
+passed on `06df1b6` with lazily initialized static tables. The complete
+native comparison used the same compiler, locked ArgumentParser and test
+source. The combined scjson implementation is `53f7a159fcf18b6daf9047ed97f2d91966c1f255`.
+Qualification covers the four package readers in the table. The remaining
+standalone language readers are unqualified for this erratum. The iState
+generator matrix, editor storage routes, and Alex Z 403b evaluation have
+separate evidence.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Original installed v0.4.2 host reproduction | `7affbbe3af97cdb1f98e4d4bfb005e0f9f1a49a5b54380151af2a256be2e5d78` |
+| Python wheel | `1041e450f54836886449b7c0351fa8864078005fa7b241444f440bcfa492cdcc` |
+| npm tarball | `767e0264ad7c34707905614f5878c1ef44ccc5a0e3db566b730eb5225b949732` |
+| Final installed-wheel suite and CLI control receipt | `ae0f475b7126b56d5135a0b03644e419eca6675f8840308c0b09dfd4fea1a394` |
+| Swift direct-client and CLI successor receipt | `74062de8cfbbb7a01596c68d052c36bd66f2a73201998ff09588e0d6e159ac30` |
+| `scjson-executable-keys-review.zip` with code, packages, and all nine VM attempts (73 entries) | `3c4777e9a29b7adcf7393b62e78baee007cd0307789e0dbf08191561f89eb8d4` |
 
 ---
 
