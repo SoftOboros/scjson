@@ -10,11 +10,13 @@ Licensed under the BSD 1-Clause License.
 import json
 from pathlib import Path
 
+from click.testing import CliRunner
 from jsonschema import Draft202012Validator
 import pytest
 
 from scjson import pydantic, pydantic_strict
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
+from scjson.cli import main
 from scjson.context import DocumentContext
 from scjson.exec_ir import RaiseNode, lower_document
 from scjson.executable_keys import InvalidExecutableKey, validate_executable_keys
@@ -74,6 +76,23 @@ def test_canonical_raise_round_trips_executes_and_lowers(tmp_path):
     ir, _ = lower_document(pydantic.Scxml.model_validate(data))
     action, = ir.children[0].onentry
     assert isinstance(action, RaiseNode) and action.event == "go"
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_reverse_cli_reports_refusal_and_preserves_destination(tmp_path, existing):
+    """A refused single-file conversion never creates or replaces its destination."""
+    raw = json.loads(CODEC.xml_to_json(XML))
+    entry = raw["state"][0]["onentry"][0]
+    entry["raise"] = entry.pop("raise_value")
+    path, dest = tmp_path / "raw.scjson", tmp_path / "review.scxml"
+    path.write_text(json.dumps(raw))
+    if existing:
+        dest.write_bytes(b"previous review")
+    result = CliRunner().invoke(main, ["xml", str(path), "-o", str(dest)])
+    assert result.exit_code == 1 and "/state/0/onentry/0/raise" in result.output
+    assert dest.is_file() == existing
+    if existing:
+        assert dest.read_bytes() == b"previous review"
 
 
 def test_drafts_wildcards_and_data_payloads_are_opaque_but_embedded_charts_are_checked():

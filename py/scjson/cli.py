@@ -115,7 +115,8 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
             else (base / path.with_suffix(".scxml").name)
         ) if output else path.with_suffix(".scxml")
         dest = None if verify else out_file
-        convert_file(path, dest)
+        if not convert_file(path, dest):
+            raise SystemExit(1)
 
 
 @main.command(help="Convert SCXML file to scjson.")
