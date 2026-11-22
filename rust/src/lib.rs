@@ -144,6 +144,8 @@ pub enum ScjsonError {
     RegionOrder(&'static str),
     #[error("invalid state_order: {0}")]
     StateOrder(&'static str),
+    #[error("invalid executable key on {0}: {1}")]
+    ExecutableKey(String, String),
 }
 
 fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
@@ -977,6 +979,57 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     Ok(serde_json::to_string_pretty(&value)?)
 }
 
+/// Check reserved fields on modeled executable owners before empty fields are pruned.
+fn validate_executable_keys(value: &Value, tag: &str) -> Result<(), ScjsonError> {
+    if let Value::Array(items) = value {
+        for item in items {
+            validate_executable_keys(item, tag)?;
+        }
+        return Ok(());
+    }
+    let Some(obj) = value.as_object() else { return Ok(()) };
+    if matches!(tag, "onentry" | "onexit" | "finalize" | "if" | "foreach" | "transition") {
+        for (raw, camel, canonical) in [
+            ("raise", "raiseValue", "raise_value"),
+            ("if", "ifValue", "if_value"),
+            ("else", "elseValue", "else_value"),
+        ] {
+            let names: Vec<_> = [raw, camel, canonical].into_iter().filter(|k| obj.contains_key(*k)).collect();
+            let Some(&present) = names.first() else { continue };
+            let reason = if names.len() > 1 {
+                format!("conflicting spellings {}", names.join(", "))
+            } else if raw == "else" && tag != "if" {
+                "else is only valid inside an if_value block".to_string()
+            } else if present != canonical {
+                format!("use {canonical} for {present}")
+            } else {
+                continue;
+            };
+            return Err(ScjsonError::ExecutableKey(tag.into(), reason));
+        }
+    }
+    for (key, child) in obj {
+        let child_tag = match key.as_str() {
+            "state" | "parallel" | "final" | "initial" | "history" | "transition"
+            | "onentry" | "onexit" | "invoke" | "finalize" | "foreach" | "send"
+            | "donedata" => key,
+            "if_value" => "if",
+            "content" if matches!(tag, "send" | "invoke" | "donedata") => "content",
+            "content" if tag == "content" => {
+                for item in child.as_array().into_iter().flatten() {
+                    if item.is_object() && item.get("qname").is_none() {
+                        validate_executable_keys(item, "scxml")?;
+                    }
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        validate_executable_keys(child, child_tag)?;
+    }
+    Ok(())
+}
+
 /// Convert a scjson string to SCXML using options.
 ///
 /// # Parameters
@@ -987,6 +1040,7 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
 /// XML string representing the document.
 pub fn json_to_xml_opts(json_str: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     let mut v: Value = serde_json::from_str(json_str)?;
+    validate_executable_keys(&v, "scxml")?;
     if omit_empty {
         remove_empty(&mut v);
     }

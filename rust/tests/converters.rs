@@ -285,3 +285,18 @@ fn comments_promote_to_help_text_and_emit_back() {
         serde_json::json!(["transition help"])
     );
 }
+#[test]
+fn executable_keys_cannot_be_dropped_or_shadowed() {
+    use serde_json::json;
+    let chart = |entry| json!({"state":[{"id":"s","onentry":[entry]}]}).to_string();
+    let good = chart(json!({"raise_value":[{"event":"go"}]}));
+    assert!(scjson::json_to_xml(&good).unwrap().contains("<raise event=\"go\""));
+    for block in [
+        json!({"raise":[]}), json!({"raiseValue":[]}),
+        json!({"raise":[], "raise_value":[]}),
+        json!({"if_value":[{"cond":"True", "else":{}}]}),
+        json!({"if":[]}), json!({"ifValue":[]}),
+    ] {
+        assert!(scjson::json_to_xml(&chart(block)).is_err());
+    }
+}
