@@ -48,7 +48,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 | ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
 | ERRATA-013 | 🟢 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
-| ERRATA-014 | 🟡 | Offline vector generation consumes host time between chart steps | 2026-11-22 | EXEC-E / Python vectors |
+| ERRATA-014 | 🟢 | Offline vector generation consumes host time between chart steps | 2026-11-22 | EXEC-E / Python vectors |
 
 ---
 
@@ -980,6 +980,25 @@ cases in `py/tests/test_vector_gen.py` exercise SCXML and SCJSON with a
 controlled host clock, a timer scheduled at startup and a transition authored
 for the event named `None`. This scope covers the generator's root context.
 Nested invoked interpreters have their own clocks.
+
+**Verified on docker-vm.** Source `6519862e9d42094946ee1bd3d8e38df7af2b73a5`
+on v0.4.3 produced wheel SHA-256
+`3e8430c0b7a462ef5c8da8ad154c6dd5c09c0ba25108b788a7bb30f1e52ba227`
+in two clean builds. Six iState mixed Rust/TypeScript jobs replayed the
+same 417 chart while the root engine's simulated host clock advanced by
+0, 1, or 7 milliseconds on every read. The previous wheel emitted
+`@advance 1000`, `@advance 999`, and `@advance 993`. The corrected
+wheel emitted `@advance 1000` in every case. Both XML and saved SCJSON
+passed the held-region comparison. All 18 vector-generator cases passed.
+The full Python suite passed 933 tests, with two optional SCION cases
+skipped because the runner was unavailable.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Six mixed jobs and installed-wheel vector tests | `accad41dbdd1b3c12f46050c3afc96bffc390a0f4c8499120f49bf29296b39ad` |
+| Held-first and held-second region replay | `08ef26c32ca1432f3ac8b87006abce61faf9048f288c85ed0eb374f3c7e68c35` |
+| Full upstream JUnit report | `b2153079a5d6e99e0ba68652b494cf73ab1a6e73a4f5826e72666a6f11507b69` |
+| `scjson-vector-clock-wheel-review.zip` with wheel, build receipts, and full suite | `40ed075d3c25cf2c2c9d6c89d53b16ea8796f03f8545823a4f3975584436289c` |
 
 ## How to add an entry
 
