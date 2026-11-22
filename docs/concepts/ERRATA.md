@@ -48,6 +48,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 | ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
 | ERRATA-013 | 🟢 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
+| ERRATA-014 | 🟡 | Offline vector generation consumes host time between chart steps | 2026-11-22 | EXEC-E / Python vectors |
 
 ---
 
@@ -958,6 +959,27 @@ separate evidence.
 | `scjson-executable-keys-review.zip` with code, packages, and all nine VM attempts (73 entries) | `3c4777e9a29b7adcf7393b62e78baee007cd0307789e0dbf08191561f89eb8d4` |
 
 ---
+
+## ERRATA-014 — Offline vector generation consumes host time between chart steps
+
+**Symptom.** In the held-region variant of Alex Z 417, two package builds on
+docker-vm emitted different time advances for the same one-second send.
+One advanced 999 milliseconds and the other advanced 1000 milliseconds.
+
+**Root cause.** At `845f6c0`, `py/vector_gen.py:38` and `:163` load ordinary
+wall-clock contexts. Startup and each replay can consume part of the chart
+delay before `:255` computes the time remaining. Coverage replay at `:288`
+also dispatches a time-control record as an external event named `None`.
+
+**Correction and verification.** Each root chart opened for offline vector
+generation MUST begin at logical time zero before entry actions. Only explicit
+advances move its clock. Search deadlines and elapsed search time continue to
+use the host clock under EXEC-E-D1. Coverage replay MUST apply time controls
+without dispatching an external event, following EXEC-INV-2. The regression
+cases in `py/tests/test_vector_gen.py` exercise SCXML and SCJSON with a
+controlled host clock, a timer scheduled at startup and a transition authored
+for the event named `None`. This scope covers the generator's root context.
+Nested invoked interpreters have their own clocks.
 
 ## How to add an entry
 
