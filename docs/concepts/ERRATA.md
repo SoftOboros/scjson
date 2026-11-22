@@ -593,6 +593,32 @@ Separate controls verified self-addressed delivery and distinct session
 addresses. A nonempty string containing the unevaluated expression had
 previously made the guard in 500 pass.
 
+**404 verification, November 22, 2026.** On docker-vm, both original Alex Z
+dialects reached `pass` in strict Python and iState's compiled executable-IR
+Rust through XML and converter-produced SCJSON read back from disk. The
+observed producers were the exit handlers of `s01p2`, `s01p1`, and `s01p`,
+followed by the effect of `s01p → s02`. The receivers consumed the four
+events in FIFO order, advancing from `s02` through `s03`, `s04`, and `s05`
+to `pass`. Python then drained its synthetic root-completion event. The Rust
+public startup call had already drained the four authored events on return.
+
+Swapping sibling elements made `event2` arrive first. Moving transition
+content ahead of exits in the diagnostic runtimes made `event4` arrive
+first. Both controls selected the wildcard to `fail` in `s02`. Renaming the
+siblings while preserving their positions retained the original behavior.
+The trace checker also detected a deliberately incorrect attribution of
+`event4` to the parent exit with the correct queue and final. The four
+original Rust libraries were byte-identical. This confirms the existing
+ERRATA-009 repair on the 0.4.3 wheel with SHA-256
+`1041e450f54836886449b7c0351fa8864078005fa7b241444f440bcfa492cdcc`.
+The 404 review ZIP has SHA-256
+`5154b97c4d8e692f8acc9e8d2d8f76eec7faf4ff8ef1c716070aa6eac336b58c`.
+The accompanying SoS replay matched all 84 Python and generated Rust
+snapshots across the counter and guard charts. All seven native SoS vectors
+passed, and the native runner rejected the one-field wrong golden. SoS ZIP
+SHA-256 `5db3e9a83e069f3c16ba223007163bd58c8c77af9e35298615b59951a497d2f9`.
+[Python regression](../../py/tests/test_parallel_exit_order.py)
+
 The same VM run matched the authored foreach final and data on 19 of 20
 originals through each loader. In ECMA 460 and 525 the collection became
 `[1,2,3,4,4,4]` in exactly three iterations. Python 525 evaluates
