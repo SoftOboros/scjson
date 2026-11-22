@@ -39,6 +39,17 @@ Decision notes (invoke/finalize ordering)
 2) Compound, Parallel, Final, History
 - [x] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
 - [x] Parallel completion: parent final when all regions complete; propagate finalization.
+  - Verified on docker-vm with the two original Alex Z 417 dialects from XML
+    and saved SCJSON in strict Python and compiled iState executable-IR Rust.
+    The queue contained one completion for each region, then exactly one for
+    `s1p1` while both region finals were active. Holding either region open
+    suppressed the parent event. Releasing it selected `pass`, and withholding
+    it until the one-second timeout selected `fail`. Bypassing the all-regions
+    check in diagnostic runtimes exposed a premature notification even on
+    the unedited chart, where the final outcome still read `pass`.
+    The November 22, 2026 review ZIP has SHA-256
+    `7e44b6785d837cc8df2411b62812db9738f0e84fda8532d1982217bbd3c79fa1`.
+    [Interpreting completion traces](ENGINE-PY.md#parallel-state-completion)
 - [x] History: shallow with default transition fallback.
 - [x] History: deep (restore deep descendants).
 - [x] Parallel: initial entry enters all child regions.

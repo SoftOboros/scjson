@@ -186,6 +186,23 @@ Mid-sequence time advance injection
 This behavior improves cross-engine parity when the reference does not model
 time, while keeping the event stream format backward compatible.
 
+## Parallel state completion
+
+When a region enters a final child, the engine queues
+`done.state.<regionId>`. It also checks the active configuration of every
+region of the enclosing parallel. When the last outstanding region reaches
+final, its own completion is queued first, followed by
+`done.state.<parallelId>`. Consuming that parent event can select an ordinary
+transition on the parallel.
+
+Alex Z 417 makes the distinction observable. Its two eventless transitions
+can enter both region finals before the first completion event is consumed.
+A trace at dequeue time can therefore show both finals even for the first
+region event. To verify the timing, record the active finals **at enqueue**,
+or hold one region open while its sibling finishes. Drain immediate work
+before advancing the one-second timeout in the original chart.
+[Parallel completion checklist](TODO-ENGINE-PY.md) · [Python completion predicate](../py/scjson/context.py#L1790)
+
 ## Invoke & Finalize Semantics
 
 The engine supports a practical subset of `<invoke>` to unblock testing and
