@@ -538,7 +538,20 @@
                         }
                     }
                 }
-            ]
+            ],
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Foreach": {
             "description": "iterate over items within executable content.",
@@ -648,7 +661,20 @@
                 "item"
             ],
             "title": "Foreach",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "History": {
             "description": "pseudostate remembering previous active children.",
@@ -831,7 +857,19 @@
                 "cond"
             ],
             "title": "If",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue"
+                    ]
+                }
+            }
         },
         "Initial": {
             "description": "starting state within a compound state.",
@@ -1118,7 +1156,20 @@
                 }
             },
             "title": "Onentry",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Onexit": {
             "description": "actions performed when leaving a state.",
@@ -1204,7 +1255,20 @@
                 }
             },
             "title": "Onexit",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Parallel": {
             "description": "coordinates concurrent regions.",
@@ -1955,7 +2019,20 @@
                 }
             },
             "title": "Transition",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "TransitionTypeDatatype": {
             "description": "The type of the transition i.e. internal or external.",

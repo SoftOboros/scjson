@@ -31,6 +31,7 @@ from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
+from .executable_keys import validate_executable_keys
 from .execution_order import (
     InvalidRegionOrder, InvalidStructuralOrder, MisplacedExecutionOrder, canonical_json, capture_order,
     ordered_state_children, restore_order, validate_order_location,
@@ -366,6 +367,7 @@ class SCXMLDocumentHandler:
         serialized by xsdata directly.
         """
         data = json.loads(json_str)
+        validate_executable_keys(data)
         if hasattr(self.model_class, "model_validate"):
             model = self.model_class.model_validate(data)
         else:

@@ -23,6 +23,21 @@ const mixedRegions = `<scxml xmlns="${ns}"><parallel id="p">
   <parallel id="first"><state id="leaf"/></parallel><onentry><log/></onentry>
   <state id="second"/><state id="third"/></parallel></scxml>`;
 
+test('raw SCJSON action spellings cannot be silently dropped', () => {
+  for (const tag of ['raise', 'if', 'else']) {
+    for (const key of [tag, tag + 'Value']) {
+      const doc = read(chart('<if cond="false"><else/><raise event="go"/></if>'));
+      const block = doc.state[0].onentry[0].if_value[0];
+      block[key] = block[tag + '_value'] || [];
+      delete block[tag + '_value'];
+      const output = jsonToXml(JSON.stringify(doc));
+      expect(output.valid).toBe(false);
+      expect(output.result).toBe('');
+      expect(output.errors[0].message).toContain(tag + '_value');
+    }
+  }
+});
+
 test('preserves implicit and explicit initial targets, anonymous children and legacy grouping', () => {
   const doc = read(`<scxml xmlns="${ns}" initial="owner"><final/><state id="owner">
     <initial><transition target="p"/></initial><parallel id="p"><state id="leaf"/></parallel>

@@ -14,12 +14,13 @@ from lxml import etree
 from pydantic import BaseModel, model_validator
 
 from .comment_promotion import _resolve_child
+from .executable_keys import ACTION_KEYS, check_action_fields
 
 
 NAMESPACE = "http://www.w3.org/2005/07/scxml"
 ACTION_FIELDS = {
-    "raise": "raise_value",
-    "if": "if_value",
+    "raise": ACTION_KEYS["raise"],
+    "if": ACTION_KEYS["if"],
     "foreach": "foreach",
     "send": "send",
     "script": "script",
@@ -27,7 +28,7 @@ ACTION_FIELDS = {
     "log": "log",
     "cancel": "cancel",
 }
-MARKER_FIELDS = {"elseif": "elseif", "else": "else_value"}
+MARKER_FIELDS = {"elseif": "elseif", "else": ACTION_KEYS["else"]}
 REGION_KINDS = ("state", "parallel")
 STATE_KINDS = (*REGION_KINDS, "final")
 
@@ -57,9 +58,21 @@ def validate_order_location(data, fields):
 class ScxmlModel(BaseModel):
     """Base of typed SCXML nodes. Opaque wildcard and attribute data are separate."""
 
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler):
+        schema = super().__get_pydantic_json_schema__(core_schema, handler)
+        if "if_value" in cls.model_fields:
+            node = handler.resolve_ref_schema(schema)
+            forbidden = [name for tag in ACTION_KEYS for name in (tag, tag + "Value")]
+            if "else_value" not in cls.model_fields:
+                forbidden.append("else_value")
+            node["propertyNames"] = {"not": {"enum": forbidden}}
+        return schema
+
     @model_validator(mode="before")
     @classmethod
     def _locate_execution_order(cls, data):
+        check_action_fields(data, cls.model_fields)
         validate_order_location(data, cls.model_fields)
         return data
 

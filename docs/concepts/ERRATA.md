@@ -47,6 +47,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-010 | 🟢 | Python qualification has reproducibility, fixture, and platform failures | 2026-11-21 | Python CLI / harness |
 | ERRATA-011 | 🟢 | Conversion loses the authored order of parallel regions of different element kinds | 2026-11-21 | Conversion / execution |
 | ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
+| ERRATA-013 | 🟡 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
 
 ---
 
@@ -867,6 +868,21 @@ wheel and npm tarball, and per-route comparisons.
 | VM Alex Z canonical intake and order census | `399195193aabc822a031138f6b14817b709da107423ccb4a1b2e7720ecd5b498` |
 | Windows replay of historical SCJSON | `978ae08cd3a8007ea3ab0a8f7d360daf2bd2c6f2a1b4cd1206ddcbe4983ac15a` |
 | `implicit-initial-generated-rust-review.zip` (1,621 members) | `f3fd7f70e87a9fb05fe83ba42acf6a4c36ef55af677bda558abc4147e44ed671` |
+
+---
+
+<a id="errata-013"></a>
+
+## ERRATA-013 — Raw SCJSON executable keys can silently drop an action or branch
+
+At v0.4.3 `4a95164`, replacing `raise_value` with `raise` in an entry
+block removed the event in the default reverse converter and in both
+Python model families. The original reached `done`. The edited document
+was admitted and remained in `s`. A lone `raiseValue` produced the same
+loss on the canonical Python paths. The generated schema allowed extra
+properties and both the model and the reverse converter ignored the key.
+The intake rule is recorded under XML Element Name vs. SCJSON Field Name in
+[the converter contract](SCJSON-CONV-00-CONCEPTS.md).
 
 ---
 

@@ -67,6 +67,16 @@ avoid language/schema conflicts:
 - XML `initial` attribute maps to SCJSON `initial_attribute`.
 - XML `datamodel` attribute maps to SCJSON `datamodel_attribute`.
 
+At a modeled executable container, a JSON property spelled `raise`, `if`,
+or `else` MUST be rejected before conversion or execution. The canonical
+spellings are the schema fields above. A product exposing a camelCase
+projection MAY accept `raiseValue`, `ifValue`, and `elseValue` on the
+corresponding owners and map them to the canonical fields before storage.
+An intake MUST reject conflicting spellings of the same child, including
+identical values. The rule applies to property names. Values in
+`execution_order` use XML child kinds, and names inside wildcard payloads
+and extension maps belong to their author. See [ERRATA-013](ERRATA.md#errata-013).
+
 ### Extension Metadata
 
 Pydantic `other_attributes` fields MAY contain JSON-typed metadata. Dataclass

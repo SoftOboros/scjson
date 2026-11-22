@@ -4,6 +4,7 @@
  * Licensed under the BSD 1-Clause License.
  */
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
+const schema = require('../scjson.schema.json');
 const { nodeDataKey, isElementNode, modelAttrForTag } = require('./comment_promotion.js');
 
 const SCXML = 'http://www.w3.org/2005/07/scxml';
@@ -127,6 +128,17 @@ function orderedChildren(model, tag) {
 function validateModel(model, tag = 'scxml') {
   if (!model || typeof model !== 'object') return false;
   let needsProjection = false;
+  const properties = schema.$defs[tag[0].toUpperCase() + tag.slice(1)]?.properties || {};
+  if (containers.has(tag)) {
+    for (const kind of ['raise', 'if', 'else']) {
+      const key = field(kind);
+      const present = [kind, kind + 'Value', key].filter(name => Object.hasOwn(model, name));
+      if (present.length > 1) throw new Error('conflicting spellings ' + present.join(', '));
+      if (present.length && (!Object.hasOwn(properties, key) || present[0] !== key)) {
+        throw new Error(Object.hasOwn(properties, key) ? 'use ' + key + ' for ' + present[0] : kind + ' requires an if_value block');
+      }
+    }
+  }
   const structural = stateOrders.get(tag);
   for (const key of ['region_order', 'state_order']) {
     if (!Object.hasOwn(model, key)) continue;
@@ -152,11 +164,12 @@ function validateModel(model, tag = 'scxml') {
   // other_attributes and foreign content can carry arbitrary user data.
   for (const kind of [...actions, 'transition', 'state', 'parallel', 'final', 'initial', 'history',
     'onentry', 'onexit', 'invoke', 'finalize', 'elseif', 'else', 'donedata', 'datamodel', 'data', 'param']) {
+    if (!Object.hasOwn(properties, field(kind))) continue;
     for (const child of list(model[field(kind)])) {
       if (validateModel(child, kind)) needsProjection = true;
     }
   }
-  for (const content of list(model.content)) {
+  for (const content of (tag === 'content' || payloadParents.has(tag)) ? list(model.content) : []) {
     if (content && typeof content === 'object' && !content.qname && validateModel(content, tag === 'content' ? 'scxml' : 'content')) {
       needsProjection = true;
     }
