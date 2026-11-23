@@ -51,6 +51,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-014 | 🟢 | Offline vector generation consumes host time between chart steps | 2026-11-22 | EXEC-E / Python vectors |
 | ERRATA-015 | 🟢 | Installed Python models and trace comparison commands fail outside the checkout | 2026-11-22 | Python distribution / execution tools |
 | ERRATA-016 | 🟢 | The installed npm reference command can exit successfully without a trace | 2026-11-22 | JavaScript distribution / trace tools |
+| ERRATA-017 | 🟢 | Native Ruby and Rust lose authored order while the release corpus check reports success | 2026-11-23 | Conversion / CONV-I |
 
 ---
 
@@ -1065,6 +1066,33 @@ previous checkout and this package.
 | npm tarball | `8aacbc6c149e47c5fc4006d39728467f86a77ca65dcc260907c40bac7e26f56d` |
 | Installed npm and TypeScript checks in `istate-release-fixes-20261123/npm/attempt-1` | `553a7650290ee23d69e41e299d2ab384f8894628e1c321b9245bbf03abda49eb` |
 | Independent source rebuilds and nested trace readback | `7356066016586ef6fc9e3e7e994458fc41cc2cbf4523310381ba3101899b72dc` |
+
+## ERRATA-017 — Ruby and Rust converter differences escaped the release check
+
+PR #131 CI run 110 recorded 450 Ruby SCJSON differences, 133 Rust SCJSON
+differences and four unreadable Rust round trips. The latter were Alex Z tests
+147 and 148 in both the ECMAScript and Python suites. Grouping the conditional
+children by kind moved an `elseif` after `else`. The check printed differences
+but returned success, and its unordered comparison could miss swapped siblings.
+
+The native converters now capture and replay `execution_order` as specified in
+[the conversion contract](SCJSON-CONV-00-CONCEPTS.md). They preserve branch
+markers, repeated actions and foreign element positions. Ruby also replays
+`state_order` and `region_order`. The Rust reader recognizes explicitly
+namespaced SCXML children of an unqualified chart and preserves an authored
+`assign` extension ID. Existing SCJSON without order metadata remains readable.
+
+On docker-vm both native converters matched the Python reference on 460 SCJSON
+outputs and 460 re-imported XML outputs each at tutorial revision
+`a442d41ed4ba7b2fbb421699591e581ef538d55a`. The reference refused the
+461st chart, `Tests/ecma/Custom/uscxml/test-enc-UTF8.scxml`, because it places
+a transition directly under the root. It is excluded from the comparison count.
+
+The release command `python py/uber_test.py -l <language>` checks ordered
+arrays and requires fresh output in both directions. Its default comparison
+fails on a missing file, parse error, difference, failed converter, empty
+corpus or unexpected reference refusal. Regression controls cover reordered
+states, stale files, broken XML, converter failures and reference admission.
 
 ## How to add an entry
 

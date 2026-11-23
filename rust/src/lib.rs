@@ -11,6 +11,7 @@ Licensed under the BSD 1-Clause License.
 //! Library providing basic SCXML <-> scjson conversion.
 
 use serde_json::{Map, Number, Value};
+use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 use xmltree::Error as XmlWriteError;
 use xmltree::{Element, XMLNode};
@@ -144,6 +145,8 @@ pub enum ScjsonError {
     RegionOrder(&'static str),
     #[error("invalid state_order: {0}")]
     StateOrder(&'static str),
+    #[error("invalid execution_order: {0}")]
+    ExecutionOrder(&'static str),
     #[error("invalid executable key on {0}: {1}")]
     ExecutableKey(String, String),
 }
@@ -382,6 +385,7 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
             ("send", "event") => {
                 map.insert("event".into(), Value::String(v.clone()));
             }
+            ("assign", "id") => append_other_attribute(&mut map, k, v),
             (_, "xmlns") => {}
             (_, attr) if !KNOWN_SCXML_ATTRS.contains(&attr) => {
                 append_other_attribute(&mut map, k, v);
@@ -413,6 +417,7 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
 
     let mut text_items = Vec::new();
     let structural = child_order(&elem.name);
+    let executable = executable_owner(&elem.name);
     let mut child_kinds = Vec::new();
     let mut pending_comments: Vec<String> = Vec::new();
     let mut saw_non_ws_text_since_comment = false;
@@ -430,11 +435,12 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
                 }
             }
             XMLNode::Element(e) => {
-                if e.namespace == elem.namespace && SCXML_ELEMS.contains(&e.name.as_str()) {
-                    if elem.namespace.as_deref() == Some(SCXML_NS)
-                        && structural.is_some_and(|order| order.kinds.contains(&e.name.as_str()))
+                if (e.namespace == elem.namespace || e.namespace.as_deref() == Some(SCXML_NS))
+                    && SCXML_ELEMS.contains(&e.name.as_str()) {
+                    if structural.is_some_and(|order| order.kinds.contains(&e.name.as_str()))
+                        || executable && action_kind(&e.name).is_some()
                     {
-                        child_kinds.push(e.name.as_str());
+                        child_kinds.push(e.name.clone());
                     }
                     let key = match e.name.as_str() {
                         "if" => "if_value",
@@ -470,7 +476,10 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
                     }
                 } else {
                     let val = any_element_to_value(e);
-                    let field = if structural.is_some() { "other_element" } else { "content" };
+                    if executable {
+                        child_kinds.push(format!("{{{}}}{}", e.namespace.as_deref().unwrap_or(""), e.name));
+                    }
+                    let field = if structural.is_some() || executable { "other_element" } else { "content" };
                     append_child(&mut map, field, val);
                 }
             }
@@ -496,9 +505,16 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
         }
     }
 
-    if let Some(order) = structural {
-        if child_kinds.windows(2).any(|pair| pair[0] != pair[1]) {
-            map.insert(order.field.into(), Value::from(child_kinds));
+    if child_kinds.windows(2).any(|pair| pair[0] != pair[1]) {
+        let field = structural.map_or("execution_order", |order| order.field);
+        map.insert(field.into(), Value::from(child_kinds));
+    }
+    if elem.name == "if" {
+        if let Some(Value::Array(items)) = map.get_mut("elseif") {
+            if items.len() == 1 {
+                let marker = items.pop().unwrap();
+                map.insert("elseif".into(), marker);
+            }
         }
     }
     if elem.name == "scxml" {
@@ -564,6 +580,71 @@ fn child_order(owner: &str) -> Option<ChildOrder> {
 }
 
 type StateChild<'a> = (&'static str, &'a Map<String, Value>);
+
+fn executable_owner(name: &str) -> bool {
+    matches!(name, "onentry" | "onexit" | "transition" | "finalize" | "foreach" | "if")
+}
+
+fn action_kind(field: &str) -> Option<&str> {
+    match field {
+        "if" | "if_value" => Some("if"),
+        "else" | "else_value" => Some("else"),
+        "raise" | "raise_value" => Some("raise"),
+        "log" | "assign" | "foreach" | "send" | "script" | "cancel" | "elseif" => Some(field),
+        _ => None,
+    }
+}
+
+/// Resolve each marker to the next payload of that kind. Extensions are keyed by expanded name.
+fn ordered_actions<'a>(owner: &str, map: &'a Map<String, Value>)
+    -> Result<Option<Vec<(&'a str, &'a Map<String, Value>)>>, ScjsonError>
+{
+    let error = ScjsonError::ExecutionOrder;
+    let Some(order) = map.get("execution_order") else {
+        if executable_owner(owner) {
+            if owner != "if" && (map.contains_key("elseif") || map.contains_key("else_value")) {
+                return Err(error("conditional marker outside if"));
+            }
+            if map.get("else_value").and_then(Value::as_array).is_some_and(|items| items.len() > 1) {
+                return Err(error("multiple else markers"));
+            }
+        }
+        return Ok(None);
+    };
+    if !executable_owner(owner) { return Err(error("misplaced order field")); }
+    let order = order.as_array().ok_or(error("expected an array"))?;
+    let mut groups: HashMap<String, VecDeque<_>> = HashMap::new();
+    for (field, value) in map {
+        let kind = action_kind(field);
+        if kind.is_none() && field != "other_element" { continue; }
+        let items = value.as_array().map_or(std::slice::from_ref(value), Vec::as_slice);
+        for item in items {
+            let payload = item.as_object().ok_or(error("expected a child object"))?;
+            let (key, tag) = if let Some(tag) = kind {
+                (tag.to_owned(), tag)
+            } else {
+                let qname = payload.get("qname").and_then(Value::as_str)
+                    .filter(|q| !q.is_empty()).ok_or(error("extension needs a qname"))?;
+                let key = if qname.starts_with('{') { qname.into() } else { format!("{{}}{qname}") };
+                (key, qname)
+            };
+            groups.entry(key).or_default().push_back((tag, payload));
+        }
+    }
+    let mut children = Vec::with_capacity(order.len());
+    let mut saw_else = false;
+    for marker in order {
+        let kind = marker.as_str().ok_or(error("expected a child kind"))?;
+        if matches!(kind, "elseif" | "else") {
+            if owner != "if" || saw_else { return Err(error("invalid conditional marker sequence")); }
+            saw_else = kind == "else";
+        }
+        children.push(groups.get_mut(kind).and_then(VecDeque::pop_front)
+            .ok_or(error("unknown or excess child kind"))?);
+    }
+    if groups.values().any(|queue| !queue.is_empty()) { return Err(error("child omitted")); }
+    Ok(Some(children))
+}
 
 /// Consume each kind's payloads in array order, independent of JSON key order.
 fn ordered_state_children<'a>(
@@ -636,6 +717,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, Scjso
         element
     };
     let structural = child_order(name);
+    let mut actions = ordered_actions(name, map)?.map(Vec::into_iter);
     if map.contains_key("region_order") && name != "parallel" {
         return Err(ScjsonError::RegionOrder("only a parallel may specify region_order"));
     }
@@ -659,8 +741,16 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, Scjso
         }
     }
     for (k, v) in map {
-        if matches!(k.as_str(), "region_order" | "state_order") {
+        if matches!(k.as_str(), "region_order" | "state_order" | "execution_order") {
             continue;
+        }
+        if let Some(sequence) = &mut actions {
+            if action_kind(k).is_some() || k == "other_element" {
+                for (tag, payload) in sequence.take(v.as_array().map_or(1, Vec::len)) {
+                    append_element_with_help_text(&mut elem, tag, payload)?;
+                }
+                continue;
+            }
         }
         if structural.is_some_and(|order| order.kinds.contains(&k.as_str())) {
             if let (Some(ordered), Some(slots)) = (&mut sequence, v.as_array()) {
@@ -915,7 +1005,10 @@ fn remove_empty(value: &mut Value) -> bool {
             for k in keys {
                 // Keep explicit metadata (including invalid null) and every referenced
                 // region occurrence intact until the owning element validates it.
-                if matches!(k.as_str(), "region_order" | "state_order") {
+                if matches!(k.as_str(), "region_order" | "state_order" | "execution_order") {
+                    continue;
+                }
+                if map.contains_key("execution_order") && (action_kind(&k).is_some() || k == "other_element") {
                     continue;
                 }
                 if matches!(k.as_str(), "state" | "parallel" | "final")
@@ -968,10 +1061,10 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    // let mut map = element_to_map(&root); // retained for potential future mutations
     let mut map = element_to_map(&root, false);
     append_help_text(&mut map, root_comments, false);
     let mut value = Value::Object(map);
+    validate_executable_keys(&value, "scxml")?;
     collapse_whitespace(&mut value);
     if omit_empty {
         remove_empty(&mut value);
@@ -988,7 +1081,8 @@ fn validate_executable_keys(value: &Value, tag: &str) -> Result<(), ScjsonError>
         return Ok(());
     }
     let Some(obj) = value.as_object() else { return Ok(()) };
-    if matches!(tag, "onentry" | "onexit" | "finalize" | "if" | "foreach" | "transition") {
+    ordered_actions(tag, obj)?;
+    if executable_owner(tag) {
         for (raw, camel, canonical) in [
             ("raise", "raiseValue", "raise_value"),
             ("if", "ifValue", "if_value"),

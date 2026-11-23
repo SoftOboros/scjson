@@ -17,6 +17,7 @@ require 'shellwords'
 
 require_relative 'scjson/version'
 require_relative 'scjson/types'
+require_relative 'scjson/child_order'
 
 # Canonical SCXML <-> scjson conversion for the Ruby agent.
 module Scjson
@@ -102,7 +103,7 @@ module Scjson
   def json_to_xml(json_str)
     if NOKOGIRI_AVAILABLE
       data = JSON.parse(json_str)
-      remove_empty(data)
+      remove_empty(data, preserve_ordered: true)
       doc = Nokogiri::XML::Document.new
       doc.encoding = 'utf-8'
       root = build_element(doc, 'scxml', data)
@@ -295,6 +296,8 @@ module Scjson
   def element_to_hash(node, inside_source_body = false, inside_extension = false)
     map = {}
     local = local_name(node)
+    order_field, kinds = ChildOrder.spec(local)
+    order = []
     elem_in_source = inside_source_body || SOURCE_BODY_TAGS.include?(local)
     elem_in_extension = inside_extension || (!SCXML_ELEMENTS.include?(local) && local != 'scxml')
 
@@ -359,6 +362,7 @@ module Scjson
       elsif child.element?
         child_local = local_name(child)
         if scxml_element?(child)
+          order << child_local if kinds&.include?(child_local)
           key = case child_local
                 when 'if' then 'if_value'
                 when 'else' then 'else_value'
@@ -393,7 +397,10 @@ module Scjson
             append_help_text(map, pending_comments)
           end
           pending_comments = []
-          target_key = extension_element?(child) ? 'other_element' : 'content'
+          if order_field == 'execution_order'
+            order << ChildOrder.extension_kind(clark_name(child))
+          end
+          target_key = extension_element?(child) || order_field == 'execution_order' ? 'other_element' : 'content'
           append_child(map, target_key, any_element_to_hash(child))
         end
       elsif child.text?
@@ -410,6 +417,9 @@ module Scjson
       append_help_text(map, pending_comments)
     end
 
+    ChildOrder.check_markers(local, order) if order_field == 'execution_order'
+    map[order_field] = order if order.uniq.length > 1
+    map['elseif'] = map['elseif'].first if local == 'if' && map['elseif']&.length == 1
     text_items.each { |text| append_child(map, 'content', text) }
 
     if local == 'scxml'
@@ -444,21 +454,24 @@ module Scjson
 
   PRESERVE_EMPTY_KEYS = %w[expr cond event target id name label text].freeze
 
-  ALWAYS_KEEP_KEYS = %w[else_value else final onentry].freeze
+  ALWAYS_KEEP_KEYS = (%w[onentry onexit] + ChildOrder::FIELDS + ChildOrder::STRUCTURAL +
+    ChildOrder::ACTIONS.map { |kind| ChildOrder::ACTION_FIELDS.fetch(kind, kind) }).freeze
 
-  def remove_empty(value, key = nil)
+  def remove_empty(value, key = nil, preserve_ordered: false)
     case value
     when Hash
+      # Preserve the original references and payloads until the owner validates them.
+      return false if preserve_ordered && !(value.keys & ChildOrder::FIELDS).empty?
       value.keys.each do |key|
-        remove = remove_empty(value[key], key)
+        remove = remove_empty(value[key], key, preserve_ordered: preserve_ordered)
         value.delete(key) if remove
       end
       value.empty? && !ALWAYS_KEEP_KEYS.include?(key)
     when Array
-      value.reject! { |item| remove_empty(item, key) }
+      value.reject! { |item| remove_empty(item, key, preserve_ordered: preserve_ordered) }
       value.empty? && !ALWAYS_KEEP_KEYS.include?(key)
     when NilClass
-      true
+      !ChildOrder::FIELDS.include?(key)
     when String
       if value.empty?
         preserve_empty_string?(key) ? false : true
@@ -518,13 +531,20 @@ module Scjson
 
     element_name = map['qname'] || name
     attrs = map['attributes'].is_a?(Hash) ? map['attributes'].dup : {}
-    if element_name == XINCLUDE_CLARK_INCLUDE
-      element_name = 'xi:include'
-      attrs['xmlns:xi'] ||= XINCLUDE_NS
+    namespace = nil
+    if map.key?('qname') && (match = /\A\{([^}]*)\}(.+)\z/.match(element_name))
+      namespace, element_name = match.captures
     end
     element = Nokogiri::XML::Element.new(element_name, doc)
 
-    if name == 'scxml'
+    if map.key?('qname')
+      prefix = 'xi' if namespace == XINCLUDE_NS
+      if namespace && !namespace.empty?
+        element.namespace = element.add_namespace_definition(prefix, namespace)
+      else
+        element['xmlns'] = ''
+      end
+    elsif name == 'scxml'
       element['xmlns'] ||= XMLNS
     elsif !element_name.include?(':') && !SCXML_ELEMENTS.include?(element_name)
       element['xmlns'] ||= ''
@@ -538,8 +558,14 @@ module Scjson
       element[attr_name] = attr_value if attr_value
     end
 
+    ordered = map.key?('qname') ? {} : ChildOrder.slots(name, map)
     map.each do |key, value|
       next if %w[qname text attributes help_text].include?(key)
+      next if ChildOrder::FIELDS.include?(key)
+      if ordered.key?(key)
+        ordered[key].each { |kind, child| add_child_element(doc, element, kind, child) }
+        next
+      end
 
       case key
       when 'content'

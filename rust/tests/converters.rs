@@ -11,6 +11,31 @@ use xmltree::{Element, XMLNode};
 const SCXML_NS: &str = "http://www.w3.org/2005/07/scxml";
 
 #[test]
+fn mixed_executable_order_retains_branch_markers_and_extensions() {
+    let xml = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:x="urn:example">
+        <state><onentry><if cond="a"><log label="a"/><elseif cond="b"/><x:note/>
+        <else/><log label="b"/></if></onentry></state></scxml>"#;
+    let wire: Value = serde_json::from_str(&xml_to_json(xml, true).unwrap()).unwrap();
+    let branch = &wire["state"][0]["onentry"][0]["if_value"][0];
+    assert_eq!(branch["execution_order"], serde_json::json!(["log","elseif","{urn:example}note","else","log"]));
+    assert_eq!(branch["elseif"], serde_json::json!({"cond": "b"}));
+    assert_eq!(round_trip(xml), wire);
+}
+
+#[test]
+fn invalid_execution_order_and_misplaced_markers_are_refused() {
+    use serde_json::json;
+    for order in [Value::Null, json!([]), json!(["unknown"]), json!(["log","log"])] {
+        let wire = json!({"state":[{"onentry":[{"log":[{}],"execution_order":order}]}]});
+        assert!(json_to_xml(&wire.to_string()).is_err());
+    }
+    for body in ["<else/>", "<if cond='a'><else/><elseif cond='b'/></if>"] {
+        let xml = format!("<scxml><state><onentry>{body}</onentry></state></scxml>");
+        assert!(xml_to_json(&xml, true).is_err());
+    }
+}
+
+#[test]
 fn document_and_compound_state_keep_their_own_child_order() {
     let xml = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="owner">
         <final/><state id="owner"><initial><transition target="p"/></initial>
