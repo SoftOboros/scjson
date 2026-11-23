@@ -59,7 +59,8 @@ def _splash() -> None:
 @click.pass_context
 def main(ctx):
     """Command line interface for scjson conversions."""
-    _splash()
+    if ctx.invoked_subcommand != "engine-trace":
+        _splash()
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 

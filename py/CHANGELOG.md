@@ -11,6 +11,7 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 - Require Python 3.10 or later and install the Pydantic v2 model adapter.
   The installed sweep can generate vectors and compare traces outside the
   checkout. Reference failures and missing or empty traces surface as errors.
+  Piping `scjson engine-trace` to a JSONL reader yields one record per line.
 - Refuse misspelled or colliding executable keys on modeled SCJSON owners
   before conversion or execution. Preserve keys inside extension payloads.
 - Generate offline timer vectors against a logical clock. Elapsed host time
