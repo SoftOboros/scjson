@@ -13,9 +13,6 @@ tests/exec/membership.scxml py-ref
 # Step-0 configuration differences: immediate child completion collapse
 tests/exec/parallel_history_invoke.scxml py-ref
 
-# History reentry target differences (Python vs SCION)
-tests/exec/history_reentry.scxml py-ref
-
 # Parallel final collapse at step-0 (SCION) vs leaf retention (Python)
 tests/exec/conflict_parallel.scxml py-ref
 

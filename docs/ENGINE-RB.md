@@ -111,7 +111,7 @@ Documentation coverage
 ## Troubleshooting
 
 - Known differences in CI runs
-  - Some charts have intentional, documented differences between engines (e.g., ECMA `in` semantics, history reentry nuances). Use the known‑diffs list to keep CI green while still reporting these cases:
+  - The harness reports documented differences such as ECMAScript `in` semantics. The history reentry fixture requires Python, SCION, and Ruby to return to the remembered child after a single `flip`.
     - File: `scripts/ci_ruby_known_diffs.txt`
     - Harness: `bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt --known scripts/ci_ruby_known_diffs.txt`
 

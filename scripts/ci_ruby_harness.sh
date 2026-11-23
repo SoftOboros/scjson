@@ -7,6 +7,9 @@
 
 set -uo pipefail
 
+# Trace subprocesses must load the same checkout as the comparison driver.
+export PYTHONPATH="$PWD/py${PYTHONPATH:+:$PYTHONPATH}"
+
 # Reference (SCION) and secondary (Ruby) commands can be overridden via env
 REF_CMD=${REF_CMD:-"node tools/scion-runner/scion-trace.cjs"}
 # Ensure secondary (Ruby) uses comparable normalization flags

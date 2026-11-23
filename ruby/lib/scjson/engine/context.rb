@@ -212,31 +212,29 @@ module Scjson
           rescue StandardError
             # ignore autoforward errors
           end
-          loop do
-            tx_set = select_transitions_for_event(ev_name)
-            break if tx_set.empty?
-            e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: ev_name)
-            entered.concat(e1)
-            exited.concat(x1)
-            fired.concat(f1)
-            action_log.concat(a1)
-            datamodel_delta.merge!(d1)
-            # After a set, enqueue done.state events if any states completed
+          # Consume this event once across the enabled regions before stabilizing.
+          tx_set = select_transitions_for_event(ev_name)
+          next if tx_set.empty?
+
+          e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: ev_name)
+          entered.concat(e1)
+          exited.concat(x1)
+          fired.concat(f1)
+          action_log.concat(a1)
+          datamodel_delta.merge!(d1)
+          enqueue_done_events
+          flush_pending_done_invoke
+          0.upto(100) do
+            tx0 = select_transitions_for_event(nil)
+            break if tx0.empty?
+            e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
+            entered.concat(e2)
+            exited.concat(x2)
+            fired.concat(f2)
+            action_log.concat(a2)
+            datamodel_delta.merge!(d2)
             enqueue_done_events
             flush_pending_done_invoke
-            # After a set, process eventless transitions to quiescence
-            0.upto(100) do
-              tx0 = select_transitions_for_event(nil)
-              break if tx0.empty?
-              e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
-              entered.concat(e2)
-              exited.concat(x2)
-              fired.concat(f2)
-              action_log.concat(a2)
-              datamodel_delta.merge!(d2)
-              enqueue_done_events
-              flush_pending_done_invoke
-            end
           end
         end
 
@@ -524,7 +522,6 @@ module Scjson
           chosen_lca = choose_shallowest_ancestor(lcas)
           exit_chain = path_up_exclusive(source_id, chosen_lca)
           exit_set.concat(exit_chain)
-          seq = []
           targets.each do |tid|
             if @tag_type[tid] == :history
               parent_id = @parent[tid]
@@ -541,13 +538,12 @@ module Scjson
                 end
               end
               remembered.each do |rid|
-                seq.concat(path_down_from_lca(chosen_lca, rid))
+                entry_sequences << path_down_from_lca(chosen_lca, rid)
               end
             else
-              seq.concat(path_down_from_lca(chosen_lca, tid))
+              entry_sequences << path_down_from_lca(chosen_lca, tid)
             end
           end
-          entry_sequences << seq
           fired << { 'source' => source_id, 'targets' => targets, 'event' => cause, 'cond' => nil }
         end
 
@@ -579,33 +575,21 @@ module Scjson
         entered_leaves = []
         entry_sequences.each do |seq|
           seq.each do |sid|
+            next if entered.include?(sid)
             a, d = run_onentry(sid)
             actions.concat(a)
             delta.merge!(d)
             entered << sid
           end
-          # Expand descendants when last target is a non-history composite
+          # Only the destination takes its default entry. Its ancestors already
+          # have an explicit path to the target or remembered history state.
           target_id = seq.last
-          if target_id && @tag_type[target_id] != :history
-            leaves, bundle = enter_descendants(target_id)
-            entered.concat(bundle[:entered])
-            actions.concat(bundle[:actions])
-            delta.merge!(bundle[:delta])
-            entered_leaves.concat(leaves)
-          else
-            # If history (deep): remembered leaves were appended as part of seq; if shallow: enter_descendants handled per remembered child in seq
-            # For shallow we should expand each remembered child; this happens implicitly since seq contains those child ids
-            # and we will expand below by calling enter_descendants on each non-history id in the sequence
-          end
-          # Expand descendants for any non-history ids in the sequence (covers shallow history children)
-          seq.each do |sid|
-            next if @tag_type[sid] == :history
-            leaves, bundle = enter_descendants(sid)
-            entered.concat(bundle[:entered])
-            actions.concat(bundle[:actions])
-            delta.merge!(bundle[:delta])
-            entered_leaves.concat(leaves)
-          end
+          next unless target_id
+          leaves, bundle = enter_descendants(target_id)
+          entered.concat(bundle[:entered])
+          actions.concat(bundle[:actions])
+          delta.merge!(bundle[:delta])
+          entered_leaves.concat(leaves)
         end
 
         # Merge entered leaves into configuration
