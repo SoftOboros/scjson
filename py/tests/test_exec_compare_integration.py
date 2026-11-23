@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scjson_argv import format_command
+
 
 def _write_chart(tmp: Path, name: str, xml: str) -> Path:
     p = tmp / name
@@ -36,7 +38,7 @@ def test_exec_compare_generates_vectors_and_prints_coverage(tmp_path: Path) -> N
     workdir = tmp_path / "artifacts"
     env = dict(os.environ)
     env["PYTHONPATH"] = str(root)
-    reference = f"{sys.executable} -m scjson.cli engine-trace"
+    reference = format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
     cmd = [
         sys.executable,
         str(root / "exec_compare.py"),
@@ -68,7 +70,7 @@ def test_exec_compare_uses_existing_events_no_generation(tmp_path: Path) -> None
     events.write_text("", encoding="utf-8")
     env = dict(os.environ)
     env["PYTHONPATH"] = str(root)
-    reference = f"{sys.executable} -m scjson.cli engine-trace"
+    reference = format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])
     cmd = [
         sys.executable,
         str(root / "exec_compare.py"),

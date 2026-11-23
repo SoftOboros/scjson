@@ -6,9 +6,9 @@ single version stream.
 
 | Language | Path                  | Latest version  | Per-package log |
 |----------|-----------------------|-----------------|------------------|
-| Python   | `py/`                 | 0.4.2           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
+| Python   | `py/`                 | 0.4.3           | [`py/CHANGELOG.md`](py/CHANGELOG.md) |
 | Ruby     | `ruby/`               | 0.4.1           | (in `git log`)   |
-| JS       | `js/`                 | 0.4.1           | (in `git log`)   |
+| JS       | `js/`                 | 0.4.3 candidate | (in `git log`)   |
 | Rust     | `rust/`               | 0.4.1           | (in `git log`)   |
 | Java     | `java/`               | 0.4.1           | (in `git log`)   |
 | Swift    | `swift/`              | (see swift)     | [`swift/CHANGELOG.md`](swift/CHANGELOG.md) |
@@ -17,6 +17,41 @@ single version stream.
 | C#       | `csharp/`             | (csproj)        | (in `git log`)   |
 
 ## Cross-language entries
+
+### 2026-11-23 — Release package corrections on v0.4.3
+
+The Python distribution installs its model adapter and comparison tools.
+The npm trace command uses the packaged SCION runner, and browser consumers
+receive declarations for both module formats.
+
+### 2026-11-22 — Executable keys and vector time (ERRATA-013 and ERRATA-014)
+
+The Python, JavaScript, Rust, and Swift readers reject ambiguous executable
+keys before conversion. Python offline vector generation advances a logical
+clock so host scheduling does not change the event stream.
+
+### 2026-11-21 — Implicit startup targets on v0.4.3 (ERRATA-012)
+
+Python, JavaScript, and native Rust preserve the order of `state`,
+`parallel`, and `final` children of a document or compound state.
+XML order chooses the default initial child. SCJSON records that order
+in `state_order` and keeps older files readable. An explicit initial
+target still wins.
+
+### 2026-11-21 — Mixed parallel regions on v0.4.3 (ERRATA-011)
+
+Python, JavaScript, and native Rust preserve the authored order of sibling
+`state` and `parallel` regions when converting between XML and SCJSON.
+The optional `region_order` list distinguishes charts whose grouped arrays
+are identical. Python execution and generated Rust honor the same order.
+Existing SCJSON without the field loads with `state` regions first.
+
+### 2026-11-21 — Executable order and mixed content on v0.4.3
+
+The Python and JavaScript converters preserve the order of executable children
+in SCJSON with an optional `execution_order` list. Existing grouped documents
+still load. Both converters preserve literal and structured event payloads,
+and the TypeScript package exposes the updated model types.
 
 ### 2026-06-20 — Python 0.4.2 (constrained-ECMAScript execution + M1 IR; Python-only)
 

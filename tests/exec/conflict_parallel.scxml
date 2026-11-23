@@ -9,15 +9,15 @@ Licensed under the BSD 1-Clause License.
 <scxml xmlns="http://www.w3.org/2005/07/scxml">
   <parallel id="P">
     <state id="L">
-      <transition event="tick" target="LF"/>
+      <state id="LReady"><transition event="tick" target="LF"/></state>
       <final id="LF"/>
     </state>
     <state id="R">
-      <transition event="tick" target="RF"/>
+      <state id="RReady"><transition event="tick" target="RF"/></state>
       <final id="RF"/>
     </state>
+    <transition event="done.state.P" target="done"/>
   </parallel>
   <final id="done"/>
-  <transition event="done.state.P" target="done"/>
 </scxml>
 

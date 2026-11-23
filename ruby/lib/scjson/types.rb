@@ -11,7 +11,7 @@ require 'json'
 # Canonical Ruby representations of the scjson schema.
 module Scjson
   module Types
-    # The assign type that allows for precise manipulation of the datamodel     location.      Types are:     replacechildren (default),     firstchild, lastchild,     previoussibling, nextsibling,     replace, delete,     addattribute
+    # The assign type that allows for precise manipulation of the datamodel location.  Types are: replacechildren (default), firstchild, lastchild, previoussibling, nextsibling, replace, delete, addattribute
     module AssignTypeDatatypeProps
       REPLACECHILDREN = 'replacechildren'.freeze
       FIRSTCHILD = 'firstchild'.freeze
@@ -119,7 +119,7 @@ module Scjson
       end
     end
 
-    # Describes the processor execution mode for this document, being either "lax" or     "strict".
+    # Describes the processor execution mode for this document, being either "lax" or "strict".
     module ExmodeDatatypeProps
       LAX = 'lax'.freeze
       STRICT = 'strict'.freeze
@@ -224,7 +224,7 @@ module Scjson
 
     # update a datamodel location with an expression or value.
     class AssignProps
-      attr_accessor :location, :expr, :type_value, :attr, :other_attributes, :content
+      attr_accessor :location, :expr, :type_value, :attr, :other_attributes, :help_text, :content
       # Instantiate a new AssignProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -233,6 +233,7 @@ module Scjson
         @type_value = kwargs.fetch(:type_value, AssignTypeDatatypeProps::REPLACECHILDREN)
         @attr = kwargs.fetch(:attr, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
         @content = kwargs.fetch(:content, [])
       end
 
@@ -249,6 +250,7 @@ module Scjson
         kwargs[:type_value] = AssignTypeDatatypeProps.coerce(normalized.fetch('type_value', AssignTypeDatatypeProps::REPLACECHILDREN))
         kwargs[:attr] = normalized.fetch('attr', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         kwargs[:content] = Array(normalized.fetch('content', []))
         new(**kwargs)
       end
@@ -270,6 +272,7 @@ module Scjson
           'type_value' => @type_value,
           'attr' => @attr,
           'other_attributes' => @other_attributes,
+          'help_text' => @help_text,
           'content' => @content
         }
       end
@@ -287,7 +290,7 @@ module Scjson
 
     # cancel a pending `<send>` operation.
     class CancelProps
-      attr_accessor :other_element, :sendid, :sendidexpr, :other_attributes
+      attr_accessor :other_element, :sendid, :sendidexpr, :other_attributes, :help_text
       # Instantiate a new CancelProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -295,6 +298,7 @@ module Scjson
         @sendid = kwargs.fetch(:sendid, nil)
         @sendidexpr = kwargs.fetch(:sendidexpr, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -309,6 +313,7 @@ module Scjson
         kwargs[:sendid] = normalized.fetch('sendid', nil)
         kwargs[:sendidexpr] = normalized.fetch('sendidexpr', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -327,7 +332,8 @@ module Scjson
           'other_element' => @other_element,
           'sendid' => @sendid,
           'sendidexpr' => @sendidexpr,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -344,13 +350,14 @@ module Scjson
 
     # Structured type for scjson elements.
     class ContentProps
-      attr_accessor :content, :expr, :other_attributes
+      attr_accessor :content, :expr, :other_attributes, :help_text
       # Instantiate a new ContentProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @content = kwargs.fetch(:content, nil)
         @expr = kwargs.fetch(:expr, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -363,10 +370,11 @@ module Scjson
         kwargs = {}
         kwargs[:content] = begin
           value = normalized.fetch('content', nil)
-          value.nil? ? nil : Array(value).map { |item| ScxmlProps.from_hash(item) }
+          value.nil? ? nil : Array(value)
         end
         kwargs[:expr] = normalized.fetch('expr', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -382,9 +390,10 @@ module Scjson
       # @return [Hash]
       def to_hash
         {
-          'content' => (@content || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
+          'content' => @content,
           'expr' => @expr,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -401,7 +410,7 @@ module Scjson
 
     # represents a single datamodel variable.
     class DataProps
-      attr_accessor :id, :src, :expr, :other_attributes, :content
+      attr_accessor :id, :src, :expr, :other_attributes, :help_text, :content
       # Instantiate a new DataProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -409,6 +418,7 @@ module Scjson
         @src = kwargs.fetch(:src, nil)
         @expr = kwargs.fetch(:expr, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
         @content = kwargs.fetch(:content, [])
       end
 
@@ -424,6 +434,7 @@ module Scjson
         kwargs[:src] = normalized.fetch('src', nil)
         kwargs[:expr] = normalized.fetch('expr', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         kwargs[:content] = Array(normalized.fetch('content', []))
         new(**kwargs)
       end
@@ -444,6 +455,7 @@ module Scjson
           'src' => @src,
           'expr' => @expr,
           'other_attributes' => @other_attributes,
+          'help_text' => @help_text,
           'content' => @content
         }
       end
@@ -461,13 +473,14 @@ module Scjson
 
     # container for one or more `<data>` elements.
     class DatamodelProps
-      attr_accessor :data, :other_element, :other_attributes
+      attr_accessor :data, :other_element, :other_attributes, :help_text
       # Instantiate a new DatamodelProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @data = kwargs.fetch(:data, [])
         @other_element = kwargs.fetch(:other_element, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -481,6 +494,7 @@ module Scjson
         kwargs[:data] = Array(normalized.fetch('data', [])).map { |item| DataProps.from_hash(item) }
         kwargs[:other_element] = Array(normalized.fetch('other_element', []))
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -498,7 +512,8 @@ module Scjson
         {
           'data' => (@data || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'other_element' => @other_element,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -515,13 +530,14 @@ module Scjson
 
     # Structured type for scjson elements.
     class DonedataProps
-      attr_accessor :content, :param, :other_attributes
+      attr_accessor :content, :param, :other_attributes, :help_text
       # Instantiate a new DonedataProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @content = kwargs.fetch(:content, nil)
         @param = kwargs.fetch(:param, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -535,6 +551,7 @@ module Scjson
         kwargs[:content] = normalized.key?('content') && normalized['content'] ? ContentProps.from_hash(normalized['content']) : nil
         kwargs[:param] = Array(normalized.fetch('param', [])).map { |item| ParamProps.from_hash(item) }
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -552,7 +569,8 @@ module Scjson
         {
           'content' => @content&.to_hash,
           'param' => (@param || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -569,11 +587,12 @@ module Scjson
 
     # fallback branch for `<if>` conditions.
     class ElseProps
-      attr_accessor :other_attributes
+      attr_accessor :other_attributes, :help_text
       # Instantiate a new ElseProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -585,6 +604,7 @@ module Scjson
         normalized = data.transform_keys(&:to_s)
         kwargs = {}
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -600,7 +620,8 @@ module Scjson
       # @return [Hash]
       def to_hash
         {
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -614,12 +635,13 @@ module Scjson
 
     # conditional branch following an `<if>`.
     class ElseifProps
-      attr_accessor :cond, :other_attributes
+      attr_accessor :cond, :other_attributes, :help_text
       # Instantiate a new ElseifProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @cond = kwargs.fetch(:cond, '')
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -632,6 +654,7 @@ module Scjson
         kwargs = {}
         kwargs[:cond] = normalized.fetch('cond', '')
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -648,7 +671,8 @@ module Scjson
       def to_hash
         {
           'cond' => @cond,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -662,7 +686,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class FinalProps
-      attr_accessor :onentry, :onexit, :donedata, :other_element, :id, :other_attributes
+      attr_accessor :onentry, :onexit, :donedata, :other_element, :id, :other_attributes, :help_text
       # Instantiate a new FinalProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -672,6 +696,7 @@ module Scjson
         @other_element = kwargs.fetch(:other_element, [])
         @id = kwargs.fetch(:id, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -688,6 +713,7 @@ module Scjson
         kwargs[:other_element] = Array(normalized.fetch('other_element', []))
         kwargs[:id] = normalized.fetch('id', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -708,7 +734,8 @@ module Scjson
           'donedata' => (@donedata || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'other_element' => @other_element,
           'id' => @id,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -725,7 +752,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class FinalizeProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes, :help_text, :execution_order
       # Instantiate a new FinalizeProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -739,6 +766,8 @@ module Scjson
         @log = kwargs.fetch(:log, [])
         @cancel = kwargs.fetch(:cancel, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -759,6 +788,8 @@ module Scjson
         kwargs[:log] = Array(normalized.fetch('log', [])).map { |item| LogProps.from_hash(item) }
         kwargs[:cancel] = Array(normalized.fetch('cancel', [])).map { |item| CancelProps.from_hash(item) }
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -783,8 +814,9 @@ module Scjson
           'assign' => (@assign || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'log' => (@log || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'cancel' => (@cancel || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -800,7 +832,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class ForeachProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :array, :item, :index, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :array, :item, :index, :other_attributes, :help_text, :execution_order
       # Instantiate a new ForeachProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -817,6 +849,8 @@ module Scjson
         @item = kwargs.fetch(:item, '')
         @index = kwargs.fetch(:index, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -840,6 +874,8 @@ module Scjson
         kwargs[:item] = normalized.fetch('item', '')
         kwargs[:index] = normalized.fetch('index', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -867,8 +903,9 @@ module Scjson
           'array' => @array,
           'item' => @item,
           'index' => @index,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -884,7 +921,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class HistoryProps
-      attr_accessor :other_element, :transition, :id, :type_value, :other_attributes
+      attr_accessor :other_element, :transition, :id, :type_value, :other_attributes, :help_text
       # Instantiate a new HistoryProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -893,6 +930,7 @@ module Scjson
         @id = kwargs.fetch(:id, nil)
         @type_value = kwargs.fetch(:type_value, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -908,6 +946,7 @@ module Scjson
         kwargs[:id] = normalized.fetch('id', nil)
         kwargs[:type_value] = normalized.key?('type_value') ? HistoryTypeDatatypeProps.coerce(normalized['type_value'], allow_nil: true) : nil
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -927,7 +966,8 @@ module Scjson
           'transition' => @transition&.to_hash,
           'id' => @id,
           'type_value' => @type_value,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -944,7 +984,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class IfProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :elseif, :else_value, :cond, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :elseif, :else_value, :cond, :other_attributes, :help_text, :execution_order
       # Instantiate a new IfProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -961,6 +1001,8 @@ module Scjson
         @else_value = kwargs.fetch(:else_value, nil)
         @cond = kwargs.fetch(:cond, '')
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -980,10 +1022,12 @@ module Scjson
         kwargs[:assign] = Array(normalized.fetch('assign', [])).map { |item| AssignProps.from_hash(item) }
         kwargs[:log] = Array(normalized.fetch('log', [])).map { |item| LogProps.from_hash(item) }
         kwargs[:cancel] = Array(normalized.fetch('cancel', [])).map { |item| CancelProps.from_hash(item) }
-        kwargs[:elseif] = normalized.key?('elseif') && normalized['elseif'] ? ElseifProps.from_hash(normalized['elseif']) : nil
+        kwargs[:elseif] = normalized.fetch('elseif', nil)
         kwargs[:else_value] = normalized.key?('else_value') && normalized['else_value'] ? ElseProps.from_hash(normalized['else_value']) : nil
         kwargs[:cond] = normalized.fetch('cond', '')
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -1008,11 +1052,12 @@ module Scjson
           'assign' => (@assign || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'log' => (@log || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'cancel' => (@cancel || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
-          'elseif' => @elseif&.to_hash,
+          'elseif' => @elseif,
           'else_value' => @else_value&.to_hash,
           'cond' => @cond,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1028,13 +1073,14 @@ module Scjson
 
     # Structured type for scjson elements.
     class InitialProps
-      attr_accessor :other_element, :transition, :other_attributes
+      attr_accessor :other_element, :transition, :other_attributes, :help_text
       # Instantiate a new InitialProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @other_element = kwargs.fetch(:other_element, [])
         @transition = kwargs.fetch(:transition, TransitionProps.new)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1048,6 +1094,7 @@ module Scjson
         kwargs[:other_element] = Array(normalized.fetch('other_element', []))
         kwargs[:transition] = normalized.key?('transition') && normalized['transition'] ? TransitionProps.from_hash(normalized['transition']) : TransitionProps.new
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1065,7 +1112,8 @@ module Scjson
         {
           'other_element' => @other_element,
           'transition' => @transition&.to_hash,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1082,7 +1130,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class InvokeProps
-      attr_accessor :content, :param, :finalize, :other_element, :type_value, :typeexpr, :src, :srcexpr, :id, :idlocation, :namelist, :autoforward, :other_attributes
+      attr_accessor :content, :param, :finalize, :other_element, :type_value, :typeexpr, :src, :srcexpr, :id, :idlocation, :namelist, :autoforward, :other_attributes, :help_text
       # Instantiate a new InvokeProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1099,6 +1147,7 @@ module Scjson
         @namelist = kwargs.fetch(:namelist, nil)
         @autoforward = kwargs.fetch(:autoforward, BooleanDatatypeProps::FALSE)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1122,6 +1171,7 @@ module Scjson
         kwargs[:namelist] = normalized.fetch('namelist', nil)
         kwargs[:autoforward] = BooleanDatatypeProps.coerce(normalized.fetch('autoforward', BooleanDatatypeProps::FALSE))
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1149,7 +1199,8 @@ module Scjson
           'idlocation' => @idlocation,
           'namelist' => @namelist,
           'autoforward' => @autoforward,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1166,7 +1217,7 @@ module Scjson
 
     # diagnostic output statement.
     class LogProps
-      attr_accessor :other_element, :label, :expr, :other_attributes
+      attr_accessor :other_element, :label, :expr, :other_attributes, :help_text
       # Instantiate a new LogProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1174,6 +1225,7 @@ module Scjson
         @label = kwargs.fetch(:label, nil)
         @expr = kwargs.fetch(:expr, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1188,6 +1240,7 @@ module Scjson
         kwargs[:label] = normalized.fetch('label', nil)
         kwargs[:expr] = normalized.fetch('expr', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1206,7 +1259,8 @@ module Scjson
           'other_element' => @other_element,
           'label' => @label,
           'expr' => @expr,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1223,7 +1277,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class OnentryProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes, :help_text, :execution_order
       # Instantiate a new OnentryProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1237,6 +1291,8 @@ module Scjson
         @log = kwargs.fetch(:log, [])
         @cancel = kwargs.fetch(:cancel, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1257,6 +1313,8 @@ module Scjson
         kwargs[:log] = Array(normalized.fetch('log', [])).map { |item| LogProps.from_hash(item) }
         kwargs[:cancel] = Array(normalized.fetch('cancel', [])).map { |item| CancelProps.from_hash(item) }
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -1281,8 +1339,9 @@ module Scjson
           'assign' => (@assign || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'log' => (@log || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'cancel' => (@cancel || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1298,7 +1357,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class OnexitProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :other_attributes, :help_text, :execution_order
       # Instantiate a new OnexitProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1312,6 +1371,8 @@ module Scjson
         @log = kwargs.fetch(:log, [])
         @cancel = kwargs.fetch(:cancel, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1332,6 +1393,8 @@ module Scjson
         kwargs[:log] = Array(normalized.fetch('log', [])).map { |item| LogProps.from_hash(item) }
         kwargs[:cancel] = Array(normalized.fetch('cancel', [])).map { |item| CancelProps.from_hash(item) }
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -1356,8 +1419,9 @@ module Scjson
           'assign' => (@assign || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'log' => (@log || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'cancel' => (@cancel || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1373,7 +1437,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class ParallelProps
-      attr_accessor :onentry, :onexit, :transition, :state, :parallel, :history, :datamodel, :invoke, :other_element, :id, :other_attributes
+      attr_accessor :onentry, :onexit, :transition, :state, :parallel, :history, :datamodel, :invoke, :other_element, :id, :other_attributes, :help_text, :region_order
       # Instantiate a new ParallelProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1388,6 +1452,8 @@ module Scjson
         @other_element = kwargs.fetch(:other_element, [])
         @id = kwargs.fetch(:id, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @region_order = kwargs.fetch(:region_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1409,6 +1475,8 @@ module Scjson
         kwargs[:other_element] = Array(normalized.fetch('other_element', []))
         kwargs[:id] = normalized.fetch('id', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:region_order] = normalized['region_order']
         new(**kwargs)
       end
 
@@ -1434,8 +1502,9 @@ module Scjson
           'invoke' => (@invoke || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
           'other_element' => @other_element,
           'id' => @id,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['region_order'] = @region_order unless @region_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1451,7 +1520,7 @@ module Scjson
 
     # parameter passed to `<invoke>` or `<send>`.
     class ParamProps
-      attr_accessor :other_element, :name, :expr, :location, :other_attributes
+      attr_accessor :other_element, :name, :expr, :location, :other_attributes, :help_text
       # Instantiate a new ParamProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1460,6 +1529,7 @@ module Scjson
         @expr = kwargs.fetch(:expr, nil)
         @location = kwargs.fetch(:location, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1475,6 +1545,7 @@ module Scjson
         kwargs[:expr] = normalized.fetch('expr', nil)
         kwargs[:location] = normalized.fetch('location', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1494,7 +1565,8 @@ module Scjson
           'name' => @name,
           'expr' => @expr,
           'location' => @location,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1511,12 +1583,13 @@ module Scjson
 
     # raise an internal event.
     class RaiseProps
-      attr_accessor :event, :other_attributes
+      attr_accessor :event, :other_attributes, :help_text
       # Instantiate a new RaiseProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @event = kwargs.fetch(:event, '')
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1529,6 +1602,7 @@ module Scjson
         kwargs = {}
         kwargs[:event] = normalized.fetch('event', '')
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1545,7 +1619,8 @@ module Scjson
       def to_hash
         {
           'event' => @event,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1562,12 +1637,13 @@ module Scjson
 
     # inline executable script.
     class ScriptProps
-      attr_accessor :src, :other_attributes, :content
+      attr_accessor :src, :other_attributes, :help_text, :content
       # Instantiate a new ScriptProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
         @src = kwargs.fetch(:src, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
         @content = kwargs.fetch(:content, [])
       end
 
@@ -1581,6 +1657,7 @@ module Scjson
         kwargs = {}
         kwargs[:src] = normalized.fetch('src', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         kwargs[:content] = Array(normalized.fetch('content', []))
         new(**kwargs)
       end
@@ -1599,6 +1676,7 @@ module Scjson
         {
           'src' => @src,
           'other_attributes' => @other_attributes,
+          'help_text' => @help_text,
           'content' => @content
         }
       end
@@ -1616,7 +1694,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class ScxmlProps
-      attr_accessor :state, :parallel, :final, :datamodel, :script, :other_element, :initial, :name, :version, :datamodel_attribute, :binding, :exmode, :other_attributes
+      attr_accessor :state, :parallel, :final, :datamodel, :script, :other_element, :initial, :name, :version, :datamodel_attribute, :binding, :exmode, :other_attributes, :help_text, :state_order
       # Instantiate a new ScxmlProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1633,6 +1711,8 @@ module Scjson
         @binding = kwargs.fetch(:binding, nil)
         @exmode = kwargs.fetch(:exmode, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @state_order = kwargs.fetch(:state_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1656,6 +1736,8 @@ module Scjson
         kwargs[:binding] = normalized.key?('binding') ? BindingDatatypeProps.coerce(normalized['binding'], allow_nil: true) : nil
         kwargs[:exmode] = normalized.key?('exmode') ? ExmodeDatatypeProps.coerce(normalized['exmode'], allow_nil: true) : nil
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:state_order] = normalized['state_order']
         new(**kwargs)
       end
 
@@ -1683,8 +1765,9 @@ module Scjson
           'datamodel_attribute' => @datamodel_attribute,
           'binding' => @binding,
           'exmode' => @exmode,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['state_order'] = @state_order unless @state_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1697,7 +1780,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class SendProps
-      attr_accessor :content, :param, :other_element, :event, :eventexpr, :target, :targetexpr, :type_value, :typeexpr, :id, :idlocation, :delay, :delayexpr, :namelist, :other_attributes
+      attr_accessor :content, :param, :other_element, :event, :eventexpr, :target, :targetexpr, :type_value, :typeexpr, :id, :idlocation, :delay, :delayexpr, :namelist, :other_attributes, :help_text
       # Instantiate a new SendProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1716,6 +1799,7 @@ module Scjson
         @delayexpr = kwargs.fetch(:delayexpr, nil)
         @namelist = kwargs.fetch(:namelist, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
       end
 
       # Build an instance from a Hash representation.
@@ -1741,6 +1825,7 @@ module Scjson
         kwargs[:delayexpr] = normalized.fetch('delayexpr', nil)
         kwargs[:namelist] = normalized.fetch('namelist', nil)
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
         new(**kwargs)
       end
 
@@ -1770,7 +1855,8 @@ module Scjson
           'delay' => @delay,
           'delayexpr' => @delayexpr,
           'namelist' => @namelist,
-          'other_attributes' => @other_attributes
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
         }
       end
 
@@ -1787,7 +1873,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class StateProps
-      attr_accessor :onentry, :onexit, :transition, :initial, :state, :parallel, :final, :history, :datamodel, :invoke, :other_element, :id, :initial_attribute, :other_attributes
+      attr_accessor :onentry, :onexit, :transition, :initial, :state, :parallel, :final, :history, :datamodel, :invoke, :other_element, :id, :initial_attribute, :other_attributes, :help_text, :state_order
       # Instantiate a new StateProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1805,6 +1891,8 @@ module Scjson
         @id = kwargs.fetch(:id, nil)
         @initial_attribute = kwargs.fetch(:initial_attribute, [])
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @state_order = kwargs.fetch(:state_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1829,6 +1917,8 @@ module Scjson
         kwargs[:id] = normalized.fetch('id', nil)
         kwargs[:initial_attribute] = Array(normalized.fetch('initial_attribute', []))
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:state_order] = normalized['state_order']
         new(**kwargs)
       end
 
@@ -1857,8 +1947,9 @@ module Scjson
           'other_element' => @other_element,
           'id' => @id,
           'initial_attribute' => @initial_attribute,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['state_order'] = @state_order unless @state_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1874,7 +1965,7 @@ module Scjson
 
     # Structured type for scjson elements.
     class TransitionProps
-      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :event, :cond, :target, :type_value, :other_attributes
+      attr_accessor :other_element, :raise_value, :if_value, :foreach, :send, :script, :assign, :log, :cancel, :event, :cond, :target, :type_value, :other_attributes, :help_text, :execution_order
       # Instantiate a new TransitionProps object.
       # @param kwargs [Hash] Optional keyword overrides.
       def initialize(**kwargs)
@@ -1892,6 +1983,8 @@ module Scjson
         @target = kwargs.fetch(:target, [])
         @type_value = kwargs.fetch(:type_value, nil)
         @other_attributes = kwargs.fetch(:other_attributes, {})
+        @help_text = kwargs.fetch(:help_text, [])
+        @execution_order = kwargs.fetch(:execution_order, nil)
       end
 
       # Build an instance from a Hash representation.
@@ -1916,6 +2009,8 @@ module Scjson
         kwargs[:target] = Array(normalized.fetch('target', []))
         kwargs[:type_value] = normalized.key?('type_value') ? TransitionTypeDatatypeProps.coerce(normalized['type_value'], allow_nil: true) : nil
         kwargs[:other_attributes] = normalized.fetch('other_attributes', {})
+        kwargs[:help_text] = Array(normalized.fetch('help_text', []))
+        kwargs[:execution_order] = normalized['execution_order']
         new(**kwargs)
       end
 
@@ -1944,8 +2039,9 @@ module Scjson
           'cond' => @cond,
           'target' => @target,
           'type_value' => @type_value,
-          'other_attributes' => @other_attributes
-        }
+          'other_attributes' => @other_attributes,
+          'help_text' => @help_text
+        }.tap { |result| result['execution_order'] = @execution_order unless @execution_order.nil? }
       end
 
       # Serialize the object to JSON.
@@ -1958,6 +2054,66 @@ module Scjson
 
     # Collection alias for TransitionProps values.
     TransitionArray = ::Array
+
+    # Structured type for scjson elements.
+    class XmlPayloadElementProps
+      attr_accessor :qname, :text, :tail, :children, :attributes
+      # Instantiate a new XmlPayloadElementProps object.
+      # @param kwargs [Hash] Optional keyword overrides.
+      def initialize(**kwargs)
+        @qname = kwargs.fetch(:qname, '')
+        @text = kwargs.fetch(:text, nil)
+        @tail = kwargs.fetch(:tail, nil)
+        @children = kwargs.fetch(:children, [])
+        @attributes = kwargs.fetch(:attributes, {})
+      end
+
+      # Build an instance from a Hash representation.
+      # @param data [Hash] Canonical hash representation.
+      # @return [XmlPayloadElementProps]
+      def self.from_hash(data)
+        raise ArgumentError, 'Expected Hash' unless data.is_a?(Hash)
+
+        normalized = data.transform_keys(&:to_s)
+        kwargs = {}
+        kwargs[:qname] = normalized.fetch('qname', '')
+        kwargs[:text] = normalized.fetch('text', nil)
+        kwargs[:tail] = normalized.fetch('tail', nil)
+        kwargs[:children] = Array(normalized.fetch('children', [])).map { |item| XmlPayloadElementProps.from_hash(item) }
+        kwargs[:attributes] = normalized.fetch('attributes', {})
+        new(**kwargs)
+      end
+
+      # Deserialize an instance from a JSON payload.
+      # @param json [String] JSON document to decode.
+      # @return [XmlPayloadElementProps]
+      def self.from_json(json)
+        parsed = JSON.parse(json)
+        from_hash(parsed)
+      end
+
+      # Convert the object to a Hash suitable for JSON serialization.
+      # @return [Hash]
+      def to_hash
+        {
+          'qname' => @qname,
+          'text' => @text,
+          'tail' => @tail,
+          'children' => (@children || []).map { |item| item.respond_to?(:to_hash) ? item.to_hash : item },
+          'attributes' => @attributes
+        }
+      end
+
+      # Serialize the object to JSON.
+      # @param opts [Array] JSON generation options.
+      # @return [String]
+      def to_json(*opts)
+        JSON.generate(to_hash, *opts)
+      end
+    end
+
+    # Collection alias for XmlPayloadElementProps values.
+    XmlPayloadElementArray = ::Array
 
   end
 end

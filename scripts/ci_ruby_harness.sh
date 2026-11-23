@@ -7,6 +7,9 @@
 
 set -uo pipefail
 
+# Trace subprocesses must load the same checkout as the comparison driver.
+export PYTHONPATH="$PWD/py${PYTHONPATH:+:$PYTHONPATH}"
+
 # Reference (SCION) and secondary (Ruby) commands can be overridden via env
 REF_CMD=${REF_CMD:-"node tools/scion-runner/scion-trace.cjs"}
 # Ensure secondary (Ruby) uses comparable normalization flags
@@ -78,6 +81,7 @@ run_one() {
   echo "[ci-ruby-harness] Comparing: $chart"
   set +e
   python py/exec_compare.py "$chart" \
+    --python-cmd "python -m scjson engine-trace" \
     --events "$events" \
     --reference "$REF_CMD" \
     --secondary "$SEC_CMD" \

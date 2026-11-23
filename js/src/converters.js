@@ -13,6 +13,7 @@
 const { XMLParser, XMLBuilder } = require('fast-xml-parser');
 const Ajv = require('ajv');
 const schema = require('../scjson.schema.json');
+const execution = require('./execution_order.js');
 const {
   extractHelpTextFromXml,
   attachHelpTextToModel,
@@ -64,11 +65,13 @@ const ARRAY_KEYS = new Set([
  * keys MUST round-trip through JSON-side normalization without being folded
  * into ``other_attributes`` or generic ``content``.
  *
- * ``help_text`` is the only member today; future structural metadata keys
- * (e.g. promoted authoring annotations from CONV-F) should be added here.
+ * These fields have dedicated XML projections.
  */
 const STRUCTURAL_METADATA_KEYS = new Set([
   'help_text',
+  'execution_order',
+  'region_order',
+  'state_order',
 ]);
 
 /// Known SCXML structural fields that should be pulled out of `content[]`
@@ -1023,12 +1026,24 @@ function fixDataContent(value) {
  * @param {object} node - Canonical content object.
  * @returns {object} XML builder structure keyed by element name.
  */
-function restoreDataNode(node) {
+function restoreDataNode(node, foreign = false) {
   let qname = node.qname;
   const out = {};
   if (node.attributes) {
+    const namespaces = new Map([['http://www.w3.org/XML/1998/namespace', 'xml']]);
     for (const [k, v] of Object.entries(node.attributes)) {
-      out[`@_${k}`] = v;
+      if (k.startsWith('{')) {
+        const end = k.indexOf('}');
+        const uri = k.slice(1, end);
+        if (!namespaces.has(uri)) {
+          const prefix = 'a' + namespaces.size;
+          namespaces.set(uri, prefix);
+          out['@_xmlns:' + prefix] = uri;
+        }
+        out['@_' + namespaces.get(uri) + ':' + k.slice(end + 1)] = v;
+      } else {
+        out[`@_${k}`] = v;
+      }
     }
   }
   if (qname === XINCLUDE_CLARK_INCLUDE) {
@@ -1036,13 +1051,23 @@ function restoreDataNode(node) {
     if (out['@_xmlns:xi'] === undefined) {
       out['@_xmlns:xi'] = XINCLUDE_NS;
     }
+  } else if (qname.startsWith('{')) {
+    const end = qname.indexOf('}');
+    const namespace = qname.slice(1, end);
+    qname = qname.slice(end + 1);
+    if (namespace) {
+      qname = 'ext:' + qname;
+      out['@_xmlns:ext'] = namespace;
+    }
+  } else if (foreign && !qname.includes(':')) {
+    out['@_xmlns'] = '';
   }
   if (node.text !== undefined && node.text !== '') {
     out['#text'] = node.text;
   }
   if (Array.isArray(node.children)) {
     node.children.forEach(c => {
-      const r = restoreDataNode(c);
+      const r = restoreDataNode(c, foreign);
       const [ck, cv] = Object.entries(r)[0];
       if (out[ck]) {
         if (Array.isArray(out[ck])) {
@@ -1073,6 +1098,7 @@ function stripQnameNs(value) {
   }
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
+      if (k === 'other_element') continue;
       if (k === 'qname' && typeof v === 'string') {
         if (v !== XINCLUDE_CLARK_INCLUDE) {
           value[k] = v.replace(/^\{[^}]+\}/, '');
@@ -1165,7 +1191,7 @@ function removeEmpty(value, key) {
       const r = removeEmpty(v, k);
       if (r !== undefined) obj[k] = r;
     }
-    if (Object.keys(obj).length > 0 || ALWAYS_KEEP.has(key)) {
+    if (Object.keys(obj).length > 0 || ALWAYS_KEEP.has(key) || key === 'donedata' || execution.emptyElements.has(key)) {
       return obj;
     }
     return undefined;
@@ -1276,9 +1302,16 @@ function xmlToJson(xmlStr, options = true) {
     trimValues: false,
     parseTagValue: false,
   });
-  let obj = parser.parse(xmlStr);
+  let orderedTree = execution.parse(xmlStr);
   if (xmlOptions.xinclude === 'resolve') {
-    obj = resolveXIncludesInParsed(obj, parser, xmlOptions);
+    orderedTree = execution.expandIncludes(orderedTree, href => loadXInclude(href, xmlOptions));
+    xmlStr = execution.serialize(orderedTree);
+  }
+  let obj = parser.parse(xmlStr);
+  try {
+    execution.captureOrder(orderedTree, obj);
+  } catch (error) {
+    return { result: '', valid: false, errors: [{ message: error.message }] };
   }
   if (obj.scxml) {
     obj = obj.scxml;
@@ -1340,6 +1373,21 @@ function xmlToJson(xmlStr, options = true) {
   reorderScxml(obj);
   stripNestedDataAttrs(obj);
   stripXmlns(obj);
+  const inlineCharts = new Map();
+  const restorePayloads = () => execution.capturePayloads(orderedTree, obj, xml => {
+    if (!inlineCharts.has(xml)) {
+      const child = xmlToJson(xml, xmlOptions);
+      if (!child.valid) throw new Error('Invalid inline SCXML document');
+      inlineCharts.set(xml, child.result);
+    }
+    return JSON.parse(inlineCharts.get(xml));
+  });
+  try {
+    restorePayloads();
+    execution.validateModel(obj);
+  } catch (error) {
+    return { result: '', valid: false, errors: [{ message: error.message }] };
+  }
   const valid = validate(obj);
   const errors = valid ? null : validate.errors;
   if (xmlOptions.omitEmpty) {
@@ -1348,6 +1396,7 @@ function xmlToJson(xmlStr, options = true) {
     stripQnameNs(obj);
     stripNestedDataAttrs(obj);
     stripXmlns(obj);
+    restorePayloads();
   }
   // CONV-F: attach promoted help_text after the model surface is stable
   // and after removeEmpty() so empty arrays from earlier passes do not
@@ -1383,6 +1432,14 @@ function jsonToXml(jsonStr) {
     suppressBooleanAttributes: false,
   });
   let obj = JSON.parse(jsonStr);
+  let orderedModel;
+  try {
+    if (execution.validateModel(obj)) orderedModel = JSON.parse(jsonStr);
+  } catch (error) {
+    return { result: '', valid: false, errors: [{ message: error.message }] };
+  }
+  // Validation/default injection below mutates the model. Keep authored empty
+  // sequences and singletons available for the ordered XML projection.
   flattenContent(obj);
   obj = removeEmpty(obj) || {};
   const valid = validate(obj);
@@ -1445,7 +1502,7 @@ function jsonToXml(jsonStr) {
           }
           continue;
         }
-        if (nk === 'help_text') {
+        if (STRUCTURAL_METADATA_KEYS.has(nk)) {
           // CONV-E: help_text is first-class authoring metadata, not an SCXML
           // attribute or element. CONV-F injects it as leading XML comments
           // after XMLBuilder emits the comment-free structural tree.
@@ -1454,7 +1511,7 @@ function jsonToXml(jsonStr) {
         if (nk === 'other_element') {
           const elements = Array.isArray(v) ? v : [v];
           elements.forEach(item => {
-            const r = restoreDataNode(item);
+            const r = restoreDataNode(item, true);
             const [ck, cv] = Object.entries(r)[0];
             if (out[ck]) {
               if (Array.isArray(out[ck])) {
@@ -1610,6 +1667,11 @@ function jsonToXml(jsonStr) {
     cleaned['@_xmlns'] = 'http://www.w3.org/2005/07/scxml';
   }
   let xmlOut = builder.build({ scxml: cleaned });
+  if (orderedModel) {
+    const tree = execution.parse(xmlOut);
+    execution.restoreOrder(tree, orderedModel, child => jsonToXml(JSON.stringify(child)).result);
+    xmlOut = execution.serialize(tree);
+  }
   // CONV-F post-pass: inject leading XML comments for every model element
   // with a non-empty help_text array. ``obj`` (the input model) is the
   // source of truth for help_text; the XMLBuilder above already stripped

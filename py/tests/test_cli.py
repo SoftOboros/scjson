@@ -107,7 +107,7 @@ def test_recursive_conversion(tmp_path):
 
     handler = SCXMLDocumentHandler()
     for f in xml_files[:5]:
-        xml_str = f.read_text()
+        xml_str = f.read_text(encoding="utf-8-sig")
         json_str = handler.xml_to_json(xml_str)
         xml_rt = handler.json_to_xml(json_str)
         assert "scxml" in xml_rt
@@ -159,10 +159,10 @@ def test_recursive_verify(tmp_path):
     for orig in originals[:3]:
         rel = orig.relative_to(tutorial_dir)
         converted = scxml_dir / rel
-        if converted.exists():
-            o_json = json.loads(handler.xml_to_json(orig.read_text()))
-            c_json = json.loads(handler.xml_to_json(converted.read_text()))
-            assert o_json == c_json
+        assert converted.is_file(), converted
+        o_json = json.loads(handler.xml_to_json(orig.read_text(encoding="utf-8-sig")))
+        c_json = json.loads(handler.xml_to_json(converted.read_text(encoding="utf-8-sig")))
+        assert o_json == c_json
 
 
 def test_run_command_scjson(tmp_path):

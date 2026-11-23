@@ -6,6 +6,43 @@ The Python package version is independent of the JS, Ruby, Rust, Java, Swift,
 Lua, Go, and C# package versions; cross-language work is coordinated through
 the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
+## 0.4.3 — Unreleased
+
+- Require Python 3.10 or later and install the Pydantic v2 model adapter.
+  The installed sweep can generate vectors and compare traces outside the
+  checkout. Reference failures and missing or empty traces surface as errors.
+  Piping `scjson engine-trace` to a JSONL reader yields one record per line.
+- Refuse misspelled or colliding executable keys on modeled SCJSON owners
+  before conversion or execution. Preserve keys inside extension payloads.
+- Generate offline timer vectors against a logical clock. Elapsed host time
+  between input events no longer changes the generated advance.
+
+- Select the first authored child when a document or compound state has no
+  explicit initial target. The optional `state_order` list preserves the
+  order of `state`, `parallel`, and `final` through conversion. Unmarked
+  legacy SCJSON keeps its grouped order.
+
+- Preserve the authored order of `state` and `parallel` regions within a
+  parallel, including the order seen by entry guards and by generated code.
+  Existing SCJSON without `region_order` keeps its grouped execution order.
+- Lower `In('stateId')` in transition, `if`, and `elseif` guards to a
+  portable state-membership query. Preserve ECMAScript negation precedence.
+  Evaluate parallel transition guards before exits and keep entry, exit,
+  and transition actions in phase order.
+- Initialize inline JSON data through the XML, SCJSON, and validated-model
+  entry points. A `foreach` over the inline array in W3C test 155 now visits
+  its three numbers in order. Conversion retains the authored text.
+- Preserve inline constants in executable IR data slots.
+- Apply datamodel truth testing to conditions and stop the current executable
+  block when an action fails. ECMAScript array concatenation preserves the
+  collection a foreach loop started iterating.
+- Preserve executable order and literal or mixed XML payloads through XML
+  and SCJSON. Both file loaders resolve relative child invocations from the
+  parent document. Each session exposes its SCXML event processor location.
+- Run exit actions in reverse document order. Correct Windows reference
+  command arguments, recursive conversion paths, local XInclude resolution
+  and redirected CLI output.
+
 ## 0.4.2 — 2026-06-20
 
 Python-only release; no cross-language (JS/Ruby/Rust/Java) changes. Adds the

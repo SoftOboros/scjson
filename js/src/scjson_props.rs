@@ -13,13 +13,13 @@ use serde_json::{Map, Value};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 /// The assign type that allows for precise manipulation of the datamodel
-///     location.
-///     Types are:
-///     replacechildren (default),
-///     firstchild, lastchild,
-///     previoussibling, nextsibling,
-///     replace, delete,
-///     addattribute
+/// location.
+/// Types are:
+/// replacechildren (default),
+/// firstchild, lastchild,
+/// previoussibling, nextsibling,
+/// replace, delete,
+/// addattribute
 pub enum AssignTypeDatatypeProps {
     Replacechildren,
     Firstchild,
@@ -39,7 +39,7 @@ impl Default for AssignTypeDatatypeProps {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-///     The binding type in use for the SCXML document.
+/// The binding type in use for the SCXML document.
 pub enum BindingDatatypeProps {
     Early,
     Late,
@@ -67,9 +67,8 @@ impl Default for BooleanDatatypeProps {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-///     Describes the processor execution mode for this document, being either "lax"
-/// or
-///     "strict".
+/// Describes the processor execution mode for this document, being either "lax" or
+/// "strict".
 pub enum ExmodeDatatypeProps {
     Lax,
     Strict,
@@ -97,7 +96,7 @@ impl Default for HistoryTypeDatatypeProps {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-///     The type of the transition i.e. internal or external.
+/// The type of the transition i.e. internal or external.
 pub enum TransitionTypeDatatypeProps {
     Internal,
     External,
@@ -128,6 +127,8 @@ pub struct AssignProps {
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default)]
     /// inline payload used by `<send>` and `<invoke>`.
     pub content: Vec<Map<String, Value>>,
 }
@@ -140,6 +141,7 @@ impl Default for AssignProps {
             type_value: AssignTypeDatatypeProps::default(),
             attr: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
             content: Vec::<Map::<String, Value>>::default(),
         }
     }
@@ -159,6 +161,8 @@ pub struct CancelProps {
     pub sendidexpr: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for CancelProps {
@@ -168,6 +172,7 @@ impl Default for CancelProps {
             sendid: Option::<String>::default(),
             sendidexpr: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -180,19 +185,22 @@ pub type CancelArray = Vec<CancelProps>;
 pub struct ContentProps {
     #[serde(default)]
     /// inline payload used by `<send>` and `<invoke>`.
-    pub content: Option<Vec<ScxmlProps>>,
+    pub content: Option<Vec<Value>>,
     #[serde(default)]
     pub expr: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for ContentProps {
     fn default() -> Self {
         Self {
-            content: Option::<Vec::<ScxmlProps>>::default(),
+            content: Option::<Vec::<Value>>::default(),
             expr: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -212,6 +220,8 @@ pub struct DataProps {
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default)]
     /// inline payload used by `<send>` and `<invoke>`.
     pub content: Vec<Map<String, Value>>,
 }
@@ -223,6 +233,7 @@ impl Default for DataProps {
             src: Option::<String>::default(),
             expr: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
             content: Vec::<Map::<String, Value>>::default(),
         }
     }
@@ -241,6 +252,8 @@ pub struct DatamodelProps {
     pub other_element: Vec<Map<String, Value>>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for DatamodelProps {
@@ -249,6 +262,7 @@ impl Default for DatamodelProps {
             data: Vec::<DataProps>::default(),
             other_element: Vec::<Map::<String, Value>>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -267,6 +281,8 @@ pub struct DonedataProps {
     pub param: Vec<ParamProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for DonedataProps {
@@ -275,6 +291,7 @@ impl Default for DonedataProps {
             content: Option::<ContentProps>::default(),
             param: Vec::<ParamProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -287,12 +304,15 @@ pub type DonedataArray = Vec<DonedataProps>;
 pub struct ElseProps {
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for ElseProps {
     fn default() -> Self {
         Self {
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -304,6 +324,8 @@ pub struct ElseifProps {
     pub cond: String,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for ElseifProps {
@@ -311,6 +333,7 @@ impl Default for ElseifProps {
         Self {
             cond: String::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -333,6 +356,8 @@ pub struct FinalProps {
     pub id: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for FinalProps {
@@ -344,6 +369,7 @@ impl Default for FinalProps {
             other_element: Vec::<Map::<String, Value>>::default(),
             id: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -380,6 +406,10 @@ pub struct FinalizeProps {
     pub cancel: Vec<CancelProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for FinalizeProps {
@@ -395,6 +425,8 @@ impl Default for FinalizeProps {
             log: Vec::<LogProps>::default(),
             cancel: Vec::<CancelProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -437,6 +469,10 @@ pub struct ForeachProps {
     pub index: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for ForeachProps {
@@ -455,6 +491,8 @@ impl Default for ForeachProps {
             item: String::default(),
             index: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -476,6 +514,8 @@ pub struct HistoryProps {
     pub type_value: Option<HistoryTypeDatatypeProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for HistoryProps {
@@ -486,6 +526,7 @@ impl Default for HistoryProps {
             id: Option::<String>::default(),
             type_value: Option::<HistoryTypeDatatypeProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -522,13 +563,17 @@ pub struct IfProps {
     pub cancel: Vec<CancelProps>,
     #[serde(default)]
     /// conditional branch following an `<if>`.
-    pub elseif: Option<ElseifProps>,
+    pub elseif: Value,
     #[serde(default)]
     pub else_value: Option<ElseProps>,
     #[serde(default)]
     pub cond: String,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for IfProps {
@@ -543,10 +588,12 @@ impl Default for IfProps {
             assign: Vec::<AssignProps>::default(),
             log: Vec::<LogProps>::default(),
             cancel: Vec::<CancelProps>::default(),
-            elseif: Option::<ElseifProps>::default(),
+            elseif: Value::default(),
             else_value: Option::<ElseProps>::default(),
             cond: String::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -564,6 +611,8 @@ pub struct InitialProps {
     pub transition: TransitionProps,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for InitialProps {
@@ -572,6 +621,7 @@ impl Default for InitialProps {
             other_element: Vec::<Map::<String, Value>>::default(),
             transition: TransitionProps::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -611,6 +661,8 @@ pub struct InvokeProps {
     pub autoforward: BooleanDatatypeProps,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for InvokeProps {
@@ -629,6 +681,7 @@ impl Default for InvokeProps {
             namelist: Option::<String>::default(),
             autoforward: BooleanDatatypeProps::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -647,6 +700,8 @@ pub struct LogProps {
     pub expr: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for LogProps {
@@ -656,6 +711,7 @@ impl Default for LogProps {
             label: Option::<String>::default(),
             expr: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -692,6 +748,10 @@ pub struct OnentryProps {
     pub cancel: Vec<CancelProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for OnentryProps {
@@ -707,6 +767,8 @@ impl Default for OnentryProps {
             log: Vec::<LogProps>::default(),
             cancel: Vec::<CancelProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -743,6 +805,10 @@ pub struct OnexitProps {
     pub cancel: Vec<CancelProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for OnexitProps {
@@ -758,6 +824,8 @@ impl Default for OnexitProps {
             log: Vec::<LogProps>::default(),
             cancel: Vec::<CancelProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -798,6 +866,10 @@ pub struct ParallelProps {
     pub id: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for ParallelProps {
@@ -814,6 +886,8 @@ impl Default for ParallelProps {
             other_element: Vec::<Map::<String, Value>>::default(),
             id: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            region_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -834,6 +908,8 @@ pub struct ParamProps {
     pub location: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for ParamProps {
@@ -844,6 +920,7 @@ impl Default for ParamProps {
             expr: Option::<String>::default(),
             location: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -858,6 +935,8 @@ pub struct RaiseProps {
     pub event: String,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for RaiseProps {
@@ -865,6 +944,7 @@ impl Default for RaiseProps {
         Self {
             event: String::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -880,6 +960,8 @@ pub struct ScriptProps {
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
     #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default)]
     /// inline payload used by `<send>` and `<invoke>`.
     pub content: Vec<Map<String, Value>>,
 }
@@ -889,6 +971,7 @@ impl Default for ScriptProps {
         Self {
             src: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
             content: Vec::<Map::<String, Value>>::default(),
         }
     }
@@ -932,6 +1015,10 @@ pub struct ScxmlProps {
     pub exmode: Option<ExmodeDatatypeProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for ScxmlProps {
@@ -950,6 +1037,8 @@ impl Default for ScxmlProps {
             binding: Option::<BindingDatatypeProps>::default(),
             exmode: Option::<ExmodeDatatypeProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            state_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -989,6 +1078,8 @@ pub struct SendProps {
     pub namelist: Option<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
 }
 /// Instantiates a Default Props Object
 impl Default for SendProps {
@@ -1009,6 +1100,7 @@ impl Default for SendProps {
             delayexpr: Option::<String>::default(),
             namelist: Option::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
         }
     }
 }
@@ -1057,6 +1149,10 @@ pub struct StateProps {
     pub initial_attribute: Vec<String>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for StateProps {
@@ -1076,6 +1172,8 @@ impl Default for StateProps {
             id: Option::<String>::default(),
             initial_attribute: Vec::<String>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            state_order: Option::<Vec::<String>>::default(),
         }
     }
 }
@@ -1120,6 +1218,10 @@ pub struct TransitionProps {
     pub type_value: Option<TransitionTypeDatatypeProps>,
     #[serde(default)]
     pub other_attributes: Map<String, Value>,
+    #[serde(default)]
+    pub help_text: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_order: Option<Vec<String>>,
 }
 /// Instantiates a Default Props Object
 impl Default for TransitionProps {
@@ -1139,10 +1241,42 @@ impl Default for TransitionProps {
             target: Vec::<String>::default(),
             type_value: Option::<TransitionTypeDatatypeProps>::default(),
             other_attributes: Map::<String, Value>::default(),
+            help_text: Vec::<String>::default(),
+            execution_order: Option::<Vec::<String>>::default(),
         }
     }
 }
 
 /// An array of Props Objects
 pub type TransitionArray = Vec<TransitionProps>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Preserve an extension element's qualified name, attributes and mixed text.
+pub struct XmlPayloadElementProps {
+    #[serde(default)]
+    pub qname: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub tail: Option<String>,
+    #[serde(default)]
+    pub children: Vec<XmlPayloadElementProps>,
+    #[serde(default)]
+    pub attributes: Map<String, Value>,
+}
+/// Instantiates a Default Props Object
+impl Default for XmlPayloadElementProps {
+    fn default() -> Self {
+        Self {
+            qname: String::default(),
+            text: Option::<String>::default(),
+            tail: Option::<String>::default(),
+            children: Vec::<XmlPayloadElementProps>::default(),
+            attributes: Map::<String, Value>::default(),
+        }
+    }
+}
+
+/// An array of Props Objects
+pub type XmlPayloadElementArray = Vec<XmlPayloadElementProps>;
 

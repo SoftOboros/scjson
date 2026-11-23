@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="owner">
+  <datamodel>
+    <data id="phase" expr="0"/>
+    <data id="initialRuns" expr="0"/>
+    <data id="observed" expr="0"/>
+  </datamodel>
+  <final id="terminal"/>
+  <state id="owner">
+    <onentry><assign location="phase" expr="1"/></onentry>
+    <initial><transition target="b d">
+      <assign location="phase" expr="phase*10+2"/>
+      <assign location="initialRuns" expr="initialRuns+1"/>
+      <raise event="observe"/>
+    </transition></initial>
+    <transition event="observe"><assign location="observed" expr="phase"/></transition>
+    <transition event="leave" target="outside"/>
+    <final id="unused"/>
+    <parallel id="pair">
+      <state id="left">
+        <state id="a"/>
+        <state id="b"><onentry><assign location="phase" expr="phase*10+3"/></onentry></state>
+      </state>
+      <state id="right">
+        <state id="c"/>
+        <state id="d"><onentry><assign location="phase" expr="phase*10+4"/></onentry></state>
+      </state>
+    </parallel>
+  </state>
+  <state id="outside">
+    <transition event="again" target="owner"/>
+    <transition event="deep" target="b d"/>
+  </state>
+</scxml>

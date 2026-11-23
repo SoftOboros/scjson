@@ -18,6 +18,11 @@ module Scjson
     # iterative scaffold toward full SCXML semantics.
     #
   class DocumentContext
+      OBJECT_PROPERTIES = %w[constructor hasOwnProperty isPrototypeOf propertyIsEnumerable toLocaleString
+                             toString valueOf __proto__ __defineGetter__ __defineSetter__ __lookupGetter__ __lookupSetter__].freeze
+      ARRAY_PROPERTIES = %w[length at concat copyWithin entries every fill filter find findIndex findLast findLastIndex
+                            flat flatMap forEach includes indexOf join keys lastIndexOf map pop push reduce reduceRight
+                            reverse shift slice some sort splice toReversed toSorted toSpliced unshift values with].freeze
       # @return [Hash{String=>Object}] Canonical scjson root map
       attr_reader :root
       # @return [Array<String>] Active state configuration
@@ -65,6 +70,14 @@ module Scjson
         @internal_queue = []
         @deferred_internal = []
         @defer_done = true
+        completions = new_state_completions
+        until completions.empty?
+          event = "done.state.#{completions.shift}"
+          transitions = select_transitions_for_event(event)
+          next if transitions.empty?
+          apply_transition_set(transitions, cause: event)
+          completions.concat(new_state_completions)
+        end
         # Schedule invocations for initial configuration
         schedule_invocations_for_entered(@configuration)
       end
@@ -76,8 +89,7 @@ module Scjson
       def leaf_state_ids
         leaves = []
         @states.each do |id, node|
-          has_children = node.key?('state') || node.key?('parallel')
-          leaves << id unless has_children
+          leaves << id unless composite?(node)
         end
         leaves.sort
       end
@@ -212,31 +224,29 @@ module Scjson
           rescue StandardError
             # ignore autoforward errors
           end
-          loop do
-            tx_set = select_transitions_for_event(ev_name)
-            break if tx_set.empty?
-            e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: ev_name)
-            entered.concat(e1)
-            exited.concat(x1)
-            fired.concat(f1)
-            action_log.concat(a1)
-            datamodel_delta.merge!(d1)
-            # After a set, enqueue done.state events if any states completed
+          # Consume this event once across the enabled regions before stabilizing.
+          tx_set = select_transitions_for_event(ev_name)
+          next if tx_set.empty?
+
+          e1, x1, f1, a1, d1 = apply_transition_set(tx_set, cause: ev_name)
+          entered.concat(e1)
+          exited.concat(x1)
+          fired.concat(f1)
+          action_log.concat(a1)
+          datamodel_delta.merge!(d1)
+          enqueue_done_events
+          flush_pending_done_invoke
+          0.upto(100) do
+            tx0 = select_transitions_for_event(nil)
+            break if tx0.empty?
+            e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
+            entered.concat(e2)
+            exited.concat(x2)
+            fired.concat(f2)
+            action_log.concat(a2)
+            datamodel_delta.merge!(d2)
             enqueue_done_events
             flush_pending_done_invoke
-            # After a set, process eventless transitions to quiescence
-            0.upto(100) do
-              tx0 = select_transitions_for_event(nil)
-              break if tx0.empty?
-              e2, x2, f2, a2, d2 = apply_transition_set(tx0, cause: nil)
-              entered.concat(e2)
-              exited.concat(x2)
-              fired.concat(f2)
-              action_log.concat(a2)
-              datamodel_delta.merge!(d2)
-              enqueue_done_events
-              flush_pending_done_invoke
-            end
           end
         end
 
@@ -483,6 +493,7 @@ module Scjson
         # Update configuration: remove exited leaves and add targets (leaf-level model)
         new_config = @configuration.dup
         exit_order.each { |sid| new_config.delete(sid) }
+        @completed_states -= exit_order if @completed_states
         # Ensure source is removed even if not in exit_order due to missing ids
         new_config.delete(source_id)
         targets.each { |tid| new_config << tid unless new_config.include?(tid) }
@@ -524,7 +535,6 @@ module Scjson
           chosen_lca = choose_shallowest_ancestor(lcas)
           exit_chain = path_up_exclusive(source_id, chosen_lca)
           exit_set.concat(exit_chain)
-          seq = []
           targets.each do |tid|
             if @tag_type[tid] == :history
               parent_id = @parent[tid]
@@ -541,18 +551,20 @@ module Scjson
                 end
               end
               remembered.each do |rid|
-                seq.concat(path_down_from_lca(chosen_lca, rid))
+                entry_sequences << path_down_from_lca(chosen_lca, rid)
               end
             else
-              seq.concat(path_down_from_lca(chosen_lca, tid))
+              entry_sequences << path_down_from_lca(chosen_lca, tid)
             end
           end
-          entry_sequences << seq
           fired << { 'source' => source_id, 'targets' => targets, 'event' => cause, 'cond' => nil }
         end
 
         # Deduplicate exit set, deep->shallow
-        exit_order = exit_set.uniq
+        # Exiting a compound or parallel state also exits every active descendant.
+        active = @configuration.flat_map { |leaf| ancestors(leaf) }.uniq
+        exit_order = active.select { |sid| ancestors(sid).any? { |id| exit_set.include?(id) } }
+                           .sort_by { |sid| -ancestors(sid).length }
         # Execute onexit
         exit_order.each do |sid|
           a, d = run_onexit(sid)
@@ -563,6 +575,7 @@ module Scjson
         # Update configuration: remove exit leaves; we'll add entered leaves after expansion
         new_config = @configuration.dup
         exit_order.each { |sid| new_config.delete(sid) }
+        @completed_states -= exit_order if @completed_states
 
         # Record history for parents being exited based on previous configuration
         record_history_for_exits(exit_order, @configuration)
@@ -579,33 +592,21 @@ module Scjson
         entered_leaves = []
         entry_sequences.each do |seq|
           seq.each do |sid|
+            next if entered.include?(sid)
             a, d = run_onentry(sid)
             actions.concat(a)
             delta.merge!(d)
             entered << sid
           end
-          # Expand descendants when last target is a non-history composite
+          # Only the destination takes its default entry. Its ancestors already
+          # have an explicit path to the target or remembered history state.
           target_id = seq.last
-          if target_id && @tag_type[target_id] != :history
-            leaves, bundle = enter_descendants(target_id)
-            entered.concat(bundle[:entered])
-            actions.concat(bundle[:actions])
-            delta.merge!(bundle[:delta])
-            entered_leaves.concat(leaves)
-          else
-            # If history (deep): remembered leaves were appended as part of seq; if shallow: enter_descendants handled per remembered child in seq
-            # For shallow we should expand each remembered child; this happens implicitly since seq contains those child ids
-            # and we will expand below by calling enter_descendants on each non-history id in the sequence
-          end
-          # Expand descendants for any non-history ids in the sequence (covers shallow history children)
-          seq.each do |sid|
-            next if @tag_type[sid] == :history
-            leaves, bundle = enter_descendants(sid)
-            entered.concat(bundle[:entered])
-            actions.concat(bundle[:actions])
-            delta.merge!(bundle[:delta])
-            entered_leaves.concat(leaves)
-          end
+          next unless target_id
+          leaves, bundle = enter_descendants(target_id)
+          entered.concat(bundle[:entered])
+          actions.concat(bundle[:actions])
+          delta.merge!(bundle[:delta])
+          entered_leaves.concat(leaves)
         end
 
         # Merge entered leaves into configuration
@@ -666,55 +667,28 @@ module Scjson
       end
 
       def composite?(node)
-        node.is_a?(Hash) && (node.key?('state') || node.key?('parallel'))
+        %w[state parallel final].any? { |key| !wrap_list(node[key]).empty? }
       end
 
       def initial_child_ids_for(node)
-        # parallel node: enter initial leaf for each region (its immediate states)
-        if node.is_a?(Hash)
-          node_id = node['id']
-          if node.key?('parallel') || (node_id && @tag_type[node_id] == :parallel)
-            ids = []
-            wrap_list(node['state']).each do |s|
-              sid = s['id']
-              ids.concat(initial_leaves_for_id(sid.to_s)) if sid
-            end
-            return ids.uniq
-          end
+        owner = node.equal?(@root) ? 'scxml' : @tag_type.fetch(node['id'], :state).to_s
+        children = ChildOrder.slots(owner, node).values.flatten(1).filter_map { |_, child| child['id'] }
+        return children if owner == 'parallel'
+        explicit = wrap_list(node['initial_attribute'])
+        return explicit unless explicit.empty?
+        wrap_list(node['initial']).each do |initial|
+          return [initial] if initial.is_a?(String)
+          targets = wrap_list(initial['transition']).flat_map { |t| wrap_list(t['target']) }
+          return targets unless targets.empty?
         end
-        # state: choose initial children or first
-        if node.key?('state')
-          initial_tokens = wrap_list(node['initial_attribute']).map(&:to_s)
-          if !initial_tokens.empty?
-            return initial_tokens
-          end
-          if node.key?('initial') && node['initial'].is_a?(Hash)
-            return wrap_list(node['initial']['transition']).flat_map { |t| wrap_list(t['target']).map(&:to_s) }
-          end
-          first = wrap_list(node['state']).map { |s| s['id'] }.compact.map(&:to_s).first
-          return first ? [first] : []
-        end
-        []
+        children.first(1)
       end
 
       def initial_leaves_for_id(state_id)
         node = @states[state_id]
         return [] unless node
         return [state_id] unless composite?(node)
-        leaves = []
-        if node.key?('parallel')
-          wrap_list(node['parallel']).each do |p|
-            wrap_list(p['state']).each do |s|
-              sid = s['id']
-              leaves.concat(initial_leaves_for_id(sid.to_s)) if sid
-            end
-          end
-          return leaves
-        end
-        initial_child_ids_for(node).each do |cid|
-          leaves.concat(initial_leaves_for_id(cid))
-        end
-        leaves
+        initial_child_ids_for(node).flat_map { |cid| initial_leaves_for_id(cid) }
       end
 
       # ---- Invoke / Finalize ----
@@ -725,6 +699,7 @@ module Scjson
           wrap_list(node['invoke']).each do |inv|
             next unless inv.is_a?(Hash)
             iid = (inv['id'] && inv['id'].to_s)
+            next if iid && @invocations_by_state[sid].include?(iid)
             unless iid && !iid.empty?
               @invoke_seq += 1
               iid = "i#{@invoke_seq}"
@@ -1248,8 +1223,8 @@ module Scjson
         # boolean literals
         return true if s.downcase == 'true'
         return false if s.downcase == 'false'
-        # in(stateId) predicate
-        if (m = s.match(/^\s*in\((.+)\)\s*$/i))
+        # The SCXML state-membership predicate is case-sensitive.
+        if (m = s.match(/^In\((.+)\)$/))
           sid_raw = m[1].strip
           sid = sid_raw
           if (mm = sid_raw.match(/^['\"](.*)['\"]$/))
@@ -1257,6 +1232,7 @@ module Scjson
           end
           return in_state?(sid.to_s)
         end
+        return nil if s.match?(/\Ain\s*\(/i)
         # JSON object/array literals
         if (s.start_with?('[') && s.end_with?(']')) || (s.start_with?('{') && s.end_with?('}'))
           begin
@@ -1360,6 +1336,17 @@ module Scjson
       end
 
       def member?(item, container)
+        if @root['datamodel_attribute'] == 'ecmascript'
+          key = item.nil? ? 'null' : item.to_s
+          key = item.to_i.to_s if item.is_a?(Float) && item.finite? && item == item.to_i
+          return container.key?(key) || OBJECT_PROPERTIES.include?(key) if container.is_a?(Hash)
+          if container.is_a?(Array)
+            return true if ARRAY_PROPERTIES.include?(key) || OBJECT_PROPERTIES.include?(key)
+            return key.match?(/\A(?:0|[1-9][0-9]{0,9})\z/) && key.to_i < container.length
+          end
+          @internal_queue << { 'name' => 'error.execution', 'data' => nil }
+          return false
+        end
         return false if container.nil?
         if container.is_a?(Array)
           return container.include?(item)
@@ -1488,40 +1475,26 @@ module Scjson
 
       # ---- Completion (done.state.*) ----
       def enqueue_done_events
-        done_ids = compute_done_states
-        done_ids.each do |sid|
+        new_state_completions.each do |sid|
           @internal_queue << ({ 'name' => "done.state.#{sid}", 'data' => nil })
         end
       end
 
+      def new_state_completions
+        done_ids = compute_done_states
+        new_ids = done_ids - (@completed_states || [])
+        @completed_states = done_ids
+        new_ids
+      end
+
       def compute_done_states
-        # Identify composite state completion and parallel completion
-        finals = @configuration.select { |sid| @tag_type[sid] == :final }
-        done = []
-        # State is done if one of its direct 'final' children is active
-        @states.each do |sid, node|
-          next unless node.is_a?(Hash)
-          # only consider composite states
-          if node.key?('state') || node.key?('parallel')
-            # direct final children ids
-            direct_finals = wrap_list(node['final']).map { |f| f.is_a?(Hash) ? f['id'] : nil }.compact.map(&:to_s)
-            if !direct_finals.empty? && (finals & direct_finals).any?
-              done << sid
-              next
-            end
-            # parallel: all regions have a final descendant
-            if node.key?('parallel')
-              region_ids = wrap_list(node['parallel']).flat_map { |p| wrap_list(p['state']).map { |s| s['id'] }.compact.map(&:to_s) }
-              if !region_ids.empty?
-                all_done = region_ids.all? do |rid|
-                  finals.any? { |fid| is_ancestor?(rid, fid) }
-                end
-                done << sid if all_done
-              end
-            end
-          end
+        done = @configuration.filter_map { |leaf| @parent[leaf] if @tag_type[leaf] == :final }.uniq
+        parallels = @states.keys.select { |id| @tag_type[id] == :parallel }
+        parallels.sort_by { |id| -ancestors(id).length }.each do |id|
+          regions = initial_child_ids_for(@states.fetch(id))
+          done << id if !regions.empty? && (regions - done).empty?
         end
-        done.uniq
+        done
       end
 
       def index_states(node, parent_id = nil, tag = nil)
@@ -1550,12 +1523,7 @@ module Scjson
           end
           return leaves.uniq
         end
-        # Else first child state id -> expand to leaves
-        first_state = wrap_list(@root['state']).find { |s| s.is_a?(Hash) && s['id'] }
-        if first_state && first_state['id']
-          return initial_leaves_for_token(first_state['id'].to_s)
-        end
-        []
+        initial_child_ids_for(@root).flat_map { |id| initial_leaves_for_token(id) }
       end
 
       def initial_leaves_for_token(token)

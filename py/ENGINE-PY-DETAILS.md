@@ -68,9 +68,9 @@ Top-level tools (directory: `py/`):
 File: `py/scjson/context.py`
 
 Key concepts
-- Activations and configuration: An `ActivationRecord` represents an active node (state/parallel/final/history). `configuration` is the set of active activation IDs; it updates during transition microsteps.
+- An `ActivationRecord` describes a chart node. The current configuration holds active states and their ancestors. A history target resolves to states before entry.
 - Macro/microstep: `microstep()` processes at most one external event (plus any immediately relevant `done.invoke*` processing); eventless transitions run until quiescent. `run()` loops `microstep()` until the queue empties or a step budget is reached.
-- Transition selection: `_select_transition(evt)` iterates document order, supports multi-token events (space-separated), wildcard `*`, and prefix `error.*` patterns. `_eval_condition` runs in a sandbox; non-boolean results produce `error.execution` and evaluate false.
+- `_select_transitions(evt)` searches from each active leaf toward its ancestors before any state exits. Independent regions can select transitions on the same event. The engine resolves conflicts, runs the selected exits, executes the transition actions, and enters targets. Event descriptors support space-separated tokens, the wildcard `*`, and prefixes such as `error.*`. Conditions use the datamodel's truth test. An evaluation error raises `error.execution` and the condition evaluates false.
 - Entry/Exit/History: `_enter_state`, `_exit_state`, `_enter_history` handle LCA-based entry/exit ordering, shallow and deep history restoration, and `done.state.*` propagation.
 - Executable content: `assign`, `log`, `raise`, `if/elseif/else`, `foreach`, `send`, `cancel`, and `script` (warning/no-op). Action execution order is preserved via XML child order or JSON order synthesis.
 - Timers: `_schedule_event` and `advance_time(seconds)` implement deterministic timers; the trace/CLI support injecting `{ "advance_time": N }` control tokens to release delayed sends between stimuli.
@@ -94,7 +94,7 @@ File: `py/scjson/safe_eval.py`
 - Default sandbox: The engine evaluates expressions via an allow-listed sandbox (`py-sandboxed`) that blocks imports, dunder access, and unsafe builtins. A curated set of pure builtins (and optionally `math.*`) are exposed.
 - CLI controls: `engine-trace` accepts `--unsafe-eval` to bypass the sandbox (trusted charts only); allow/deny patterns and presets can refine exposure when sandboxed.
 - Import surface: prefers `py_sandboxed` (your managed package); falls back to `py_sandboxer` for environments that expose the same API under a different name.
-- Error semantics: sandbox violations or runtime exceptions raise `SafeEvaluationError`; the engine enqueues `error.execution` and treats the condition as false or the expression value as a literal where applicable.
+- Error semantics: when a condition fails evaluation, the engine enqueues `error.execution` and treats the condition as false. When an assignment fails evaluation, the target keeps its previous value and the surrounding executable block stops. See [engine error handling](scjson/ENGINE.md#errors).
 
 ---
 

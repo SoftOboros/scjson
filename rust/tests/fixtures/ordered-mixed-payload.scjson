@@ -1,0 +1,19 @@
+{
+  "version": 1.0,
+  "initial": ["s"],
+  "state": [{
+    "id": "s",
+    "onentry": [{
+      "send": [{
+        "event": "sample",
+        "content": [{"content": [
+          "  42\n",
+          {"qname": "{urn:fixture}note", "attributes": {"key": "value"}, "text": "inside", "tail": " end"},
+          {"version": 1.0, "initial": ["done"], "final": [{"id": "done"}]}
+        ]}]
+      }],
+      "assign": [{"location": "seen", "expr": "1"}],
+      "execution_order": ["assign", "send"]
+    }]
+  }]
+}

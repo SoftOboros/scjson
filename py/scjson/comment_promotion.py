@@ -125,6 +125,16 @@ def _local_name(tag: str) -> str:
     return tag
 
 
+def _address_name(node: _ET._Element) -> str:
+    """Keep extension lookalikes out of the core model's per-tag indexes."""
+    tag = node.tag
+    if tag.startswith("{http://www.w3.org/2005/07/scxml}"):
+        return _local_name(tag)
+    if not tag.startswith("{") and node.getroottree().getroot().tag.startswith("{"):
+        return "{}" + tag
+    return tag
+
+
 def _is_comment(node: Any) -> bool:
     """Return True if ``node`` is an lxml comment node."""
     return getattr(node, "tag", None) is _ET.Comment
@@ -221,7 +231,7 @@ def _assign_address_and_walk(
         element (a local tag not in :data:`APPLIES_TO_TAGS`); suppresses
         promotion.
     """
-    local = _local_name(elem.tag)
+    local = _address_name(elem)
     elem_in_source = inside_source_body or local in SOURCE_BODY_TAGS
     elem_in_extension = inside_extension or (
         local not in APPLIES_TO_TAGS and address != ()  # root pass guard
@@ -310,7 +320,7 @@ def _assign_address_and_walk(
             continue
 
         if kind == "element":
-            child_local = _local_name(payload.tag)
+            child_local = _address_name(payload)
             idx = per_tag_counter.get(child_local, 0)
             per_tag_counter[child_local] = idx + 1
             child_addr: Address = address + ((child_local, idx),)
@@ -498,14 +508,19 @@ def _strip_unsupported_character_data_in_place(elem: _ET._Element) -> None:
     xsdata because xsdata may surface it as a wildcard with no qname. Mixed
     payload elements and opaque extension subtrees keep their text intact.
     """
-    local = _local_name(elem.tag)
-    structural_scxml = local in APPLIES_TO_TAGS and local not in MIXED_TEXT_TAGS
+    local = _address_name(elem)
+    if local not in APPLIES_TO_TAGS:
+        return
+    structural_scxml = local not in MIXED_TEXT_TAGS
 
     if structural_scxml and elem.text and elem.text.strip():
         elem.text = ""
 
     for child in list(elem):
-        _strip_unsupported_character_data_in_place(child)
+        # Only an embedded chart has SCXML structure inside a mixed payload.
+        # A literal XML element can share a name such as "state" or "send".
+        if local != "content" or child.tag in {"scxml", "{http://www.w3.org/2005/07/scxml}scxml"}:
+            _strip_unsupported_character_data_in_place(child)
         if structural_scxml and child.tail and child.tail.strip():
             child.tail = ""
 
@@ -684,7 +699,7 @@ def _navigate_xml(
         for child in node:
             if _is_comment(child) or _is_processing_instruction(child):
                 continue
-            if _local_name(child.tag) == tag:
+            if _address_name(child) == tag:
                 if count == idx:
                     match = child
                     break

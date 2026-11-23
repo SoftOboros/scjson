@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" datamodel="ecmascript"
+       version="1.0" initial="b qLeaf a zLeaf">
+  <datamodel>
+    <data id="entry" expr="0"/><data id="queued" expr="0"/>
+    <data id="actions" expr="0"/><data id="exitOrder" expr="0"/>
+    <data id="sawFirst" expr="0"/>
+  </datamodel>
+  <parallel id="p">
+    <transition event="record1"><assign location="queued" expr="queued*10+1"/></transition>
+    <transition event="record2"><assign location="queued" expr="queued*10+2"/></transition>
+    <transition event="record3"><assign location="queued" expr="queued*10+3"/></transition>
+    <transition event="record4"><assign location="queued" expr="queued*10+4"/></transition>
+    <parallel id="z">
+      <onentry><assign location="entry" expr="entry*10+1"/><raise event="record1"/></onentry>
+      <onexit><assign location="exitOrder" expr="exitOrder*10+1"/></onexit>
+      <state id="zLeaf">
+        <transition event="visit"><assign location="actions" expr="actions*10+1"/></transition>
+        <transition event="choose" target="zWon"/>
+      </state>
+    </parallel>
+    <state id="a">
+      <onentry>
+        <if cond="In('zLeaf')"><assign location="sawFirst" expr="1"/></if>
+        <assign location="entry" expr="entry*10+2"/><raise event="record2"/>
+      </onentry>
+      <onexit><assign location="exitOrder" expr="exitOrder*10+2"/></onexit>
+      <transition event="visit"><assign location="actions" expr="actions*10+2"/></transition>
+      <transition event="choose" target="aWon"/>
+    </state>
+    <parallel id="q">
+      <onentry><assign location="entry" expr="entry*10+3"/><raise event="record3"/></onentry>
+      <onexit><assign location="exitOrder" expr="exitOrder*10+3"/></onexit>
+      <state id="qLeaf">
+        <transition event="visit"><assign location="actions" expr="actions*10+3"/></transition>
+      </state>
+    </parallel>
+    <state id="b">
+      <onentry><assign location="entry" expr="entry*10+4"/><raise event="record4"/></onentry>
+      <onexit><assign location="exitOrder" expr="exitOrder*10+4"/></onexit>
+      <transition event="visit"><assign location="actions" expr="actions*10+4"/></transition>
+    </state>
+  </parallel>
+  <final id="zWon"/><final id="aWon"/>
+</scxml>

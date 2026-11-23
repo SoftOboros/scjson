@@ -21,6 +21,20 @@ For cross-language parity and [SCION](https://www.npmjs.com/package/scion) compa
 
 ## Overview
 
+In the Python and ECMAScript datamodels, an inline character-data initializer
+such as `<data id="items">[1,2,3]</data>` supplies an array. The engine decodes
+JSON literals at initialization and keeps other character data as authored
+text. The XML and SCJSON loaders use the same rule. The converter preserves
+the original character data for round trips. The executable IR records the
+decoded constant in the data slot and reserves `expr_source` for an authored
+`expr` attribute.
+
+For `<send>` and `<donedata>`, literal `<content>` text keeps its characters,
+including surrounding whitespace. Thus `<content>42</content>` delivers the
+string `"42"`, while `<content expr="6 * 7"/>` delivers the number `42`.
+Mixed content keeps text and qualified XML elements in order. An inline
+`<invoke><content><scxml>…</scxml></content></invoke>` carries a nested chart.
+
 The Python engine executes SCXML/SCJSON statecharts and can emit deterministic JSONL traces of execution. A set of CLI utilities help you:
 
 - Run the Python engine and collect traces
@@ -171,6 +185,23 @@ Mid-sequence time advance injection
 
 This behavior improves cross-engine parity when the reference does not model
 time, while keeping the event stream format backward compatible.
+
+## Parallel state completion
+
+When a region enters a final child, the engine queues
+`done.state.<regionId>`. It also checks the active configuration of every
+region of the enclosing parallel. When the last outstanding region reaches
+final, its own completion is queued first, followed by
+`done.state.<parallelId>`. Consuming that parent event can select an ordinary
+transition on the parallel.
+
+Alex Z 417 makes the distinction observable. Its two eventless transitions
+can enter both region finals before the first completion event is consumed.
+A trace at dequeue time can therefore show both finals even for the first
+region event. To verify the timing, record the active finals **at enqueue**,
+or hold one region open while its sibling finishes. Drain immediate work
+before advancing the one-second timeout in the original chart.
+[Parallel completion checklist](TODO-ENGINE-PY.md) · [Python completion predicate](../py/scjson/context.py#L1790)
 
 ## Invoke & Finalize Semantics
 

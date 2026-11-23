@@ -121,6 +121,12 @@ Independent from: converter metadata tests.
 
 Goal: review `ENGINE_KNOWN_UNSUPPORTED` and recursive tutorial validation.
 
+The Python 0.4.2 and 0.4.3 qualification findings are tracked individually
+in the [scjson errata register](ERRATA.md#errata-004--inline-data-initialization-in-the-python-engine-and-executable-ir).
+The register gives the reproducer and closure check for each outstanding
+case. Keep authored final states, data-field observations, and harness failures
+distinct in subsequent corpus runs.
+
 Output:
 
 - Retain/remove each unsupported chart with a note.
@@ -517,6 +523,10 @@ initiative.
   `docs/TODO-ENGINE-CSHARP.md`, `docs/TODO-ENGINE-LUA.md`
 
 ## Section 11. Change Log
+
+- 2026-11-21. Added the Python 0.4.2 and 0.4.3 errata and corpus follow-up
+  to EXEC-C. ERRATA-004 records the verified inline data correction.
+  ERRATA-005 through ERRATA-010 track the remaining repairs.
 
 - 2026-05-14: Initial execution concepts document.
 - 2026-06-20: §5 EXEC-E expanded with five normative sub-decisions

@@ -16,16 +16,26 @@ parsing.
 from typing import Optional, Type, Union, Any, get_args, get_origin, ForwardRef
 from enum import Enum
 from decimal import Decimal
+from urllib.request import url2pathname
+from urllib.parse import urlsplit
+from pathlib import Path
 import xmlschema
 import json
+import sys
 from dataclasses import asdict, fields, is_dataclass
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 from xsdata.formats.dataclass.parsers import XmlParser
+from xsdata.formats.dataclass.parsers.nodes import ElementNode, WildcardNode
 from xsdata.formats.dataclass.parsers.config import ParserConfig
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.models.generics import AnyElement
 from . import dataclasses as dataclasses_module
 from .dataclasses import Scxml as Scxml
+from .executable_keys import validate_executable_keys
+from .execution_order import (
+    InvalidRegionOrder, InvalidStructuralOrder, MisplacedExecutionOrder, canonical_json, capture_order,
+    ordered_state_children, restore_order, validate_order_location,
+)
 from xml.etree import ElementTree as ET
 from xml.etree import ElementInclude
 from .comment_promotion import (
@@ -33,6 +43,39 @@ from .comment_promotion import (
     extract_help_text_from_xml,
     inject_help_text_comments_into_xml,
 )
+
+
+class _PayloadParser(XmlParser):
+    """Bind inline charts as charts and preserve other payload elements as XML."""
+
+    def start(self, clazz, queue, objects, qname, attrs, ns_map):
+        parent = queue[-1] if queue else None
+        if (isinstance(parent, ElementNode)
+                and parent.meta.qname == "{http://www.w3.org/2005/07/scxml}content"
+                and qname != "{http://www.w3.org/2005/07/scxml}scxml"):
+            wildcard = next(var for var in parent.meta.find_children(qname) if var.is_wildcard)
+            queue.append(WildcardNode(wildcard, attrs, ns_map, len(objects), self.context.class_type.any_element))
+            return
+        super().start(clazz, queue, objects, qname, attrs, ns_map)
+
+    def end(self, queue, objects, qname, text, tail):
+        bound = super().end(queue, objects, qname, text, tail)
+        if bound and qname == "{http://www.w3.org/2005/07/scxml}content" and text and text.isspace():
+            for tag, value in reversed(objects):
+                if tag == qname:
+                    if getattr(value, "expr", None) is None and getattr(value, "content", None) == []:
+                        value.content.append(text)
+                    break
+        return bound
+
+
+def _load_included_file(href, parse, encoding=None):
+    """Open local file URIs produced while joining nested XInclude references."""
+    uri = urlsplit(href)
+    if uri.scheme == "file" and uri.netloc in ("", "localhost"):
+        href = url2pathname(uri.path)
+    return ElementInclude.default_loader(href, parse, encoding)
+
 
 class SCXMLDocumentHandler:
     def __init__(
@@ -74,7 +117,7 @@ class SCXMLDocumentHandler:
         """
         self.model_class = model_class
         self.schema_path = schema_path
-        self.parser = XmlParser(
+        self.parser = _PayloadParser(
             config=ParserConfig(fail_on_unknown_properties=fail_on_unknown_properties)
         )
         self.serializer = XmlSerializer(
@@ -89,12 +132,14 @@ class SCXMLDocumentHandler:
         self.xinclude = xinclude
         self.xinclude_base_url = xinclude_base_url
 
-    @staticmethod
-    def _resolve(cls: type) -> type:
-        """Resolve forward references to actual classes."""
+    def _resolve(self, cls: type) -> type:
+        """Resolve children in the chosen model family, including strict parallels."""
         if isinstance(cls, ForwardRef):
-            return getattr(dataclasses_module, cls.__forward_arg__)
+            cls = cls.__forward_arg__
         if isinstance(cls, str):
+            module = sys.modules[self.model_class.__module__]
+            if hasattr(module, cls):
+                return getattr(module, cls)
             return getattr(dataclasses_module, cls)
         return cls
 
@@ -105,15 +150,18 @@ class SCXMLDocumentHandler:
 
     def load(self, xml_path: str):
         with open(xml_path, "rb") as f:
-            return self.parser.from_bytes(f.read(), self.model_class)
+            data = f.read()
+        model = self.parser.from_bytes(data, self.model_class)
+        capture_order(model, data)
+        return model
 
     def dump(self, instance, output_path: str):
-        xml_string = self.serializer.render(instance)
+        xml_string = self.to_string(instance)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(xml_string)
 
     def to_string(self, instance) -> str:
-        return self.serializer.render(instance)
+        return restore_order(instance, self.serializer.render(instance))
 
     def _fix_decimal(obj):
         if isinstance(obj, Enum):
@@ -185,16 +233,27 @@ class SCXMLDocumentHandler:
                 if xinclude_base_url is not None
                 else self.xinclude_base_url
             )
-            ElementInclude.include(root, base_url=base_url)
+            if base_url and (Path(base_url).is_absolute() or not urlsplit(base_url).scheme):
+                directory_base = str(base_url).endswith(("/", "\\"))
+                document = str(Path(base_url).resolve())
+                if document.startswith("\\\\?\\UNC\\"):
+                    document = "\\\\" + document[8:]
+                elif document.startswith("\\\\?\\"):
+                    document = document[4:]
+                base_url = Path(document).as_uri()
+                if directory_base and not base_url.endswith("/"):
+                    base_url += "/"
+            ElementInclude.include(root, loader=_load_included_file, base_url=base_url)
             xml_str = ET.tostring(root, encoding="unicode")
         model = self.parser.from_string(xml_str, self.model_class)
+        capture_order(model, xml_str)
         # Attach help_text to the model nodes addressed by the pre-pass.
         attach_help_text_to_model(model, address_help)
         if hasattr(model, "model_dump"):
             data = model.model_dump()
         else:
             data = asdict(model)
-        data = SCXMLDocumentHandler._fix_decimal(data)
+        data = SCXMLDocumentHandler._fix_decimal(canonical_json(model, data))
         if self.omit_empty:
             data = SCXMLDocumentHandler._remove_empty(data)
         return json.dumps(data, indent=2)
@@ -212,6 +271,8 @@ class SCXMLDocumentHandler:
                     continue
                 try:
                     return self._to_dataclass(self._resolve(arg), data)
+                except (MisplacedExecutionOrder, InvalidStructuralOrder):
+                    raise
                 except Exception:
                     pass
             return data
@@ -229,7 +290,9 @@ class SCXMLDocumentHandler:
                 )
             if isinstance(data, dict):
                 try:
-                    return self._to_dataclass(Scxml, data)
+                    return self._to_dataclass(self._resolve("Scxml"), data)
+                except (MisplacedExecutionOrder, InvalidStructuralOrder):
+                    raise
                 except Exception:
                     pass
             if isinstance(data, list):
@@ -251,12 +314,25 @@ class SCXMLDocumentHandler:
                 return [self._to_dataclass(object, x) for x in data]
             return data
         if is_dataclass(cls):
+            validate_order_location(data, cls.__dataclass_fields__)
             kwargs = {}
             post = {}
             for f in fields(cls):
                 if f.name not in data:
                     continue
-                value = self._to_dataclass(f.type, data[f.name])
+                raw = data[f.name]
+                if f.name == "region_order" and not isinstance(raw, list):
+                    raise InvalidRegionOrder("region_order must be an array of region kinds")
+                if f.name == "state_order" and not isinstance(raw, list):
+                    raise InvalidStructuralOrder("state_order must be an array of direct child kinds")
+                if f.name == "execution_order":
+                    if not isinstance(raw, list) or not all(isinstance(k, str) for k in raw):
+                        raise ValueError("execution_order must be an array of child-kind strings")
+                if f.name == "elseif" and isinstance(raw, dict):
+                    raw = [raw]
+                if f.name == "elseif" and raw is None:
+                    raw = []
+                value = self._to_dataclass(f.type, raw)
                 if f.type is Decimal or f.name == "version":
                     try:
                         value = Decimal(str(value))
@@ -271,6 +347,8 @@ class SCXMLDocumentHandler:
             obj = cls(**kwargs)
             for name, value in post.items():
                 setattr(obj, name, value)
+            if "region_order" in data or "state_order" in data:
+                ordered_state_children(obj)
             return obj
         if isinstance(cls, type) and issubclass(cls, Enum):
             try:
@@ -289,6 +367,7 @@ class SCXMLDocumentHandler:
         serialized by xsdata directly.
         """
         data = json.loads(json_str)
+        validate_executable_keys(data)
         if hasattr(self.model_class, "model_validate"):
             model = self.model_class.model_validate(data)
         else:

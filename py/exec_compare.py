@@ -15,7 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
+from scjson_argv import split_command
+from scion_support import reference_command
 import subprocess
 import sys
 from pathlib import Path
@@ -33,10 +34,6 @@ except Exception:  # pragma: no cover - fallback when package not importable
 
 
 PYTHON_TRACE_CMD = [sys.executable, "-m", "scjson.cli", "engine-trace"]
-
-_SCION_SCRIPT = (
-    Path(__file__).resolve().parent.parent / "tools" / "scion-runner" / "scion-trace.cjs"
-)
 
 
 def _default_events_path(chart: Path) -> Path | None:
@@ -106,6 +103,8 @@ def _load_trace(path: Path) -> List[dict]:
             if not raw:
                 continue
             lines.append(json.loads(raw))
+    if not lines:
+        raise SystemExit(f"Engine produced an empty trace: {path}")
     return lines
 
 
@@ -288,26 +287,6 @@ def _diff_steps(py_steps: List[dict], ref_steps: List[dict]) -> Tuple[bool, List
     return mismatch, notes, (py_len, ref_len, compared, mismatching_keys)
 
 
-def _default_reference_cmd() -> List[str]:
-    if _SCION_SCRIPT.exists():
-        return ["node", str(_SCION_SCRIPT)]
-    return []
-
-
-def _resolve_reference_cmd(args: argparse.Namespace) -> List[str]:
-    if args.reference:
-        return shlex.split(args.reference)
-    env_cmd = os.environ.get("SCJSON_REF_ENGINE_CMD")
-    if env_cmd:
-        return shlex.split(env_cmd)
-    default = _default_reference_cmd()
-    if default:
-        return default
-    raise SystemExit(
-        "Reference command not provided. Use --reference, set SCJSON_REF_ENGINE_CMD, or install tools/scion-runner."
-    )
-
-
 def _build_trace_cmd(
     base: Iterable[str],
     chart: Path,
@@ -355,6 +334,21 @@ def _run(cmd: List[str], cwd: Path | None = None) -> None:
         )
 
 
+def _command_trace(
+    cmd: List[str], chart: Path, events: Path, out: Path, xml: bool,
+    flags: Iterable[str] = (),
+) -> List[dict]:
+    # A reused workdir may already contain a successful trace for another run.
+    with TemporaryDirectory(dir=out.parent) as directory:
+        fresh = Path(directory) / out.name
+        _run(_build_trace_cmd(cmd, chart, events, fresh, xml, flags))
+        if not fresh.is_file():
+            raise SystemExit(f"Engine command did not write {out.name}")
+        steps = _load_trace(fresh)
+        fresh.replace(out)
+    return steps
+
+
 def _write_python_trace_inline(
     chart: Path,
     events: Path | None,
@@ -369,14 +363,10 @@ def _write_python_trace_inline(
     out.parent.mkdir(parents=True, exist_ok=True)
     execution_mode = ExecutionMode.LAX if treat_as_xml else ExecutionMode.STRICT
     ctx = (
-        DocumentContext.from_xml_file(chart, execution_mode=execution_mode)
+        DocumentContext.from_xml_file(chart, execution_mode=execution_mode, ordering_mode=ordering)
         if treat_as_xml
-        else DocumentContext.from_json_file(chart, execution_mode=execution_mode)
+        else DocumentContext.from_json_file(chart, execution_mode=execution_mode, ordering_mode=ordering)
     )
-    try:
-        ctx.ordering_mode = (ordering or "tolerant").lower()
-    except Exception:
-        pass
     with out.open("w", encoding="utf-8") as sink:
         # Step 0 snapshot
         config = sorted(ctx._filter_states(ctx.configuration), key=ctx._activation_order_key)
@@ -519,7 +509,7 @@ def main() -> None:
         type=str,
         choices=["tolerant", "strict", "scion"],
         default="tolerant",
-        help="Ordering policy for child→parent emissions (finalize, etc.)",
+        help="Ordering policy for child-to-parent emissions (finalize, etc.)",
     )
     parser.add_argument(
         "--norm",
@@ -600,7 +590,7 @@ def main() -> None:
         args.keep_step0_states = False
         args.ordering = "scion"
 
-    ref_cmd = _resolve_reference_cmd(args)
+    ref_cmd = reference_command(args.reference)
 
     # If not explicitly specified, auto-set step-0 state normalization when using SCION as reference
     if args.keep_step0_states is None:
@@ -623,7 +613,7 @@ def main() -> None:
 
     # Build python trace command (supports extra flags for size/determinism)
     py_cmd = (
-        shlex.split(args.python_cmd) if args.python_cmd else list(PYTHON_TRACE_CMD)
+        split_command(args.python_cmd) if args.python_cmd else list(PYTHON_TRACE_CMD)
     )
     py_flags: list[str] = []
     if args.leaf_only:
@@ -645,18 +635,18 @@ def main() -> None:
             workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
             workdir.mkdir(parents=True, exist_ok=True)
             py_trace = workdir / "python.trace.jsonl"
-        _run(_build_trace_cmd(py_cmd, chart, events, py_trace, treat_as_xml, py_flags))
+        py_steps = _command_trace(py_cmd, chart, events, py_trace, treat_as_xml, py_flags)
     except SystemExit:
+        if args.python_cmd:
+            raise
         # Fallback to inline generation when package CLI is unavailable
         _write_python_trace_inline(chart, events, py_trace, treat_as_xml, ordering=args.ordering)
+        py_steps = _load_trace(py_trace)
     if os.environ.get("WORKDIR_OVERRIDE"):
         workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
         workdir.mkdir(parents=True, exist_ok=True)
         ref_trace = workdir / "reference.trace.jsonl"
-    _run(_build_trace_cmd(ref_cmd, chart, events, ref_trace, treat_as_xml))
-
-    py_steps = _load_trace(py_trace)
-    ref_steps = _load_trace(ref_trace)
+    ref_steps = _command_trace(ref_cmd, chart, events, ref_trace, treat_as_xml)
     # Normalize states to leaf-only (optional)
     if args.leaf_only:
         leaf_ids = _leaf_ids_from_chart(chart, treat_as_xml)
@@ -699,13 +689,13 @@ def main() -> None:
             print(f"Artifacts retained in {workdir}")
         sys.exit(1)
 
-    print("✔ Python vs reference traces match")
+    print("Python vs reference traces match")
 
     if args.secondary:
-        secondary_cmd = shlex.split(args.secondary)
+        secondary_cmd = split_command(args.secondary)
     else:
         secondary_env = os.environ.get("SCJSON_SECONDARY_ENGINE_CMD")
-        secondary_cmd = shlex.split(secondary_env) if secondary_env else []
+        secondary_cmd = split_command(secondary_env) if secondary_env else []
 
     if secondary_cmd:
         secondary_trace = workdir / "secondary.trace.jsonl"
@@ -714,8 +704,7 @@ def main() -> None:
             workdir = Path(os.environ["WORKDIR_OVERRIDE"])  # type: ignore
             workdir.mkdir(parents=True, exist_ok=True)
             secondary_trace = workdir / "secondary.trace.jsonl"
-        _run(_build_trace_cmd(secondary_cmd, chart, events, secondary_trace, treat_as_xml))
-        secondary_steps = _load_trace(secondary_trace)
+        secondary_steps = _command_trace(secondary_cmd, chart, events, secondary_trace, treat_as_xml)
         # Apply normalization to secondary to align with ref_steps
         if args.leaf_only:
             leaf_ids = _leaf_ids_from_chart(chart, treat_as_xml)
@@ -742,7 +731,7 @@ def main() -> None:
             if temp_dir:
                 print(f"Artifacts retained in {workdir}")
             sys.exit(2)
-        print("✔ Reference vs secondary traces match")
+        print("Reference vs secondary traces match")
     if temp_dir:
         temp_dir.cleanup()
 

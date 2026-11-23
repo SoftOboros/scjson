@@ -11,6 +11,8 @@ Tests for Phase 2 vector generation: payload heuristics and auto-advance.
 from __future__ import annotations
 
 from pathlib import Path
+from itertools import count
+from types import SimpleNamespace
 import sys
 
 # Ensure local package is importable when running tests directly
@@ -18,11 +20,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import json
+import pytest
 
+from scjson import context as engine
 from scjson.context import DocumentContext, ExecutionMode
+from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from vector_lib.analyzer import extract_payload_heuristics
 from vector_lib.search import generate_sequences
-from vector_gen import generate_vectors, _minimize_sequence
+from vector_gen import _ctx_factory, _minimize_sequence, _simulate_sequence, generate_vectors
 
 
 def _chart_cond_flag() -> str:
@@ -80,7 +85,7 @@ def _chart_chained_range() -> str:
         """
         <scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
           <state id="s0">
-            <transition event="go" cond="0 < _event.data.n < 5" target="ok"/>
+            <transition event="go" cond="0 &lt; _event.data.n &lt; 5" target="ok"/>
           </state>
           <state id="ok"/>
         </scxml>
@@ -163,6 +168,16 @@ def test_payload_heuristics_extracts_event_data_variants() -> None:
     values = {json.dumps(p, sort_keys=True) for p in payloads}
     assert any("true" in s.lower() for s in values) or any(": true" in s.lower() for s in values)
     assert any("false" in s.lower() for s in values)
+
+
+@pytest.mark.parametrize("operator,positive,negative", [
+    ("==", "A", "A_x"), ("===", "A", "A_x"),
+    ("!=", "A_x", "A"), ("!==", "A_x", "A"),
+])
+def test_equality_payloads_use_the_literal(operator, positive, negative) -> None:
+    chart = _chart_membership().replace("in ['A','B']", f"{operator} 'A'")
+    ctx = DocumentContext.from_xml_string(chart, execution_mode=ExecutionMode.LAX)
+    assert extract_payload_heuristics(ctx)["go"][:2] == [{"kind": positive}, {"kind": negative}]
 
 
 def test_payload_heuristics_membership_variants() -> None:
@@ -298,3 +313,60 @@ def test_vector_meta_recommends_advance_time(tmp_path: Path) -> None:
     assert float(meta.get("advanceTime", 0.0)) >= 0.0
     # For this chart specifically, we should detect the 1s delay and recommend > 0
     assert float(meta.get("advanceTime", 0.0)) > 0.0
+
+
+@pytest.fixture(params=["scxml", "scjson"])
+def timed_chart(request, tmp_path, monkeypatch):
+    xml = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="waiting">
+      <state id="waiting">
+        <onentry><send event="tick" delay="1s"/><send event="later" delay="2s"/></onentry>
+        <transition event="probe" target="seen"/>
+      </state>
+      <state id="seen"><transition event="None" target="wrong"/></state>
+      <final id="wrong"/>
+    </scxml>"""
+    is_xml = request.param == "scxml"
+    chart = tmp_path / f"timed.{request.param}"
+    chart.write_text(xml if is_xml else SCXMLDocumentHandler().xml_to_json(xml), encoding="utf-8")
+    # Advance real-engine reads by a millisecond apiece, independently of the BFS budget clock.
+    clock = count(300.0, 0.001)
+    monkeypatch.setattr(engine, "time", SimpleNamespace(monotonic=clock.__next__))
+    return chart, is_xml
+
+
+def test_vector_timer_starts_at_zero_before_boot(timed_chart, tmp_path):
+    chart, is_xml = timed_chart
+    # Ordinary clients still schedule against host time.
+    loader = DocumentContext.from_xml_file if is_xml else DocumentContext.from_json_file
+    live = loader(chart)
+    assert live._use_wall_clock and live._timer_now >= 300.0
+    path = generate_vectors(chart, treat_as_xml=is_xml, out_dir=tmp_path)
+    assert path.exists()
+    meta = json.loads((tmp_path / "timed.vector.json").read_text(encoding="utf-8"))
+    assert meta["advanceTime"] == 1.000001
+    context = _ctx_factory(chart, is_xml, 0.0)()
+    assert context.execution_mode == (ExecutionMode.LAX if is_xml else ExecutionMode.STRICT)
+    assert not context._use_wall_clock and context._timer_now == 0.0
+    assert [due for due, _ in context.delayed_events] == [1.0, 2.0]
+
+
+def test_vector_emits_entire_pending_delay(timed_chart, tmp_path):
+    chart, is_xml = timed_chart
+    path = generate_vectors(chart, treat_as_xml=is_xml, out_dir=tmp_path, auto_advance=False)
+    assert [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] == [
+        {"event": "probe"}, {"advance_time": 1.000001},
+    ]
+
+
+def test_vector_coverage_applies_clock_controls_without_external_event(timed_chart, tmp_path):
+    chart, is_xml = timed_chart
+    path = generate_vectors(chart, treat_as_xml=is_xml, out_dir=tmp_path, auto_advance=False)
+    summary = json.loads((tmp_path / "timed.coverage.json").read_text(encoding="utf-8"))
+    assert summary == {"enteredStates": 1, "firedTransitions": 1, "doneEvents": 0, "errorEvents": 0}
+
+    context = _ctx_factory(chart, is_xml, 0.0)()
+    stimuli = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    coverage = _simulate_sequence(context, stimuli)
+    assert coverage.entered_states == {"seen"}
+    assert context.events.pop().name == "tick"
+    assert [event.name for _, event in context.delayed_events] == ["later"]

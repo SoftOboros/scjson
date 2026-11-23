@@ -64,6 +64,12 @@ module Scjson
           # ignore if not supported
         end
         leaves = leaf_only ? ctx.leaf_state_ids : nil
+        write_frame = lambda do |step, frame|
+          if ordering == 'scion'
+            %w[configuration enteredStates exitedStates].each { |key| frame[key] = frame.fetch(key).uniq.sort }
+          end
+          sink.write(JSON.generate({ step: step }.merge(frame)) + "\n")
+        end
         # Step 0 snapshot
         init = ctx.trace_init
         if leaf_only && leaves
@@ -82,7 +88,7 @@ module Scjson
           init['enteredStates'] = []
           init['exitedStates'] = []
         end
-        sink.write(JSON.generate({ step: 0 }.merge(init)) + "\n")
+        write_frame.call(0, init)
 
         # Stream of events: from file or STDIN
         stream = events_path ? File.open(events_path, 'r', encoding: 'utf-8') : $stdin
@@ -137,7 +143,7 @@ module Scjson
                   end
                 end
                 rec['firedTransitions'] = [] if omit_transitions
-                sink.write(JSON.generate({ step: step_no }.merge(rec)) + "\n")
+                write_frame.call(step_no, rec)
                 step_no += 1
             rescue StandardError
               # ignore malformed
@@ -176,7 +182,7 @@ module Scjson
             end
           end
           rec['firedTransitions'] = [] if omit_transitions
-          sink.write(JSON.generate({ step: step_no }.merge(rec)) + "\n")
+          write_frame.call(step_no, rec)
           step_no += 1
         end
       ensure

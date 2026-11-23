@@ -18,6 +18,8 @@ import argparse
 from pathlib import Path
 from typing import Any, Iterable, List, Set
 
+from pydantic import PrivateAttr
+
 from scjson.context import DocumentContext, ExecutionMode
 from scjson.events import Event
 from vector_lib.analyzer import (
@@ -30,15 +32,22 @@ from vector_lib.coverage import CoverageTracker
 import json
 
 
+class _VectorContext(DocumentContext):
+    """Use logical time from the first entry action of an offline root chart."""
+
+    _timer_now: float = PrivateAttr(default=0.0)
+    _use_wall_clock: bool = PrivateAttr(default=False)
+
+
 def _ctx_factory(chart: Path, treat_as_xml: bool, advance_time: float) -> callable:
     """Return a factory that creates a fresh context for the chart."""
 
     def make() -> DocumentContext:
         mode = ExecutionMode.LAX if treat_as_xml else ExecutionMode.STRICT
         ctx = (
-            DocumentContext.from_xml_file(chart, execution_mode=mode)
+            _VectorContext.from_xml_file(chart, execution_mode=mode)
             if treat_as_xml
-            else DocumentContext.from_json_file(chart, execution_mode=mode)
+            else _VectorContext.from_json_file(chart, execution_mode=mode)
         )
         if advance_time and advance_time > 0:
             ctx.advance_time(advance_time)
@@ -55,7 +64,7 @@ def _simulate_sequence(ctx: DocumentContext, seq: list[Any]) -> CoverageTracker:
     ctx: DocumentContext
         Initialized runtime context.
     seq: list[Any]
-        Sequence of event names (str) or objects with ``event|name`` and ``data``.
+        Event names, event objects with optional data, or ``advance_time`` controls in seconds.
 
     Returns
     -------
@@ -65,7 +74,13 @@ def _simulate_sequence(ctx: DocumentContext, seq: list[Any]) -> CoverageTracker:
     cov = CoverageTracker()
     for ev in seq:
         if isinstance(ev, dict):
+            advance = ev.get("advance_time")
+            if isinstance(advance, (int, float)) and advance > 0:
+                ctx.advance_time(advance)
+                continue
             name = ev.get("event") or ev.get("name")
+            if not name:
+                continue
             data = ev.get("data") if "data" in ev else None
         else:
             name = str(ev)
@@ -159,12 +174,7 @@ def generate_vectors(
     """
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    execution_mode = ExecutionMode.LAX if treat_as_xml else ExecutionMode.STRICT
-    ctx = (
-        DocumentContext.from_xml_file(chart, execution_mode=execution_mode)
-        if treat_as_xml
-        else DocumentContext.from_json_file(chart, execution_mode=execution_mode)
-    )
+    ctx = _ctx_factory(chart, treat_as_xml, 0.0)()
     # Auto-detect initial delayed sends when no explicit advance_time provided
     used_advance = advance_time or 0.0
     if (not advance_time or advance_time <= 0) and auto_advance:
@@ -213,8 +223,9 @@ def generate_vectors(
     ):
         stimuli.append({"event": "complete"})
 
+    new_context = _ctx_factory(chart, treat_as_xml, used_advance)
     search_result = generate_sequences(
-        _ctx_factory(chart, treat_as_xml, used_advance),
+        new_context,
         stimuli,
         max_depth=max_depth,
         limit=limit,
@@ -231,14 +242,14 @@ def generate_vectors(
     top = sequences[0] if sequences else []
     # Minimize sequence greedily for more compact vectors
     try:
-        top = _minimize_sequence(_ctx_factory(chart, treat_as_xml, used_advance), list(top))
+        top = _minimize_sequence(new_context, list(top))
     except Exception:
         pass
     # Optionally inject per-step time advances when delayed sends are detected
     # after initialization so timers are released before the next stimulus.
     try:
         def _inject_advances(seq: list[Any]) -> list[Any]:
-            ctx = _ctx_factory(chart, treat_as_xml, used_advance)()
+            ctx = new_context()
             out_seq: list[Any] = []
             epsilon = 1e-6
             for item in seq:
@@ -284,17 +295,7 @@ def generate_vectors(
                 fh.write(json.dumps({"event": str(ev)}) + "\n")
     # Emit a coverage summary sidecar for sweeps/reporting
     try:
-        ctx2 = _ctx_factory(chart, treat_as_xml, used_advance)()
-        cov = CoverageTracker()
-        for ev in top:
-            if isinstance(ev, dict):
-                name = ev.get("event") or ev.get("name")
-                data = ev.get("data") if "data" in ev else None
-            else:
-                name = str(ev)
-                data = None
-            trace = ctx2.trace_step(Event(name=str(name), data=data))
-            cov.add_step(trace)
+        cov = _simulate_sequence(new_context(), top)
         cov_path = out_dir / f"{chart.stem}.coverage.json"
         summary = cov.summary()
         cov_path.write_text(json.dumps(summary, indent=2))

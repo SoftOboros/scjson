@@ -38,9 +38,8 @@
  * This MUST match the Python tuple shape byte-for-byte (after canonical
  * JSON serialization) so cross-language fixtures align.
  *
- * XML-local element names are used (the parser drops the ``xmlns`` prefix
- * because SCXML elements are not namespace-qualified in serialized form;
- * any future namespaced extensions would be opaque and not promoted).
+ * SCXML names use their local names. Extension names retain their namespace
+ * so an extension cannot take a core sibling's address.
  *
  * Model-attribute mapping
  * -----------------------
@@ -324,20 +323,25 @@ function textBody(node) {
 }
 
 /**
- * Strip a local prefix from a tag returned by fast-xml-parser. The parser
- * already drops the ``xmlns`` URI; this helper survives any future
- * namespace-aware caller using ``{namespace}local`` form.
+ * Resolve an element's address name from the namespace declarations in scope.
+ * A missing document namespace retains the converter's legacy SCXML default.
  *
- * @param {string} tag - Tag name.
- * @returns {string} Local tag name.
+ * @param {object} node - The parser's ordered element node.
+ * @param {Map<string, string>} inherited - Parent's prefix bindings.
+ * @returns {{key: string, namespaces: Map<string, string>}} Address and child scope.
  */
-function localName(tag) {
-  if (typeof tag !== 'string') return tag;
-  if (tag.startsWith('{')) {
-    const end = tag.indexOf('}');
-    if (end !== -1) return tag.slice(end + 1);
+function addressName(node, inherited = new Map([['', 'http://www.w3.org/2005/07/scxml']])) {
+  const namespaces = new Map(inherited);
+  for (const [name, uri] of Object.entries(node[':@'] || {})) {
+    if (name === '@_xmlns') namespaces.set('', uri);
+    if (name.startsWith('@_xmlns:')) namespaces.set(name.slice(8), uri);
   }
-  return tag;
+  const tag = nodeDataKey(node);
+  const colon = tag.indexOf(':');
+  const uri = namespaces.get(colon < 0 ? '' : tag.slice(0, colon)) || '';
+  const local = tag.slice(colon + 1);
+  const key = uri === 'http://www.w3.org/2005/07/scxml' ? local : '{' + uri + '}' + local;
+  return { key, namespaces };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,11 +369,12 @@ function walkPromotion(
   address,
   addressMap,
   insideSourceBody,
-  insideExtension
+  insideExtension,
+  name
 ) {
   const elemTag = nodeDataKey(elem);
   if (elemTag === null) return;
-  const elemLocal = localName(elemTag);
+  const elemLocal = name.key;
   const elemInSource = insideSourceBody || SOURCE_BODY_TAGS.has(elemLocal);
   // The root element is always treated as inside-known: APPLIES_TO_TAGS
   // contains "scxml" so the root passes; for any other root we still walk
@@ -422,8 +427,8 @@ function walkPromotion(
     }
 
     if (isElementNode(child)) {
-      const childTag = nodeDataKey(child);
-      const childLocal = localName(childTag);
+      const childName = addressName(child, name.namespaces);
+      const childLocal = childName.key;
       const idx = perTagCounter[childLocal] || 0;
       perTagCounter[childLocal] = idx + 1;
       const childAddr = address.concat([[childLocal, idx]]);
@@ -458,7 +463,8 @@ function walkPromotion(
         childAddr,
         addressMap,
         elemInSource,
-        elemInExtension
+        elemInExtension,
+        childName
       );
       continue;
     }
@@ -572,7 +578,8 @@ function extractHelpTextFromXml(xmlStr) {
     return { cleanedXml: xmlStr, addressMap, addressMapJson: [] };
   }
 
-  const rootLocal = localName(nodeDataKey(root));
+  const rootName = addressName(root);
+  const rootLocal = rootName.key;
   const rootAddr = [[rootLocal, 0]];
 
   // CONV-F rule 4: pre-root and post-root comments attach to root.
@@ -601,7 +608,7 @@ function extractHelpTextFromXml(xmlStr) {
     }
   }
 
-  walkPromotion(root, rootAddr, addressMap, false, false);
+  walkPromotion(root, rootAddr, addressMap, false, false, rootName);
 
   // Strip comments and re-serialize.
   const cleaned = buildCleanedTree(tree);
@@ -769,6 +776,7 @@ function collectHelpTextAddresses(node, address, out) {
 function navigateXml(rootNode, address) {
   if (!Array.isArray(address) || address.length === 0) return null;
   let node = rootNode;
+  let name = addressName(rootNode);
   let parentList = null;
   let indexInParent = -1;
   for (let i = 1; i < address.length; i++) {
@@ -782,9 +790,11 @@ function navigateXml(rootNode, address) {
     for (let j = 0; j < children.length; j++) {
       const child = children[j];
       if (!isElementNode(child)) continue;
-      if (localName(nodeDataKey(child)) === tag) {
+      const childName = addressName(child, name.namespaces);
+      if (childName.key === tag) {
         if (count === idx) {
           found = j;
+          name = childName;
           break;
         }
         count++;
@@ -842,7 +852,7 @@ function injectHelpTextCommentsIntoXml(xmlStr, model) {
   if (!Array.isArray(tree)) return xmlStr;
   const root = findRootElement(tree);
   if (root === null) return xmlStr;
-  const rootLocal = localName(nodeDataKey(root));
+  const rootLocal = addressName(root).key;
   const rootAddr = [[rootLocal, 0]];
 
   collectHelpTextAddresses(model, rootAddr, collected);
@@ -927,6 +937,8 @@ function injectHelpTextCommentsIntoXml(xmlStr, model) {
 }
 
 module.exports = {
+  nodeDataKey,
+  isElementNode,
   APPLIES_TO_TAGS,
   SOURCE_BODY_TAGS,
   TAG_TO_ATTR,

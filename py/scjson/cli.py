@@ -21,12 +21,26 @@ from .jinja_gen import JinjaGenPydantic
 from importlib.metadata import version, PackageNotFoundError
 from json import dumps
 
+
+class _ConversionPath(click.Path):
+    """Allow recursive Windows input/output trees to exceed legacy MAX_PATH."""
+
+    def convert(self, value, param, ctx):
+        if os.name == "nt" and value is not None:
+            value = os.path.abspath(value)
+            if not value.startswith("\\\\?\\"):
+                if value.startswith("\\\\"):
+                    value = "\\\\?\\UNC\\" + value[2:]
+                else:
+                    value = "\\\\?\\" + value
+        return super().convert(value, param, ctx)
+
 def _get_metadata(pkg="scjson"):
     try:
         return {
             "version": version(pkg),
             "progname": pkg,
-            "description": "SCJSON: SCXML ↔ JSON converter"
+            "description": "SCJSON: SCXML and JSON converter"
         }
     except PackageNotFoundError:
         return {
@@ -45,14 +59,15 @@ def _splash() -> None:
 @click.pass_context
 def main(ctx):
     """Command line interface for scjson conversions."""
-    _splash()
+    if ctx.invoked_subcommand != "engine-trace":
+        _splash()
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
 
 
 @main.command(help="Convert scjson file to SCXML.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
+@click.option("--output", "-o", type=_ConversionPath(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
@@ -101,12 +116,13 @@ def xml(path: Path, output: Path | None, recursive: bool, verify: bool, keep_emp
             else (base / path.with_suffix(".scxml").name)
         ) if output else path.with_suffix(".scxml")
         dest = None if verify else out_file
-        convert_file(path, dest)
+        if not convert_file(path, dest):
+            raise SystemExit(1)
 
 
 @main.command(help="Convert SCXML file to scjson.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
-@click.option("--output", "-o", type=click.Path(path_type=Path), help="Output file or directory")
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
+@click.option("--output", "-o", type=_ConversionPath(path_type=Path), help="Output file or directory")
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 @click.option("--verify", "-v", is_flag=True, default=False, help="Verify conversion without writing output")
 @click.option("--keep-empty", is_flag=True, default=False, help="Keep null or empty items when producing JSON")
@@ -184,7 +200,7 @@ def json(
 
 
 @main.command(help="Validate scjson or SCXML files by round-tripping them in memory.")
-@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.argument("path", type=_ConversionPath(exists=True, path_type=Path))
 @click.option("--recursive", "-r", is_flag=True, default=False, help="Recurse into subdirectories when PATH is a directory")
 def validate(path: Path, recursive: bool):
     """Check that files can be converted to the opposite format and back."""
@@ -446,7 +462,7 @@ def run(input_path: Path, workdir: Path | None, is_xml: bool) -> None:
     type=click.Choice(["tolerant", "strict", "scion"], case_sensitive=False),
     default="tolerant",
     show_default=True,
-    help="Ordering policy for child→parent emissions (finalize, etc.)",
+    help="Ordering policy for child-to-parent emissions (finalize, etc.)",
 )
 @click.option(
     "--emit-time-steps/--no-emit-time-steps",
@@ -516,6 +532,7 @@ def engine_trace(
     ctx_kwargs = {
         "allow_unsafe_eval": unsafe_eval,
         "execution_mode": execution_mode,
+        "ordering_mode": ordering.lower(),
     }
     if evaluator is not None:
         ctx_kwargs["evaluator"] = evaluator
@@ -524,10 +541,6 @@ def engine_trace(
         if is_xml
         else DocumentContext.from_json_file(input_path, **ctx_kwargs)
     )
-    try:
-        ctx.ordering_mode = (ordering or "tolerant").lower()
-    except Exception:
-        pass
 
     sink: TextIO
     if out_path:
@@ -535,6 +548,12 @@ def engine_trace(
         sink = open(out_path, "w", encoding="utf-8")
     else:
         sink = sys.stdout
+
+    def write_frame(frame):
+        if ctx.ordering_mode == "scion":
+            for key in ("configuration", "enteredStates", "exitedStates"):
+                frame[key] = sorted(set(frame[key]))
+        sink.write(dumps(frame) + "\n")
 
     stream_handle: TextIO | None = None
     try:
@@ -560,7 +579,7 @@ def engine_trace(
                 {} if omit_delta else {k: ctx.data_model[k] for k in sorted(ctx.data_model)}
             ),
         }
-        sink.write(dumps(init) + "\n")
+        write_frame(init)
 
         # Event stream
         if events_path:
@@ -597,7 +616,7 @@ def engine_trace(
                             trace["firedTransitions"] = []
                         trace["event"] = None
                         trace["step"] = step_no
-                        sink.write(dumps(trace) + "\n")
+                        write_frame(trace)
                         step_no += 1
                     continue
             except Exception:
@@ -632,7 +651,7 @@ def engine_trace(
             if omit_transitions and "firedTransitions" in trace:
                 trace["firedTransitions"] = []
             trace["step"] = step_no
-            sink.write(dumps(trace) + "\n")
+            write_frame(trace)
             step_no += 1
     finally:
         if sink is not sys.stdout:

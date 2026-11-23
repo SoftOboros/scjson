@@ -21,7 +21,20 @@ const {
 
 const program = new Command();
 
-
+// Yield relative source names. A recursive conversion does not follow
+// directory symlinks or include hidden files.
+function* inputFiles(directory, recursive, prefix = '') {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const relative = path.join(prefix, entry.name);
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (recursive) yield* inputFiles(full, true, relative);
+    } else if (entry.isFile() || (entry.isSymbolicLink() && fs.statSync(full, { throwIfNoEntry: false })?.isFile())) {
+      yield relative;
+    }
+  }
+}
 
 program
   .name('scjson')
@@ -37,27 +50,15 @@ program
     let success = true;
 
     function validateFile(p) {
-      const data = fs.readFileSync(p, 'utf8');
-      try {
-        if (p.endsWith('.scxml')) {
-          const json = xmlToJson(data);
-          jsonToXml(json);
-        } else if (p.endsWith('.scjson')) {
-          const xml = jsonToXml(data);
-          xmlToJson(xml);
-        } else {
-          return;
-        }
-      } catch (e) {
-        console.error(`Validation failed for ${p}: ${e.message}`);
+      if (p.endsWith('.scxml') && !convertScxmlFile(p, undefined, true, false)) {
+        success = false;
+      } else if (p.endsWith('.scjson') && !convertScjsonFile(p, undefined, true)) {
         success = false;
       }
     }
 
     if (fs.statSync(src).isDirectory()) {
-      const pattern = options.recursive ? '**/*' : '*';
-      const files = require('glob').sync(pattern, { cwd: src, nodir: true });
-      files.forEach(f => validateFile(path.join(src, f)));
+      for (const f of inputFiles(src, options.recursive)) validateFile(path.join(src, f));
     } else {
       validateFile(src);
     }
@@ -78,16 +79,15 @@ program
  * @returns {boolean} True if all files converted successfully.
  */
 function convertDirectoryJson(inputDir, outputDir, recursive, verify, keepEmpty) {
-  const pattern = recursive ? '**/*.scxml' : '*.scxml';
-  const files = require('glob').sync(pattern, { cwd: inputDir, nodir: true });
   let success = true;
-  files.forEach(f => {
+  for (const f of inputFiles(inputDir, recursive)) {
+    if (!f.endsWith('.scxml')) continue;
     const src = path.join(inputDir, f);
     const dest = path.join(outputDir, f.replace(/\.scxml$/, '.scjson'));
     if (!convertScxmlFile(src, dest, verify, keepEmpty)) {
       success = false;
     }
-  });
+  }
   return success;
 }
 
@@ -102,16 +102,15 @@ function convertDirectoryJson(inputDir, outputDir, recursive, verify, keepEmpty)
  * @returns {boolean} True if all files converted successfully.
  */
 function convertDirectoryXml(inputDir, outputDir, recursive, verify, keepEmpty) {
-  const pattern = recursive ? '**/*.scjson' : '*.scjson';
-  const files = require('glob').sync(pattern, { cwd: inputDir, nodir: true });
   let success = true;
-  files.forEach(f => {
+  for (const f of inputFiles(inputDir, recursive)) {
+    if (!f.endsWith('.scjson')) continue;
     const src = path.join(inputDir, f);
     const dest = path.join(outputDir, f.replace(/\.scjson$/, '.scxml'));
     if (!convertScjsonFile(src, dest, verify, keepEmpty)) {
       success = false;
     }
-  });
+  }
   return success;
 }
 
@@ -132,6 +131,7 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
       console.warn(
         `Validation failed in xmlToJson for ${src}: ${JSON.stringify(errors, null, 2)}`,
       );
+      if (verify || !jsonStr) return false;
     }
     if (verify) {
       const { valid: xmlValid, errors: xmlErrors } = jsonToXml(jsonStr);
@@ -139,6 +139,7 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
         console.warn(
           `Validation failed in jsonToXml for ${src}: ${JSON.stringify(xmlErrors, null, 2)}`,
         );
+        return false;
       }
     } else {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -147,10 +148,11 @@ function convertScxmlFile(src, dest, verify, keepEmpty) {
     if (verify) console.log(`Verified ${src}`);
     return true;
   } catch (e) {
+    const failure = verify ? 'Validation failed for' : 'Failed to convert';
     if (e.errors) {
-      console.error(`Failed to convert ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
+      console.error(`${failure} ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
     } else {
-      console.error(`Failed to convert ${src}: ${e.message}`);
+      console.error(`${failure} ${src}: ${e.message}`);
     }
     return false;
   }
@@ -172,6 +174,7 @@ function convertScjsonFile(src, dest, verify) {
       console.warn(
         `Validation failed in jsonToXml for ${src}: ${JSON.stringify(errors, null, 2)}`,
       );
+      if (verify || !xmlStr) return false;
     }
     if (verify) {
       const { valid: jsonValid, errors: jsonErrors } = xmlToJson(xmlStr);
@@ -179,6 +182,7 @@ function convertScjsonFile(src, dest, verify) {
         console.warn(
           `Validation failed in xmlToJson for ${src}: ${JSON.stringify(jsonErrors, null, 2)}`,
         );
+        return false;
       }
     } else {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -187,10 +191,11 @@ function convertScjsonFile(src, dest, verify) {
     if (verify) console.log(`Verified ${src}`);
     return true;
   } catch (e) {
+    const failure = verify ? 'Validation failed for' : 'Failed to convert';
     if (e.errors) {
-      console.error(`Failed to convert ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
+      console.error(`${failure} ${src}: ${e.message}\n${JSON.stringify(e.errors, null, 2)}`);
     } else {
-      console.error(`Failed to convert ${src}: ${e.message}`);
+      console.error(`${failure} ${src}: ${e.message}`);
     }
     return false;
   }
@@ -209,13 +214,13 @@ program
 
     if (fs.statSync(src).isDirectory()) {
       const success = convertDirectoryJson(src, out, opts.recursive, opts.verify, opts.keepEmpty);
-      if (opts.verify && !success) process.exitCode = 1;
+      if (!success) process.exitCode = 1;
     } else {
       const dest = opts.output && !opts.output.endsWith('.json') && !opts.output.endsWith('.scjson')
         ? path.join(out, path.basename(src).replace(/\.scxml$/, '.scjson'))
         : (opts.output || src.replace(/\.scxml$/, '.scjson'));
       const success = convertScxmlFile(src, dest, opts.verify, opts.keepEmpty);
-      if (opts.verify && !success) process.exitCode = 1;
+      if (!success) process.exitCode = 1;
     }
   });
 
@@ -232,13 +237,13 @@ program
 
     if (fs.statSync(src).isDirectory()) {
       const success = convertDirectoryXml(src, out, opts.recursive, opts.verify, opts.keepEmpty);
-      if (opts.verify && !success) process.exitCode = 1;
+      if (!success) process.exitCode = 1;
     } else {
       const dest = opts.output && !opts.output.endsWith('.xml') && !opts.output.endsWith('.scxml')
         ? path.join(out, path.basename(src).replace(/\.scjson$/, '.scxml'))
         : (opts.output || src.replace(/\.scjson$/, '.scxml'));
       const success = convertScjsonFile(src, dest, opts.verify, opts.keepEmpty);
-      if (opts.verify && !success) process.exitCode = 1;
+      if (!success) process.exitCode = 1;
     }
   });
 

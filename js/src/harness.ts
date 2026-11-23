@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Agent Name: js-scion-harness
  *
@@ -6,9 +7,7 @@
  * Licensed under the BSD 1-Clause License.
  */
 
-import { spawn } from 'node:child_process';
-import { createInterface } from 'node:readline';
-import { resolve } from 'node:path';
+import { jsonToXml } from './converters.js';
 
 type NormFlags = {
   leafOnly: boolean;
@@ -70,33 +69,13 @@ function normalizeStep(obj: any, norm: NormFlags): any {
   return out;
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
-  const { pass, norm } = parseArgs(argv);
-  const runner = resolve(__dirname, '../../tools/scion-runner/scion-trace.cjs');
-  const runPipe = (cmd: string, args: string[]) => new Promise<number>((resolve) => {
-    const proc = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'inherit'] });
-    const rl = createInterface({ input: proc.stdout });
-    let failed = false;
-    rl.on('line', (line) => {
-      const s = line.trim();
-      if (!s) return;
-      try {
-        const obj = JSON.parse(s);
-        const normed = normalizeStep(obj, norm);
-        process.stdout.write(JSON.stringify(normed) + '\n');
-      } catch (e) {
-        failed = true;
-        process.stderr.write(String(e) + '\n');
-        process.stdout.write(line + '\n');
-      }
-    });
-    proc.on('close', (code) => resolve(code ?? (failed ? 1 : 0)));
-  });
-  const code = await runPipe('node', [runner, ...pass]);
-  if (code !== 0) {
-    await runPipe('python', ['-m', 'scjson.cli', 'engine-trace', ...pass]);
-  }
-}
-
-void main();
+const { pass, norm } = parseArgs(process.argv.slice(2));
+// The build stages the repository's canonical runner beside this entry point.
+require('./scion-trace.cjs').runCli(pass, {
+  convertJson(text: string): string {
+    const chart = jsonToXml(text);
+    if (!chart.valid) throw new Error('Invalid SCJSON: ' + JSON.stringify(chart.errors));
+    return chart.result;
+  },
+  normalize: (frame: unknown) => normalizeStep(frame, norm),
+});

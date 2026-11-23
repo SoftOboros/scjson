@@ -28,7 +28,9 @@
 {% endif %}
 export interface {{ if_name }}Props {
 {% for field_name, field in schem["properties"].items() %}
-{% if is_field_enum(field, schem ) and not is_runtime %}
+{% if field_name in ("execution_order", "region_order", "state_order") %}
+    {{ to_camel(field_name) }}?: {% if field['items'].get('enum') %}('{{ field['items']['enum'] | join("' | '") }}')[]{% else %}string[]{% endif %};
+{% elif is_field_enum(field, schem ) and not is_runtime %}
     {{ to_camel(field_name) }}: typeof {{ get_field_type(field)}};
 {% else %}
     {{ to_camel(field_name) }}: {{ get_field_type(field)}};
@@ -39,7 +41,7 @@ export interface {{ if_name }}Props {
 {% if is_runtime %}
 /** Instantiate a default object of type {{ if_name}}Props */
 export const default{{ if_name }} = (): {{ if_name }}Props => ({
-{% for field_name, field in schem["properties"].items() %}
+{% for field_name, field in schem["properties"].items() if field_name not in ("execution_order", "region_order", "state_order") %}
     {{ to_camel(field_name) }}: {{ get_field_default(field, schem["$defs"])}},
 {% endfor %}
 });

@@ -63,7 +63,7 @@ impl Default for {{ to_pascal(if_name) }}Props {
 pub struct {{ if_name }}Props {
 {% for field_name, field in schem["properties"].items() %}
 {% set doc = Gen.objekts[to_pascal(field_name)].__doc__ if Gen.objekts[to_pascal(field_name)] else "" %}
-    #[serde(default{% if field.get("rename") %}, rename = "{{ field["rename"] }}"{% endif %})]
+    #[serde(default{% if field_name in ("execution_order", "region_order", "state_order") %}, skip_serializing_if = "Option::is_none"{% endif %}{% if field.get("rename") %}, rename = "{{ field["rename"] }}"{% endif %})]
 {% if doc %}
 {% for doc_line in doc.splitlines() %}
 {% for line in textwrap.wrap(doc_line, 80) %}
@@ -71,7 +71,7 @@ pub struct {{ if_name }}Props {
 {% endfor %}
 {% endfor %}
 {% endif %}
-    pub {{ rust_ident(to_snake(field_name)) }}: {{ get_field_type(field) }},
+    pub {{ rust_ident(to_snake(field_name)) }}: {{ 'Option<Vec<String>>' if field_name in ('execution_order', 'region_order', 'state_order') else get_field_type(field) }},
 {% endfor %}
 }
 /// Instantiates a Default {{ field_name }}Props Object
@@ -79,7 +79,7 @@ impl Default for {{ if_name }}Props {
     fn default() -> Self {
         Self {
 {% for field_name, field in schem["properties"].items() %}
-{% set ty = get_field_type(field) %}
+{% set ty = 'Option<Vec<String>>' if field_name in ('execution_order', 'region_order', 'state_order') else get_field_type(field) %}
             {{ rust_ident(to_snake(field_name)) }}: {{ ty.replace('<', '::<') }}::default(),
 {% endfor %}
         }

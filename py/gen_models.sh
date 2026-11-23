@@ -26,6 +26,8 @@ wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-profile-mi
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-profile-xpath.xsd	 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml-strict.xsd	 
 wget --directory-prefix=../xsd https://www.w3.org/2011/04/SCXML/scxml.xsd
+# Apply the ratified XML marker cardinality to the downloaded legacy schemas.
+python patch_execution_order.py --xsd
 # Generate pydantic model
 xsdata generate \
         --output pydantic  \
@@ -85,3 +87,10 @@ python patch_help_text.py --file ./scjson/dataclasses_strict/generated.py
 python patch_finalize_restrictions.py \
         --pydantic-file ./scjson/pydantic/generated.py \
         --pydantic-file ./scjson/pydantic_strict/generated.py
+
+# Preserve grouped payloads and record the executable order defined by SCJSON-CONV-00.
+python patch_execution_order.py
+for schema in ../scjson.schema.json ../js/scjson.schema.json ../java/src/main/resources/scjson.schema.json; do
+    python patch_scxml_forward_ref.py --schema-file "$schema"
+    python patch_execution_order.py --schema-file "$schema"
+done

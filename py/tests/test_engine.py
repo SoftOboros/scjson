@@ -7,6 +7,8 @@ Licensed under the BSD 1-Clause License.
 """
 
 from decimal import Decimal
+import json
+from pathlib import Path
 import pytest
 from xsdata.exceptions import ParserError
 
@@ -14,6 +16,102 @@ from scjson.pydantic import Scxml, State, Transition, Datamodel, Data, Parallel
 from scjson.context import DocumentContext, ExecutionMode
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from scjson.invoke import InvokeRegistry, RecordHandler
+
+
+@pytest.mark.parametrize("dialect", ["ecma", "python"])
+def test_inline_foreach_original_155(dialect, tmp_path):
+    """Run the unmodified W3C chart and its ordinary SCJSON conversion."""
+    tests = Path(__file__).resolve().parents[2] / "tutorial" / "Tests"
+    if not tests.is_dir():
+        pytest.skip("Initialize the tutorial submodule to run the original chart")
+    xml_path = tests / dialect / "W3C" / "Mandatory" / "Auto" / "test155.scxml"
+    xml = xml_path.read_text(encoding="utf-8")
+    handler = SCXMLDocumentHandler()
+    scjson = handler.xml_to_json(xml)
+    json_path = tmp_path / "test155.scjson"
+    json_path.write_text(scjson, encoding="utf-8")
+    model = Scxml.model_validate_json(scjson)
+    original = next(d.content for d in model.datamodel[0].data if d.id == "Var3")
+    assert "".join(original).strip() == "[1,2,3]"
+    restored = Scxml.model_validate_json(handler.xml_to_json(handler.json_to_xml(scjson)))
+    assert next(d.content for d in restored.datamodel[0].data if d.id == "Var3") == original
+
+    for machine in (DocumentContext.from_xml_file(xml_path),
+                    DocumentContext.from_xml_string(xml),
+                    DocumentContext.from_json_file(json_path),
+                    DocumentContext.from_doc(model)):
+        assert machine.configuration - {"__scxml_root__"} == {"pass"}
+        assert [machine.data_model[k] for k in ("Var1", "Var2", "Var3")] == [6, 3, [1, 2, 3]]
+
+
+@pytest.mark.parametrize("dialect", ["ecma", "python"])
+@pytest.mark.parametrize("number", [150, 151])
+def test_first_use_foreach_binding_in_later_state(dialect, number, tmp_path):
+    """Declared and first-use bindings must survive the transition to s2."""
+    tests = Path(__file__).resolve().parents[2] / "tutorial" / "Tests"
+    if not tests.is_dir():
+        pytest.skip("Initialize the tutorial submodule to run the original chart")
+    original = tests / dialect / "W3C" / "Mandatory" / "Auto" / f"test{number}.scxml"
+    chart = tmp_path / "chart.scjson"
+    chart.write_text(SCXMLDocumentHandler().xml_to_json(original.read_text(encoding="utf-8")),
+                     encoding="utf-8")
+    for machine in (DocumentContext.from_xml_file(original), DocumentContext.from_json_file(chart)):
+        machine.run(steps=20)
+        assert machine.configuration - {"__scxml_root__"} == {"pass"}
+        assert [machine.data_model[f"Var{i}"] for i in (1, 2, 4, 5)] == [3, 2, 3, 2]
+
+
+@pytest.mark.parametrize("dialect", ["python", "ecmascript"])
+@pytest.mark.parametrize(("value", "python_expected", "js_expected"), [
+    (2, True, True), (0, False, False), ("", False, False), (None, False, False),
+    ([], False, True), ({}, False, True), (float("nan"), True, False),
+])
+def test_datamodel_truth_for_transition_and_executable_conditions(dialect, value, python_expected, js_expected):
+    """A valid falsy guard takes the fallback without queuing an error."""
+    machine = DocumentContext.from_xml_string(f"""
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="{dialect}" initial="s">
+        <datamodel><data id="flag"/><data id="hit" expr="0"/></datamodel>
+        <state id="s"><transition event="go" target="next">
+          <if cond="0"><assign location="hit" expr="-1"/><elseif cond="flag"/><assign location="hit" expr="1"/></if>
+        </transition></state>
+        <state id="next"><transition cond="flag" target="yes"/><transition target="no"/></state>
+        <final id="yes"/><final id="no"/>
+      </scxml>
+    """)
+    machine.data_model["flag"] = value
+    machine.enqueue("go")
+    machine.microstep()
+    machine.drain_internal()
+    expected = js_expected if dialect == "ecmascript" else python_expected
+    assert machine.data_model["hit"] == int(expected)
+    assert ("yes" if expected else "no") in machine.configuration
+    assert all(event.name != "error.execution" for event in iter(machine.events.pop, None))
+
+
+def test_inline_data_literals_and_authored_text(tmp_path):
+    """Decode JSON exactly once and keep fallback text and expr precedence."""
+    data = [
+        {"id": "nested", "content": ['{"a": [false,', ' null, -3, "x"]}']},
+        {"id": "items", "content": ["[]"]},
+        {"id": "zero", "content": ["0"]},
+        {"id": "quoted", "content": ['"[1,2,3]"']},
+        {"id": "text", "content": ["  keep", "  this  "]},
+        {"id": "expression", "content": ["1 + 2"]},
+        {"id": "invalid", "content": ["[1,]"]},
+        {"id": "nan", "content": ["NaN"]},
+        {"id": "attr", "expr": "2", "content": ["[4]"]},
+        {"id": "absent"},
+    ]
+    raw = {"version": "1.0", "initial": ["s"], "state": [{"id": "s"}],
+           "datamodel": [{"data": data}]}
+    path = tmp_path / "values.scjson"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    expected = {"nested": {"a": [False, None, -3, "x"]}, "items": [], "zero": 0,
+                "quoted": "[1,2,3]", "text": "  keep  this  ", "expression": "1 + 2",
+                "invalid": "[1,]", "nan": "NaN", "attr": 2, "absent": None}
+    for machine in (DocumentContext.from_doc(Scxml.model_validate(raw)),
+                    DocumentContext.from_json_file(path)):
+        assert {name: machine.data_model[name] for name in expected} == expected
 
 
 def _make_doc():
@@ -867,7 +965,7 @@ def test_error_event_ordering_precedes_later_events(tmp_path):
 
 
 def test_external_send_error_precedes_raise(tmp_path):
-    """error.communication from external send should preserve document order vs raise."""
+    """An independent handler raises its event after the earlier send fails."""
     chart = tmp_path / "send_error_ordering.scxml"
     chart.write_text(
         """
@@ -875,6 +973,8 @@ def test_external_send_error_precedes_raise(tmp_path):
   <state id="s">
     <onentry>
       <send event="poke" target="#external"/>
+    </onentry>
+    <onentry>
       <raise event="later"/>
     </onentry>
   </state>

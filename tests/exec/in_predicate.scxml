@@ -8,7 +8,7 @@ Licensed under the BSD 1-Clause License.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="s0">
   <state id="s0">
-    <transition event="go" cond="in('s0')" target="s1"/>
+    <transition event="go" cond="In('s0')" target="s1"/>
   </state>
   <final id="s1"/>
 </scxml>

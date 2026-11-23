@@ -17,6 +17,8 @@ For language status and parity notes, see
 
 ## Installation
 
+The Python package requires Python 3.10 or later.
+
 ```bash
 pip install scjson
 ```
@@ -49,21 +51,23 @@ Online: https://github.com/SoftOboros/scjson/blob/main/docs/ENGINE-PY.md
 
 ## SCION Reference Dependency
 
-Several comparison tests (`py/tests/test_exec_compare_advanced.py`) and the
-`exec_compare` tooling invoke the Node-based [SCION](https://www.npmjs.com/package/scion) runner bundled under
-`tools/scion-runner`. Node.js must be able to resolve the [SCION](https://www.npmjs.com/package/scion) packages
-(`scxml`, `jsdom`, and `regenerator-runtime`) via its module loader. Install
-them once before running comparisons:
+To compare the Python engine with SCION from outside a checkout, install the
+matching `scjson` npm package and put its `scjson-scion-trace` executable on
+`PATH`. For a local npm installation, pass its entry point directly:
 
 ```bash
-cd tools/scion-runner
-npm ci  # or npm install
+npm install scjson@0.4.3
+scjson-exec-sweep ./charts --reference "node ./node_modules/scjson/dist/harness.js" --generate-vectors --workdir ./traces
 ```
 
-When running the Python tests or CLI comparisons, ensure `node` can load these
-modules (for example by keeping the installation above in place or by adding
-their location to `NODE_PATH`). Without the [SCION](https://www.npmjs.com/package/scion) packages, comparisons fall
-back to the Python engine.
+In a source checkout, run `npm ci` under `tools/scion-runner` to use the
+repository's SCION script. Both `scjson-exec-compare` and
+`scjson-exec-sweep` accept another reference command through `--reference`
+or `SCJSON_REF_ENGINE_CMD`. The command receives `-I` for the chart,
+`-e` for events, and `-o` for its JSONL trace. XML charts also receive
+`--xml`. An unavailable reference, a missing trace, or a disagreement
+exits unsuccessfully. Select `--reference "python -m scjson.cli engine-trace"`
+explicitly when exercising a Python-only workflow.
 
 ## Command Line Usage
 

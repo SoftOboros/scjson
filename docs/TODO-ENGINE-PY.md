@@ -39,14 +39,50 @@ Decision notes (invoke/finalize ordering)
 2) Compound, Parallel, Final, History
 - [x] Compute exit/entry sets via LCA; correct ancestor/descendant handling.
 - [x] Parallel completion: parent final when all regions complete; propagate finalization.
+  - Verified on docker-vm with the two original Alex Z 417 dialects from XML
+    and saved SCJSON in strict Python and compiled iState executable-IR Rust.
+    The queue contained one completion for each region, then exactly one for
+    `s1p1` while both region finals were active. Holding either region open
+    suppressed the parent event. Releasing it selected `pass`, and withholding
+    it until the one-second timeout selected `fail`. Bypassing the all-regions
+    check in diagnostic runtimes exposed a premature notification even on
+    the unedited chart, where the final outcome still read `pass`.
+    The November 22, 2026 review ZIP has SHA-256
+    `7e44b6785d837cc8df2411b62812db9738f0e84fda8532d1982217bbd3c79fa1`.
+    [Interpreting completion traces](ENGINE-PY.md#parallel-state-completion)
 - [x] History: shallow with default transition fallback.
 - [x] History: deep (restore deep descendants).
 - [x] Parallel: initial entry enters all child regions.
+- [x] Compare literal state membership across regions, ancestors, lifecycle
+  handlers and invoked sessions against generated Rust. Verify the 15 original
+  Alex Z charts with membership guards through XML and SCJSON (ERRATA-003).
+- [x] Preserve the authored order of sibling `state` and `parallel` regions.
+  Verify the preceding-region entry guard and the legacy state-first read
+  rule in Python and generated Rust. [ERRATA-011](concepts/ERRATA.md#errata-011--structural-order-of-mixed-parallel-regions)
+- [x] Use authored child order for implicit startup at the root and inside a
+  compound state. Verify explicit initial actions, completion, and legacy
+  SCJSON reads in Python and generated Rust. [ERRATA-012](concepts/ERRATA.md#errata-012--implicit-initial-state-selection-across-child-kinds)
 
 3) Executable Content Phase 1
 - [x] Implement assign, log, raise within onentry/onexit/transition bodies.
 - [x] Implement if/elseif/else.
 - [x] Implement foreach.
+- [x] Initialize collections from inline JSON character data through both file
+  entry points and carry the same constants into executable IR data slots.
+- [x] Stop the enclosing executable block and any remaining foreach iterations
+  on a failed assignment or send. Keep earlier effects and execute independent
+  handlers. Cover original tests 156 and 159 through both file loaders.
+- [x] Verify first-use bindings, error interruption, and XML/SCJSON
+  executable order on the original charts in both dialects (ERRATA-005 through -007).
+- [x] Represent literal, nested XML and inline chart payloads in both
+  generated Python model families and the canonical schema. Check round trips,
+  event delivery and the original 17 literal-payload roots (ERRATA-008).
+- [x] Resolve every remaining authored-outcome discrepancy in the original
+  ECMA pilot (ERRATA-009). The [errata register](concepts/ERRATA.md) owns
+  the per-case closure checks.
+- [x] Recover the 17 reproducible Windows qualification failures and check
+  native command arguments, long paths, and local includes on Linux and
+  Windows (ERRATA-010).
 - [x] Replace `eval` with safe expression evaluator/sandbox; document trust model and add `--unsafe-eval` for trusted runs.
 
 4) Events, Timers, and External I/O
@@ -73,8 +109,12 @@ Decision notes (invoke/finalize ordering)
 - Parallel completion: emits `done.state.<regionId>` events per region and `done.state.<parallelId>` when all regions are final. Compound states emit `done.state.<parentId>` with `<donedata>` payload.
 - History: shallow and deep restore supported. Default history transition actions execute when no snapshot exists.
 - Delayed `<send>` tasks schedule against `DocumentContext` and are advanced deterministically with `advance_time`; external targets enqueue `error.communication` and are skipped.
-- Error events: non-boolean/failed `cond`, `<foreach>` array errors, and `<assign>` evaluation failures enqueue `error.execution`.
-  - Engine-generated error events are prioritized to the front of the queue so they are processed before subsequently enqueued normal events.
+- Transition, if, and elseif conditions use the selected datamodel's truth
+  test. A failed evaluation enqueues `error.execution` and yields false.
+  A foreach array or assignment error enqueues this event and stops its enclosing
+  executable block. An undeliverable external send stops its block with
+  `error.communication`. Execution errors go to the front of the queue and
+  communication errors go to the back.
 - Tutorial sweep (`py/uber_test.py::test_python_engine_executes_python_charts`) honors `ENGINE_KNOWN_UNSUPPORTED` and is being reduced as features land.
 - Textual `<send><content>` blocks are normalized during JSON ingestion; location attributes receive autogenerated IDs before Pydantic validation.
 - Integration tests cover textual, expression, and nested markup payloads emitted by `<send>`.

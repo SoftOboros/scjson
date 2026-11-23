@@ -29,15 +29,15 @@ Inadmissible forms that produce unsupported-ecmascript:
 
 from __future__ import annotations
 
+import ast
 import re
+import textwrap
 from typing import List, Tuple
 
 
-# Sentinel prefix used to mark string-literal placeholders.  We use a
-# distinctive multi-character prefix that cannot appear in valid JS/Python
-# expressions so that restoring placeholders is unambiguous.
-_STR_SENTINEL = "__SCJSON_STR_"
-_STR_SENTINEL_RE = re.compile(r"__SCJSON_STR_(\d+)__")
+# NUL cannot occur in an authored identifier. This prevents a variable from
+# being restored as a quoted literal when a guard also contains strings.
+_STR_SENTINEL_RE = re.compile(r"\x00\d+\x00")
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +93,7 @@ _INADMISSIBLE_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\bwith\s*\("), "with statement"),
     # Template literals (backtick strings)
     (re.compile(r"`"), "template literal"),
+    (re.compile(r"~"), "bitwise complement"),
 ]
 
 
@@ -104,29 +105,35 @@ _STRING_LITERAL_RE = re.compile(
     r"""(?P<sq>'(?:[^'\\]|\\.)*')|(?P<dq>"(?:[^"\\]|\\.)*")"""
 )
 
-_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
-_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+# Scan comments and complete quoted literals in the same pass. A comment
+# delimiter inside a quoted URL is data, and quotes inside comments are inert.
+_STRING_OR_COMMENT = re.compile(
+    _STRING_LITERAL_RE.pattern + r"|(?P<comment>//[^\r\n]*|/\*[\s\S]*?\*/)"
+)
 
 
 def _strip_comments(text: str) -> str:
-    """Remove // and /* ... */ comments from *text*."""
-    text = _BLOCK_COMMENT_RE.sub("", text)
-    text = _LINE_COMMENT_RE.sub("", text)
-    return text
+    def replacement(match):
+        if match.lastgroup != "comment":
+            return match.group()
+        return "\n" if "\n" in match.group() else " "
+
+    return _STRING_OR_COMMENT.sub(replacement, text)
 
 
 def _extract_strings(text: str) -> Tuple[str, List[str]]:
     """Replace string literals with positional placeholders.
 
-    Returns (masked_text, strings) where ``strings[i]`` is the original
-    literal for placeholder ``__SCJSON_STR_i__``.
+    Return the masked text and the original literals in encounter order.
     """
+    if "\0" in text:
+        raise ECMAScriptNormalizationError("NUL in expression source")
     strings: List[str] = []
 
     def _replace(m: re.Match) -> str:
         idx = len(strings)
         strings.append(m.group(0))
-        return "__SCJSON_STR_{}__".format(idx)
+        return "\0{}\0".format(idx)
 
     masked = _STRING_LITERAL_RE.sub(_replace, text)
     return masked, strings
@@ -136,7 +143,7 @@ def _restore_strings(text: str, strings: List[str]) -> str:
     """Restore string placeholders back to their original literals."""
 
     def _restore(m: re.Match) -> str:
-        return strings[int(m.group(1))]
+        return strings[int(m.group()[1:-1])]
 
     return _STR_SENTINEL_RE.sub(_restore, text)
 
@@ -172,10 +179,6 @@ def _normalize_object_literal(text: str) -> str:
         # string literals from _extract_strings) and already-quoted keys.
         def _quote_key(km):
             key_text = km.group(1)
-            # If the key is a string placeholder, leave it unquoted
-            # (it will be restored to its original quoted literal).
-            if key_text.startswith("__SCJSON_STR_"):
-                return km.group(0)
             return '"{}":'.format(key_text)
         rewritten = _UNQUOTED_IDENTIFIER_KEY_RE.sub(_quote_key, inner)
         return "{" + rewritten + "}"
@@ -210,10 +213,9 @@ def _apply_token_substitutions(text: str) -> str:
     text = re.sub(r"&&", " and ", text)
     text = re.sub(r"\|\|", " or ", text)
 
-    # Logical not: !expr -> not expr
-    # ! not followed by = (after the !== -> != substitution above, any remaining
-    # ! is a logical not).
-    text = re.sub(r"!(?!=)", "not ", text)
+    # Use a Python prefix operator with the same precedence while parsing.
+    # _restore_logical_not writes the Boolean operator around that operand.
+    text = re.sub(r"!(?!=)", "~", text)
 
     # Boolean / null / undefined literals (word-boundary safe)
     text = re.sub(r"\btrue\b", "True", text)
@@ -231,6 +233,29 @@ def _apply_token_substitutions(text: str) -> str:
     text = re.sub(r"\bNumber\b(?=\s*\()", "float", text)
 
     return text
+
+
+def _restore_logical_not(masked: str, strings: List[str], mode: str) -> str:
+    text = _restore_strings(masked, strings)
+    if "~" not in masked:
+        return text
+    text = textwrap.dedent(text).strip()
+    try:
+        tree = ast.parse(text, mode=mode)
+    except SyntaxError as exc:
+        raise ECMAScriptNormalizationError(f"Invalid expression containing '!': {exc.msg}") from exc
+
+    # AST columns are UTF-8 byte offsets. Edit only the operator and operand
+    # boundary so quoted IDs and neighboring source tokens keep their spelling.
+    lines = text.encode("utf-8").splitlines(keepends=True)
+    edits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Invert):
+            edits.append((node.lineno - 1, node.col_offset, 1, b"(not "))
+            edits.append((node.end_lineno - 1, node.end_col_offset, 0, b")"))
+    for line, column, width, replacement in sorted(edits, reverse=True):
+        lines[line] = lines[line][:column] + replacement + lines[line][column + width:]
+    return b"".join(lines).decode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +277,7 @@ def _coerce_string_concatenation(text: str, strings: List[str]) -> str:
     if not strings:
         return text
 
-    _placeholder = r"__SCJSON_STR_\d+__"
+    _placeholder = _STR_SENTINEL_RE.pattern
 
     # A "complex token" is a parenthesized expression, a dotted/subscripted
     # identifier chain, a plain identifier, or an integer.
@@ -412,21 +437,19 @@ def normalize(expr: str) -> str:
     """
     cleaned = _strip_comments(expr)
 
-    # Check inadmissible forms before masking strings.
+    masked, strings = _extract_strings(cleaned)
     for pattern, description in _INADMISSIBLE_PATTERNS:
-        if pattern.search(cleaned):
+        if pattern.search(masked):
             raise ECMAScriptNormalizationError(
                 "ECMAScript form not in admitted subset (D-M1P6-2): {!r} "
                 "found in expression: {!r}".format(description, expr),
                 diagnostic="unsupported-ecmascript",
             )
 
-    masked, strings = _extract_strings(cleaned)
     masked = _normalize_object_literal(masked)
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
-    result = _restore_strings(masked, strings)
-    return result
+    return _restore_logical_not(masked, strings, mode="eval")
 
 
 def normalize_script(script_body: str) -> str:
@@ -446,18 +469,17 @@ def normalize_script(script_body: str) -> str:
     """
     cleaned = _strip_comments(script_body)
 
+    masked, strings = _extract_strings(cleaned)
     for pattern, description in _INADMISSIBLE_PATTERNS:
-        if pattern.search(cleaned):
+        if pattern.search(masked):
             raise ECMAScriptNormalizationError(
                 "ECMAScript form not in admitted subset (D-M1P6-2): {!r} "
                 "found in script body".format(description),
                 diagnostic="unsupported-ecmascript",
             )
 
-    masked, strings = _extract_strings(cleaned)
     masked = _normalize_object_literal(masked)
     masked = _apply_token_substitutions(masked)
     masked = _coerce_string_concatenation(masked, strings)
     masked = _normalize_if_statements(masked)
-    result = _restore_strings(masked, strings)
-    return result
+    return _restore_logical_not(masked, strings, mode="exec")

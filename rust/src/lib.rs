@@ -11,11 +11,14 @@ Licensed under the BSD 1-Clause License.
 //! Library providing basic SCXML <-> scjson conversion.
 
 use serde_json::{Map, Number, Value};
+use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 use xmltree::Error as XmlWriteError;
 use xmltree::{Element, XMLNode};
 
 pub mod scjson_props;
+
+const SCXML_NS: &str = "http://www.w3.org/2005/07/scxml";
 
 /// Attribute name mappings used during conversion.
 // const ATTRIBUTE_MAP: &[(&str, &str)] = &[
@@ -138,6 +141,14 @@ pub enum ScjsonError {
     Json(#[from] serde_json::Error),
     #[error("unsupported document")]
     Unsupported,
+    #[error("invalid region_order: {0}")]
+    RegionOrder(&'static str),
+    #[error("invalid state_order: {0}")]
+    StateOrder(&'static str),
+    #[error("invalid execution_order: {0}")]
+    ExecutionOrder(&'static str),
+    #[error("invalid executable key on {0}: {1}")]
+    ExecutableKey(String, String),
 }
 
 fn append_child(map: &mut Map<String, Value>, key: &str, val: Value) {
@@ -269,7 +280,11 @@ fn append_help_text(map: &mut Map<String, Value>, comments: Vec<String>, prepend
 
 fn any_element_to_value(elem: &Element) -> Value {
     let mut map = Map::new();
-    map.insert("qname".into(), Value::String(elem.name.clone()));
+    let qname = match elem.namespace.as_deref() {
+        Some(ns) => format!("{{{ns}}}{}", elem.name),
+        None => elem.name.clone(),
+    };
+    map.insert("qname".into(), Value::String(qname));
     let text = elem.get_text().map(|c| c.into_owned()).unwrap_or_default();
     map.insert("text".into(), Value::String(text));
     if !elem.attributes.is_empty() {
@@ -370,6 +385,7 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
             ("send", "event") => {
                 map.insert("event".into(), Value::String(v.clone()));
             }
+            ("assign", "id") => append_other_attribute(&mut map, k, v),
             (_, "xmlns") => {}
             (_, attr) if !KNOWN_SCXML_ATTRS.contains(&attr) => {
                 append_other_attribute(&mut map, k, v);
@@ -400,6 +416,9 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
     }
 
     let mut text_items = Vec::new();
+    let structural = child_order(&elem.name);
+    let executable = executable_owner(&elem.name);
+    let mut child_kinds = Vec::new();
     let mut pending_comments: Vec<String> = Vec::new();
     let mut saw_non_ws_text_since_comment = false;
     let current_can_own_help = SCXML_ELEMS.contains(&elem.name.as_str()) && !suppress_help_text;
@@ -416,7 +435,13 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
                 }
             }
             XMLNode::Element(e) => {
-                if SCXML_ELEMS.contains(&e.name.as_str()) {
+                if (e.namespace == elem.namespace || e.namespace.as_deref() == Some(SCXML_NS))
+                    && SCXML_ELEMS.contains(&e.name.as_str()) {
+                    if structural.is_some_and(|order| order.kinds.contains(&e.name.as_str()))
+                        || executable && action_kind(&e.name).is_some()
+                    {
+                        child_kinds.push(e.name.clone());
+                    }
                     let key = match e.name.as_str() {
                         "if" => "if_value",
                         "else" => "else_value",
@@ -451,7 +476,11 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
                     }
                 } else {
                     let val = any_element_to_value(e);
-                    append_child(&mut map, "content", val);
+                    if executable {
+                        child_kinds.push(format!("{{{}}}{}", e.namespace.as_deref().unwrap_or(""), e.name));
+                    }
+                    let field = if structural.is_some() || executable { "other_element" } else { "content" };
+                    append_child(&mut map, field, val);
                 }
             }
             XMLNode::Text(t) => {
@@ -476,6 +505,18 @@ fn element_to_map(elem: &Element, suppress_help_text: bool) -> Map<String, Value
         }
     }
 
+    if child_kinds.windows(2).any(|pair| pair[0] != pair[1]) {
+        let field = structural.map_or("execution_order", |order| order.field);
+        map.insert(field.into(), Value::from(child_kinds));
+    }
+    if elem.name == "if" {
+        if let Some(Value::Array(items)) = map.get_mut("elseif") {
+            if items.len() == 1 {
+                let marker = items.pop().unwrap();
+                map.insert("elseif".into(), marker);
+            }
+        }
+    }
     if elem.name == "scxml" {
         if !map.contains_key("version") {
             map.insert(
@@ -515,7 +556,137 @@ fn join_tokens(v: &Value) -> Option<String> {
     }
 }
 
-fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
+#[derive(Clone, Copy)]
+struct ChildOrder {
+    field: &'static str,
+    kinds: &'static [&'static str],
+    error: fn(&'static str) -> ScjsonError,
+}
+
+fn child_order(owner: &str) -> Option<ChildOrder> {
+    match owner {
+        "scxml" | "state" => Some(ChildOrder {
+            field: "state_order",
+            kinds: &["state", "parallel", "final"],
+            error: ScjsonError::StateOrder,
+        }),
+        "parallel" => Some(ChildOrder {
+            field: "region_order",
+            kinds: &["state", "parallel"],
+            error: ScjsonError::RegionOrder,
+        }),
+        _ => None,
+    }
+}
+
+type StateChild<'a> = (&'static str, &'a Map<String, Value>);
+
+fn executable_owner(name: &str) -> bool {
+    matches!(name, "onentry" | "onexit" | "transition" | "finalize" | "foreach" | "if")
+}
+
+fn action_kind(field: &str) -> Option<&str> {
+    match field {
+        "if" | "if_value" => Some("if"),
+        "else" | "else_value" => Some("else"),
+        "raise" | "raise_value" => Some("raise"),
+        "log" | "assign" | "foreach" | "send" | "script" | "cancel" | "elseif" => Some(field),
+        _ => None,
+    }
+}
+
+/// Resolve each marker to the next payload of that kind. Extensions are keyed by expanded name.
+fn ordered_actions<'a>(owner: &str, map: &'a Map<String, Value>)
+    -> Result<Option<Vec<(&'a str, &'a Map<String, Value>)>>, ScjsonError>
+{
+    let error = ScjsonError::ExecutionOrder;
+    let Some(order) = map.get("execution_order") else {
+        if executable_owner(owner) {
+            if owner != "if" && (map.contains_key("elseif") || map.contains_key("else_value")) {
+                return Err(error("conditional marker outside if"));
+            }
+            if map.get("else_value").and_then(Value::as_array).is_some_and(|items| items.len() > 1) {
+                return Err(error("multiple else markers"));
+            }
+        }
+        return Ok(None);
+    };
+    if !executable_owner(owner) { return Err(error("misplaced order field")); }
+    let order = order.as_array().ok_or(error("expected an array"))?;
+    let mut groups: HashMap<String, VecDeque<_>> = HashMap::new();
+    for (field, value) in map {
+        let kind = action_kind(field);
+        if kind.is_none() && field != "other_element" { continue; }
+        let items = value.as_array().map_or(std::slice::from_ref(value), Vec::as_slice);
+        for item in items {
+            let payload = item.as_object().ok_or(error("expected a child object"))?;
+            let (key, tag) = if let Some(tag) = kind {
+                (tag.to_owned(), tag)
+            } else {
+                let qname = payload.get("qname").and_then(Value::as_str)
+                    .filter(|q| !q.is_empty()).ok_or(error("extension needs a qname"))?;
+                let key = if qname.starts_with('{') { qname.into() } else { format!("{{}}{qname}") };
+                (key, qname)
+            };
+            groups.entry(key).or_default().push_back((tag, payload));
+        }
+    }
+    let mut children = Vec::with_capacity(order.len());
+    let mut saw_else = false;
+    for marker in order {
+        let kind = marker.as_str().ok_or(error("expected a child kind"))?;
+        if matches!(kind, "elseif" | "else") {
+            if owner != "if" || saw_else { return Err(error("invalid conditional marker sequence")); }
+            saw_else = kind == "else";
+        }
+        children.push(groups.get_mut(kind).and_then(VecDeque::pop_front)
+            .ok_or(error("unknown or excess child kind"))?);
+    }
+    if groups.values().any(|queue| !queue.is_empty()) { return Err(error("child omitted")); }
+    Ok(Some(children))
+}
+
+/// Consume each kind's payloads in array order, independent of JSON key order.
+fn ordered_state_children<'a>(
+    order: ChildOrder,
+    map: &'a Map<String, Value>,
+) -> Result<Option<Vec<StateChild<'a>>>, ScjsonError> {
+    let mut groups = Vec::new();
+    for &kind in order.kinds {
+        match map.get(kind) {
+            Some(Value::Array(items)) => groups.push((kind, items.iter())),
+            None => {}
+            Some(_) if !map.contains_key(order.field) => return Ok(None),
+            Some(_) => return Err((order.error)("expected a child array")),
+        }
+    }
+    let Some(markers) = map.get(order.field) else {
+        if groups.iter().filter(|(_, items)| items.len() > 0).count() < 2 {
+            return Ok(None);
+        }
+        let children = groups.into_iter().flat_map(|(kind, items)| {
+            items.map(move |v| v.as_object().map(|obj| (kind, obj)))
+        });
+        return Ok(children.collect());
+    };
+    let kinds = markers.as_array().ok_or((order.error)("expected an array"))?;
+    let mut children = Vec::with_capacity(kinds.len());
+    for marker in kinds {
+        let (kind, items) = groups
+            .iter_mut()
+            .find(|(kind, _)| Some(*kind) == marker.as_str())
+            .ok_or((order.error)("unknown or absent child kind"))?;
+        let value = items.next().ok_or((order.error)("excess child occurrence"))?;
+        let payload = value.as_object().ok_or((order.error)("expected a child object"))?;
+        children.push((*kind, payload));
+    }
+    if groups.iter().any(|(_, items)| items.len() > 0) {
+        return Err((order.error)("one or more children omitted"));
+    }
+    Ok(Some(children))
+}
+
+fn map_to_element(name: &str, map: &Map<String, Value>) -> Result<Element, ScjsonError> {
     if name == "scxml" && map.len() == 1 {
         if let Some(Value::Array(arr)) = map.get("content") {
             if arr.len() == 1 {
@@ -525,20 +696,38 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             }
         }
     }
-    let mut elem_name = name.to_string();
-    if let Some(Value::String(q)) = map.get("qname") {
-        elem_name = q.clone();
+    let qname = map.get("qname").and_then(Value::as_str);
+    let mut elem = if let Some(qname) = qname {
+        let (namespace, local) = qname
+            .strip_prefix('{')
+            .and_then(|q| q.split_once('}'))
+            .unwrap_or(("", qname));
+        let mut element = Element::new(local);
+        element
+            .attributes
+            .insert("xmlns".into(), namespace.to_owned());
+        element
+    } else {
+        let mut element = Element::new(name);
+        if name == "scxml" {
+            element.attributes.insert("xmlns".into(), SCXML_NS.into());
+        } else if !SCXML_ELEMS.contains(&name) && !name.contains(':') {
+            element.attributes.insert("xmlns".into(), String::new());
+        }
+        element
+    };
+    let structural = child_order(name);
+    let mut actions = ordered_actions(name, map)?.map(Vec::into_iter);
+    if map.contains_key("region_order") && name != "parallel" {
+        return Err(ScjsonError::RegionOrder("only a parallel may specify region_order"));
     }
-    let mut elem = Element::new(&elem_name);
-    if name == "scxml" {
-        elem.attributes
-            .insert("xmlns".into(), "http://www.w3.org/2005/07/scxml".into());
-    } else if !elem_name.contains(':')
-        && !elem_name.contains('{')
-        && !SCXML_ELEMS.contains(&elem_name.as_str())
-    {
-        elem.attributes.insert("xmlns".into(), String::new());
+    if map.contains_key("state_order") && !matches!(name, "scxml" | "state") {
+        return Err(ScjsonError::StateOrder("only scxml and state may specify state_order"));
     }
+    let mut sequence = match structural {
+        Some(order) => ordered_state_children(order, map)?.map(Vec::into_iter),
+        None => None,
+    };
     if let Some(Value::String(text)) = map.get("text") {
         if !text.is_empty() {
             elem.children.push(XMLNode::Text(text.clone()));
@@ -552,6 +741,26 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
         }
     }
     for (k, v) in map {
+        if matches!(k.as_str(), "region_order" | "state_order" | "execution_order") {
+            continue;
+        }
+        if let Some(sequence) = &mut actions {
+            if action_kind(k).is_some() || k == "other_element" {
+                for (tag, payload) in sequence.take(v.as_array().map_or(1, Vec::len)) {
+                    append_element_with_help_text(&mut elem, tag, payload)?;
+                }
+                continue;
+            }
+        }
+        if structural.is_some_and(|order| order.kinds.contains(&k.as_str())) {
+            if let (Some(ordered), Some(slots)) = (&mut sequence, v.as_array()) {
+                // Fill only child-state slots so unrelated siblings keep their positions.
+                for (kind, payload) in ordered.take(slots.len()) {
+                    append_element_with_help_text(&mut elem, kind, payload)?;
+                }
+                continue;
+            }
+        }
         if ["qname", "text", "attributes", "help_text"].contains(&k.as_str()) {
             continue;
         }
@@ -586,7 +795,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                                     } else {
                                         "content"
                                     };
-                                    append_element_with_help_text(&mut elem, child_name, obj);
+                                    append_element_with_help_text(&mut elem, child_name, obj)?;
                                 }
                                 _ => {}
                             }
@@ -611,7 +820,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                                     } else {
                                         "content"
                                     };
-                                    append_element_with_help_text(&mut elem, child_name, obj);
+                                    append_element_with_help_text(&mut elem, child_name, obj)?;
                                 }
                                 _ => {}
                             }
@@ -628,7 +837,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                     } else {
                         "content"
                     };
-                    append_element_with_help_text(&mut elem, child_name, obj);
+                    append_element_with_help_text(&mut elem, child_name, obj)?;
                 }
                 Value::String(s) => {
                     if name == "script" {
@@ -694,10 +903,10 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                 };
                 for item in arr {
                     if let Value::Object(obj) = item {
-                        append_element_with_help_text(&mut elem, child_name, obj);
+                        append_element_with_help_text(&mut elem, child_name, obj)?;
                     } else if let Value::String(text) = item {
                         elem.children
-                            .push(XMLNode::Element(map_to_element(child_name, &Map::new())));
+                            .push(XMLNode::Element(map_to_element(child_name, &Map::new())?));
                         elem.children.push(XMLNode::Text(text.clone()));
                     }
                 }
@@ -709,14 +918,14 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
                     "raise_value" => "raise",
                     other => other,
                 };
-                append_element_with_help_text(&mut elem, child_name, obj);
+                append_element_with_help_text(&mut elem, child_name, obj)?;
             }
             Value::String(s) => {
                 if k == "version" {
                     elem.attributes.insert("version".into(), s.clone());
                 } else {
                     elem.children
-                        .push(XMLNode::Element(map_to_element(k, &Map::new())));
+                        .push(XMLNode::Element(map_to_element(k, &Map::new())?));
                     elem.children.push(XMLNode::Text(s.clone()));
                 }
             }
@@ -728,7 +937,7 @@ fn map_to_element(name: &str, map: &Map<String, Value>) -> Element {
             _ => {}
         }
     }
-    elem
+    Ok(elem)
 }
 
 fn help_text_comments(map: &Map<String, Value>) -> Vec<XMLNode> {
@@ -743,13 +952,18 @@ fn help_text_comments(map: &Map<String, Value>) -> Vec<XMLNode> {
     nodes
 }
 
-fn append_element_with_help_text(parent: &mut Element, child_name: &str, obj: &Map<String, Value>) {
+fn append_element_with_help_text(
+    parent: &mut Element,
+    child_name: &str,
+    obj: &Map<String, Value>,
+) -> Result<(), ScjsonError> {
     for comment in help_text_comments(obj) {
         parent.children.push(comment);
     }
     parent
         .children
-        .push(XMLNode::Element(map_to_element(child_name, obj)));
+        .push(XMLNode::Element(map_to_element(child_name, obj)?));
+    Ok(())
 }
 
 /// Collapse newlines and tabs in attribute values recursively.
@@ -789,6 +1003,20 @@ fn remove_empty(value: &mut Value) -> bool {
         Value::Object(map) => {
             let keys: Vec<String> = map.keys().cloned().collect();
             for k in keys {
+                // Keep explicit metadata (including invalid null) and every referenced
+                // region occurrence intact until the owning element validates it.
+                if matches!(k.as_str(), "region_order" | "state_order" | "execution_order") {
+                    continue;
+                }
+                if map.contains_key("execution_order") && (action_kind(&k).is_some() || k == "other_element") {
+                    continue;
+                }
+                if matches!(k.as_str(), "state" | "parallel" | "final")
+                    && (map.contains_key("region_order") || map.contains_key("state_order")
+                        || map[&k].as_array().is_some_and(|a| a.iter().any(Value::is_object)))
+                {
+                    continue;
+                }
                 if let Some(v) = map.get_mut(&k) {
                     if remove_empty(v) {
                         map.remove(&k);
@@ -833,15 +1061,67 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     if root.name != "scxml" {
         return Err(ScjsonError::Unsupported);
     }
-    // let mut map = element_to_map(&root); // retained for potential future mutations
     let mut map = element_to_map(&root, false);
     append_help_text(&mut map, root_comments, false);
     let mut value = Value::Object(map);
+    validate_executable_keys(&value, "scxml")?;
     collapse_whitespace(&mut value);
     if omit_empty {
         remove_empty(&mut value);
     }
     Ok(serde_json::to_string_pretty(&value)?)
+}
+
+/// Check reserved fields on modeled executable owners before empty fields are pruned.
+fn validate_executable_keys(value: &Value, tag: &str) -> Result<(), ScjsonError> {
+    if let Value::Array(items) = value {
+        for item in items {
+            validate_executable_keys(item, tag)?;
+        }
+        return Ok(());
+    }
+    let Some(obj) = value.as_object() else { return Ok(()) };
+    ordered_actions(tag, obj)?;
+    if executable_owner(tag) {
+        for (raw, camel, canonical) in [
+            ("raise", "raiseValue", "raise_value"),
+            ("if", "ifValue", "if_value"),
+            ("else", "elseValue", "else_value"),
+        ] {
+            let names: Vec<_> = [raw, camel, canonical].into_iter().filter(|k| obj.contains_key(*k)).collect();
+            let Some(&present) = names.first() else { continue };
+            let reason = if names.len() > 1 {
+                format!("conflicting spellings {}", names.join(", "))
+            } else if raw == "else" && tag != "if" {
+                "else is only valid inside an if_value block".to_string()
+            } else if present != canonical {
+                format!("use {canonical} for {present}")
+            } else {
+                continue;
+            };
+            return Err(ScjsonError::ExecutableKey(tag.into(), reason));
+        }
+    }
+    for (key, child) in obj {
+        let child_tag = match key.as_str() {
+            "state" | "parallel" | "final" | "initial" | "history" | "transition"
+            | "onentry" | "onexit" | "invoke" | "finalize" | "foreach" | "send"
+            | "donedata" => key,
+            "if_value" => "if",
+            "content" if matches!(tag, "send" | "invoke" | "donedata") => "content",
+            "content" if tag == "content" => {
+                for item in child.as_array().into_iter().flatten() {
+                    if item.is_object() && item.get("qname").is_none() {
+                        validate_executable_keys(item, "scxml")?;
+                    }
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        validate_executable_keys(child, child_tag)?;
+    }
+    Ok(())
 }
 
 /// Convert a scjson string to SCXML using options.
@@ -854,11 +1134,12 @@ pub fn xml_to_json(xml: &str, omit_empty: bool) -> Result<String, ScjsonError> {
 /// XML string representing the document.
 pub fn json_to_xml_opts(json_str: &str, omit_empty: bool) -> Result<String, ScjsonError> {
     let mut v: Value = serde_json::from_str(json_str)?;
+    validate_executable_keys(&v, "scxml")?;
     if omit_empty {
         remove_empty(&mut v);
     }
     let obj = v.as_object().ok_or(ScjsonError::Unsupported)?;
-    let elem = map_to_element("scxml", obj);
+    let elem = map_to_element("scxml", obj)?;
     let mut out = Vec::new();
     elem.write(&mut out)?;
     let mut xml = String::from_utf8(out).unwrap();

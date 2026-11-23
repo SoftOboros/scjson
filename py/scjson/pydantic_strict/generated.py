@@ -1,8 +1,11 @@
 from decimal import Decimal
 from enum import Enum
-from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+from typing import Literal, Any, List, Optional
+from pydantic import ConfigDict, field_serializer, model_serializer, model_validator
 from xsdata_pydantic.fields import field
+from ..xml_payload import NestedChart, XmlPayloadElement
+
+from ..execution_order import ScxmlModel, ordered_children, ordered_regions, ordered_state_children
 
 __NAMESPACE__ = "http://www.w3.org/2005/07/scxml"
 
@@ -71,7 +74,7 @@ class TransitionTypeDatatype(Enum):
     EXTERNAL = "external"
 
 
-class ScxmlCancelType(BaseModel):
+class ScxmlCancelType(ScxmlModel):
 
     class Meta:
         name = "scxml.cancel.type"
@@ -90,8 +93,8 @@ class ScxmlCancelType(BaseModel):
     )
 
 
-class ScxmlContentType(BaseModel):
-    content: Optional[List["Scxml"]] = None
+class ScxmlContentType(ScxmlModel):
+    content: Optional[List["str | XmlPayloadElement | NestedChart[Scxml]"]] = None
     expr: Optional[str] = None
     other_attributes: dict[str, Any] = field(
         default_factory=dict, title="Other Attributes"
@@ -106,7 +109,7 @@ class ScxmlContentType(BaseModel):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlDataType(BaseModel):
+class ScxmlDataType(ScxmlModel):
 
     class Meta:
         name = "scxml.data.type"
@@ -127,7 +130,7 @@ class ScxmlDataType(BaseModel):
     )
 
 
-class ScxmlElseType(BaseModel):
+class ScxmlElseType(ScxmlModel):
 
     class Meta:
         name = "scxml.else.type"
@@ -141,7 +144,7 @@ class ScxmlElseType(BaseModel):
     )
 
 
-class ScxmlElseifType(BaseModel):
+class ScxmlElseifType(ScxmlModel):
 
     class Meta:
         name = "scxml.elseif.type"
@@ -156,7 +159,7 @@ class ScxmlElseifType(BaseModel):
     )
 
 
-class ScxmlLogType(BaseModel):
+class ScxmlLogType(ScxmlModel):
 
     class Meta:
         name = "scxml.log.type"
@@ -175,7 +178,7 @@ class ScxmlLogType(BaseModel):
     )
 
 
-class ScxmlParamType(BaseModel):
+class ScxmlParamType(ScxmlModel):
 
     class Meta:
         name = "scxml.param.type"
@@ -195,7 +198,7 @@ class ScxmlParamType(BaseModel):
     )
 
 
-class ScxmlRaiseType(BaseModel):
+class ScxmlRaiseType(ScxmlModel):
 
     class Meta:
         name = "scxml.raise.type"
@@ -210,7 +213,7 @@ class ScxmlRaiseType(BaseModel):
     )
 
 
-class ScxmlScriptType(BaseModel):
+class ScxmlScriptType(ScxmlModel):
 
     class Meta:
         name = "scxml.script.type"
@@ -319,7 +322,7 @@ class Script(ScxmlScriptType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlAssignType(BaseModel):
+class ScxmlAssignType(ScxmlModel):
 
     class Meta:
         name = "scxml.assign.type"
@@ -354,7 +357,7 @@ class Assign(ScxmlAssignType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlDatamodelType(BaseModel):
+class ScxmlDatamodelType(ScxmlModel):
 
     class Meta:
         name = "scxml.datamodel.type"
@@ -375,7 +378,7 @@ class ScxmlDatamodelType(BaseModel):
     )
 
 
-class ScxmlDonedataType(BaseModel):
+class ScxmlDonedataType(ScxmlModel):
 
     class Meta:
         name = "scxml.donedata.type"
@@ -400,7 +403,7 @@ class ScxmlDonedataType(BaseModel):
     )
 
 
-class ScxmlSendType(BaseModel):
+class ScxmlSendType(ScxmlModel):
 
     class Meta:
         name = "scxml.send.type"
@@ -474,7 +477,7 @@ class Send(ScxmlSendType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlIfType(BaseModel):
+class ScxmlIfType(ScxmlModel):
 
     class Meta:
         name = "scxml.if.type"
@@ -523,7 +526,7 @@ class ScxmlIfType(BaseModel):
         default_factory=list,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
-    elseif: Optional[Elseif] = field(
+    elseif: Optional[Elseif | list[Elseif]] = field(
         default=None,
         metadata={"type": "Element", "namespace": "http://www.w3.org/2005/07/scxml"},
     )
@@ -543,6 +546,28 @@ class ScxmlIfType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+    @field_serializer("elseif", mode="wrap")
+    def _serialize_elseif(self, value, handler):
+        payload = handler(value)
+        return payload[0] if isinstance(payload, list) and len(payload) == 1 else payload
+
 
 class If(ScxmlIfType):
     """conditional execution block."""
@@ -554,7 +579,7 @@ class If(ScxmlIfType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlForeachType(BaseModel):
+class ScxmlForeachType(ScxmlModel):
 
     class Meta:
         name = "scxml.foreach.type"
@@ -613,6 +638,24 @@ class ScxmlForeachType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+
 
 class Foreach(ScxmlForeachType):
     """iterate over items within executable content."""
@@ -624,7 +667,7 @@ class Foreach(ScxmlForeachType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlFinalizeType(BaseModel):
+class ScxmlFinalizeType(ScxmlModel):
 
     class Meta:
         name = "scxml.finalize.type"
@@ -690,8 +733,26 @@ class ScxmlFinalizeType(BaseModel):
             )
         return self
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
 
-class ScxmlOnentryType(BaseModel):
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+
+
+class ScxmlOnentryType(ScxmlModel):
 
     class Meta:
         name = "scxml.onentry.type"
@@ -747,8 +808,26 @@ class ScxmlOnentryType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
 
-class ScxmlOnexitType(BaseModel):
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+
+
+class ScxmlOnexitType(ScxmlModel):
 
     class Meta:
         name = "scxml.onexit.type"
@@ -804,8 +883,26 @@ class ScxmlOnexitType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
 
-class ScxmlTransitionType(BaseModel):
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+
+
+class ScxmlTransitionType(ScxmlModel):
 
     class Meta:
         name = "scxml.transition.type"
@@ -875,6 +972,24 @@ class ScxmlTransitionType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    execution_order: list[str] = field(
+        default_factory=lambda: None,
+        metadata={"type": "Ignore"},
+    )
+
+    @model_validator(mode="after")
+    def _validate_execution_order(self):
+        ordered_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_execution_order(self, handler):
+        data = handler(self)
+        if self.execution_order is None:
+            data.pop("execution_order", None)
+        return data
+
+
 
 class Finalize(ScxmlFinalizeType):
     """executed after an `<invoke>` completes."""
@@ -916,7 +1031,7 @@ class Transition(ScxmlTransitionType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlFinalType(BaseModel):
+class ScxmlFinalType(ScxmlModel):
 
     class Meta:
         name = "scxml.final.type"
@@ -946,7 +1061,7 @@ class ScxmlFinalType(BaseModel):
     )
 
 
-class ScxmlHistoryType(BaseModel):
+class ScxmlHistoryType(ScxmlModel):
 
     class Meta:
         name = "scxml.history.type"
@@ -974,7 +1089,7 @@ class ScxmlHistoryType(BaseModel):
     )
 
 
-class ScxmlInitialType(BaseModel):
+class ScxmlInitialType(ScxmlModel):
 
     class Meta:
         name = "scxml.initial.type"
@@ -998,7 +1113,7 @@ class ScxmlInitialType(BaseModel):
     )
 
 
-class ScxmlInvokeType(BaseModel):
+class ScxmlInvokeType(ScxmlModel):
 
     class Meta:
         name = "scxml.invoke.type"
@@ -1079,7 +1194,7 @@ class Invoke(ScxmlInvokeType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlStateType(BaseModel):
+class ScxmlStateType(ScxmlModel):
 
     class Meta:
         name = "scxml.state.type"
@@ -1140,6 +1255,22 @@ class ScxmlStateType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    state_order: list[Literal["state", "parallel", "final"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_state_order(self):
+        ordered_state_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_state_order(self, handler):
+        data = handler(self)
+        if self.state_order is None:
+            data.pop("state_order", None)
+        return data
+
 
 class State(ScxmlStateType):
     """basic state node."""
@@ -1151,7 +1282,7 @@ class State(ScxmlStateType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlParallelType(BaseModel):
+class ScxmlParallelType(ScxmlModel):
 
     class Meta:
         name = "scxml.parallel.type"
@@ -1200,6 +1331,22 @@ class ScxmlParallelType(BaseModel):
         default_factory=list, metadata={"type": "Ignore"}
     )
 
+    region_order: list[Literal["state", "parallel"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_region_order(self):
+        ordered_regions(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_region_order(self, handler):
+        data = handler(self)
+        if self.region_order is None:
+            data.pop("region_order", None)
+        return data
+
 
 class Parallel(ScxmlParallelType):
     """coordinates concurrent regions."""
@@ -1211,7 +1358,7 @@ class Parallel(ScxmlParallelType):
     model_config = ConfigDict(defer_build=True)
 
 
-class ScxmlScxmlType(BaseModel):
+class ScxmlScxmlType(ScxmlModel):
 
     class Meta:
         name = "scxml.scxml.type"
@@ -1264,6 +1411,22 @@ class ScxmlScxmlType(BaseModel):
     help_text: list[str] = field(
         default_factory=list, metadata={"type": "Ignore"}
     )
+
+    state_order: list[Literal["state", "parallel", "final"]] = field(
+        default_factory=lambda: None, metadata={"type": "Ignore"}
+    )
+
+    @model_validator(mode="after")
+    def _validate_state_order(self):
+        ordered_state_children(self)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_state_order(self, handler):
+        data = handler(self)
+        if self.state_order is None:
+            data.pop("state_order", None)
+        return data
 
 
 class Scxml(ScxmlScxmlType):

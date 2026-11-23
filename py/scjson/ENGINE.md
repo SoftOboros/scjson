@@ -51,9 +51,34 @@ are evaluated with a sandbox powered by [`py-sandboxed`](https://pypi.org/projec
 Only a curated subset of pure builtins (e.g. `abs`, `len`, `sum`, `sorted`) and
 the `math` module are exposed by default; attempts to import modules, access
 double-underscore attributes, or call `eval`/`exec` raise a
-``SafeEvaluationError`` and fall back to the literal expression string when
-possible. The helper `In(stateId)` function is injected automatically so charts
+``SafeEvaluationError``. A failed assignment leaves its target unchanged.
+A failed condition evaluates to false. The helper `In(stateId)` function is injected automatically so charts
 can query active states without opening the sandbox.
+
+For portable generation, use one quoted state ID in the `cond` of a
+transition, `if`, or `elseif`. For example, `In('muteOff')` tests the
+current session, including its other active parallel regions. Active
+ancestors also match. An inactive state, unknown ID, or history
+pseudostate returns false. Each session has its own configuration.
+
+All transition guards in one microstep observe its starting configuration.
+Exit handlers still see their owning states. Transition actions run after
+the selected exits, and each entry handler sees its newly active state.
+The generator reports an unsupported composite guard and disables that
+branch if any operand falls outside the admitted grammar.
+
+When a `<parallel>` mixes `<state>` and `<parallel>` children, entry follows
+their XML order. An entry guard can see regions that have already entered.
+Exit handlers run in reverse order. SCJSON records the sequence in the
+parent's optional `region_order` list. Older files without this list enter
+the `state` array in order, followed by the `parallel` array.
+
+At the document root or in a compound state, an explicit initial target
+takes precedence. Without one, the engine enters the first child state
+in document order. For example, a root whose first child is a final state
+finishes immediately. SCJSON records mixed child kinds in `state_order`.
+An older file without that list uses the first available child in the
+`state`, `parallel`, then `final` arrays.
 
 For environments that fully trust the input chart you can opt out of the
 sandbox by passing `--unsafe-eval` to `scjson engine-trace` (or by constructing
@@ -80,11 +105,11 @@ To improve reproducibility, `datamodelDelta` keys are emitted in sorted order wh
 
 ## Canonical JSON Ingestion
 
-Even when the CLI receives SCXML, the runtime first converts it into its
-canonical SCJSON form and executes against the JSON tree. This guarantees the
-same inference rules apply regardless of the source format and lets the engine
-preserve authoring order for executable content by reading directly from the
-normalised JSON structure.
+The XML loader records the direct child sequence of each executable block that
+mixes action kinds. The SCJSON loader validates the optional `execution_order`
+list against the grouped children and consumes each kind in sequence. Legacy
+SCJSON without that list retains the earlier grouped traversal. Reconvert the
+original XML to recover interleaving that an older converter discarded.
 
 ## Reference Compatibility Guidance
 
@@ -131,8 +156,8 @@ new scenario is exercised against scion-core.
 
 - `<assign>`, `<log>`, and `<raise>` execute in authoring order and feed into the
   JSON trace.
-- `<if>`/`<elseif>`/`<else>` and `<foreach>` respect document order by consulting
-  the canonical JSON structure rather than regenerated dataclasses.
+- `<if>`/`<elseif>`/`<else>` and `<foreach>` follow the validated child order,
+  including repeated actions of the same kind in separate conditional branches.
 - `<send>` enqueues internal events (including `<param>` and `namelist`
   payloads); delayed sends are queued via the built-in scheduler and can be
   triggered in tests with `DocumentContext.advance_time(seconds)`. `<cancel>`
@@ -240,16 +265,20 @@ out-of-the-box. For external services, prefer emitting parent events with
 
 ### Errors
 
-- Conditions that fail to evaluate, or that produce non-boolean results, enqueue
+- Conditions use Python truth testing in the Python datamodel and ECMAScript
+  ToBoolean in the ECMAScript datamodel. Failed evaluations enqueue
   `error.execution` and evaluate to false.
-- `<foreach>` evaluation failures also enqueue `error.execution` and iterate
-  over an empty sequence.
-- `<assign>`
-  - Expression failures enqueue `error.execution` and store the raw expression
-    string as the value.
-  - Invalid locations (no matching variable in scope) enqueue
-    `error.execution` and do not create a new variable.
-- External `<send>` targets enqueue `error.communication` and are skipped.
+- A failed assignment expression or an invalid assignment location enqueues
+  `error.execution`. The assignment leaves existing data unchanged.
+- An invalid foreach binding or a collection that cannot be evaluated or
+  iterated enqueues `error.execution`. A failure in the body ends the loop
+  immediately, including its remaining iterations.
+- An unsupported external send target enqueues `error.communication`.
+- A reported action failure ends its enclosing executable block. Earlier
+  effects remain visible. Subsequent entry or exit handlers still run, and
+  a transition still enters its target. Raising an event named
+  `error.execution` explicitly is an ordinary successful action. See
+  [SCXML §4.9](https://www.w3.org/TR/scxml/#EvaluationofExecutableContent).
 
 ### Transition Event Matching
 

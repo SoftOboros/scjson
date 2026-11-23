@@ -1,20 +1,21 @@
 [project]
 name = "scjson"
-version = "0.4.2"
+version = "0.4.3"
 description = "A JSON-based serialization of SCXML (State Chart XML) for modern tooling, interoperability, and education, with execution engine and trace tools for SCXML/SCML."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "BSD-1-Clause"
 authors = [{name = "Ira Abbott", email = "ira@mycloud.blue"}]
 dependencies = [
-    "pydantic",
+    "pydantic>=2.6,<3",
     "lxml",
     "jsonschema",
     "click",
     "py-sandboxed",
     "jinja2",
     "xmlschema",
-    "xsdata",
+    "xsdata>=24.5",
+    "xsdata-pydantic>=24.5",
 ]  # runtime + tooling for CLI, engine, and vector utilities
 
 [project.scripts]
@@ -24,13 +25,13 @@ scjson-exec-sweep = "exec_sweep:main"
 scjson-vector-gen = "vector_gen:main"
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 include-package-data = true
 # Install top-level helper modules used by CLI workflows as importable modules
-py-modules = ["exec_compare", "exec_sweep", "vector_gen"]
+py-modules = ["exec_compare", "exec_sweep", "vector_gen", "scjson_argv", "scion_support"]
 
 [tool.setuptools.packages.find]
 include = ["scjson", "scjson.*", "vector_lib"]

@@ -26,6 +26,23 @@ function createScjson() {
 }
 
 describe('scjson CLI', () => {
+  test('validates both file routes and refuses an invalid order before writing XML', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scjson-order-'));
+    const source = path.join(dir, 'ordered.scxml');
+    const json = path.join(dir, 'ordered.scjson');
+    const cli = (...args) => spawnSync(process.execPath, [cliPath, ...args], { encoding: 'utf8' });
+    fs.writeFileSync(source, '<scxml xmlns="http://www.w3.org/2005/07/scxml"><state id="s"><onentry><log/><raise event="e"/></onentry></state></scxml>');
+    expect(cli('validate', source).status).toBe(0);
+    expect(cli('json', source).status).toBe(0);
+    expect(cli('validate', json).status).toBe(0);
+    const model = JSON.parse(fs.readFileSync(json, 'utf8'));
+    model.state[0].onentry[0].execution_order = ['raise'];
+    const invalid = path.join(dir, 'invalid.scjson');
+    fs.writeFileSync(invalid, JSON.stringify(model));
+    expect(cli('validate', invalid).status).toBe(1);
+    expect(cli('xml', invalid).status).toBe(1);
+    expect(fs.existsSync(path.join(dir, 'invalid.scxml'))).toBe(false);
+  });
   test('shows help', () => {
     const res = spawnSync('node', [cliPath, '--help'], { encoding: 'utf8' });
     expect(res.stderr).not.toMatch(/Failed to convert/);

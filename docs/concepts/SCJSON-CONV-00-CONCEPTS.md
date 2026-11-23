@@ -67,6 +67,16 @@ avoid language/schema conflicts:
 - XML `initial` attribute maps to SCJSON `initial_attribute`.
 - XML `datamodel` attribute maps to SCJSON `datamodel_attribute`.
 
+At a modeled executable container, a JSON property spelled `raise`, `if`,
+or `else` MUST be rejected before conversion or execution. The canonical
+spellings are the schema fields above. A product exposing a camelCase
+projection MAY accept `raiseValue`, `ifValue`, and `elseValue` on the
+corresponding owners and map them to the canonical fields before storage.
+An intake MUST reject conflicting spellings of the same child, including
+identical values. The rule applies to property names. Values in
+`execution_order` use XML child kinds, and names inside wildcard payloads
+and extension maps belong to their author. See [ERRATA-013](ERRATA.md#errata-013).
+
 ### Extension Metadata
 
 Pydantic `other_attributes` fields MAY contain JSON-typed metadata. Dataclass
@@ -135,6 +145,90 @@ surface to audit and align is:
 
 Changes to this registry require Standards Action because they affect every
 language converter and generated type surface.
+
+### Executable child order (ERRATA-007)
+
+Ratified November 21, 2026. An `onentry`, `onexit`, `transition`,
+`finalize`, `foreach`, or `if` MAY carry `execution_order`, an array of
+strings (`executionOrder` in camelCase projections). It records direct
+executable children in XML document order. Each SCXML child uses its XML
+local name, including `raise`, `if`, `elseif`, and `else`. Each extension
+child uses its expanded XML name, `{namespace-uri}local` (or `{}local` with
+no namespace). An explicitly supplied null is invalid. Data and action
+payloads remain in their existing fields. Each appearance of a kind consumes
+the next instance of that kind in its payload field. An order list MUST cover
+every direct executable child exactly once. Readers MUST reject unknown,
+missing, or excess references, a marker outside `if`, multiple `else`
+markers, or an `elseif` following `else`.
+
+XML converters MUST emit the list whenever two or more distinct direct
+executable kinds occur. A homogeneous or empty sequence has unambiguous order
+and MAY omit the list. An explicit empty list is valid only on an empty
+executable container. Comments, attributes, and text are not order entries.
+XML export MUST use an explicit list to position the original children,
+including branch markers and extensions. It MUST NOT serialize the order
+list as an XML attribute or element. An unimplemented extension keeps its
+place in interchange without acquiring execution semantics.
+
+For `if`, `elseif` accepts the historical single object and an ordered
+array of marker objects. Canonical writers retain the single-object encoding
+for a single marker and emit an array for multiple markers. An absent
+`execution_order` on existing JSON retains the legacy reader's grouping.
+Re-importing the original SCXML can recover order that a legacy mixed-kind
+document omitted. Implementations MUST NOT infer that order from JSON
+object key insertion order. Canonical schema/types, converters, execution
+and IR lowering share this contract, including nested executable containers.
+
+### Parallel region order (ERRATA-011)
+
+A `parallel` MAY carry `region_order` (`regionOrder` in camelCase
+projections), an array of the strings `state` and `parallel`. Each string
+references the next direct SCXML region of that kind in its existing array.
+For example, `["state", "parallel", "state"]` places the first state before
+the nested parallel and the second state after it. History, executable
+handlers, comments and foreign elements do not occupy region slots.
+
+XML intake MUST emit the array whenever both kinds occur, even if the first
+kind is `state`. A homogeneous or empty region sequence MAY omit it.
+Readers MUST reject an explicit null, an invalid kind, a missing or excess
+occurrence, or the field on a different SCXML element. An explicit empty
+array is valid only when there are no regions. Each nested parallel,
+including one inside an invoked chart, owns its own sequence.
+
+XML export, execution, and executable-IR lowering MUST respect the supplied
+sequence. Entry handlers observe the regions entered before them. Exit
+handlers run in reverse document order. XML export writes the region
+elements in order and omits the SCJSON metadata itself.
+
+If the field is absent, keep the legacy grouping of states followed by
+parallel regions, preserving order within each group. JSON object key order
+has no effect. Recovering an interleaving lost in an older conversion
+requires the original XML or an explicit sequence supplied by the author.
+Earlier standalone Rust XML exports visited JSON keys lexically, placing
+parallel regions first. To reproduce that presentation for an old file,
+list its parallel occurrences first in `region_order`. New exports use
+the same legacy fallback as the Python engine and generated Rust.
+
+### Document and compound-state child order (ERRATA-012)
+
+`scxml` and `state` MAY carry `state_order` (`stateOrder` in camelCase
+projections). Each entry consumes the next direct SCXML `state`, `parallel`,
+or `final` in its existing array, including an element without an ID. XML
+intake MUST record the list when two or more of those kinds occur, including
+on owners with an explicit initial target. A homogeneous or empty owner MAY
+omit the field. A supplied list MUST cover exactly those children once each.
+Readers MUST reject null, unknown or misplaced kinds, unmatched counts, and
+the field on a different SCXML element. History, handlers, initial elements,
+foreign elements, and comments do not consume slots. Each owner, including an
+embedded chart, has its own order. XML export MUST restore that order and
+omit the metadata itself.
+
+An explicit `initial` attribute or a compound state's `<initial>` transition
+selects the target. Otherwise, execution and executable IR MUST select the
+first child state in the recorded order. When older SCJSON omits the field,
+read `state`, then `parallel`, then `final`, preserving array order within
+each kind regardless of JSON key order. A parallel owner continues to use
+`region_order` and enters all its regions. [SCXML initial state rules](https://www.w3.org/TR/scxml/#scxml)
 
 ## Section 6. Work Packages
 

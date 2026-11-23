@@ -48,6 +48,45 @@ def test_logical_not_complex() -> None:
     assert "==" in result
 
 
+@pytest.mark.parametrize(("expr", "expected"), [
+    ("In('a') == !In('b')", True),
+    ("!In('a') + 2", 2),
+    ("!!In('a')", True),
+    ("!(In('a') && !In('b'))", False),
+    ("In('média!') && !In('bébé')", True),
+    ("!['a', 'b'][1].replace('b', '')", True),
+])
+def test_ecmascript_negation_precedence(expr, expected):
+    scope = {"In": {"a", "média!"}.__contains__}
+    result = eval(normalize(expr), {"__builtins__": {}}, scope)
+    assert type(result) is type(expected)
+    assert result == expected
+
+
+def test_negation_preserves_neighboring_literal_tokens():
+    assert "'left' 'right'" in normalize("!In('left' 'right')")
+    assert "~" in normalize("!'~'")
+    with pytest.raises(ECMAScriptNormalizationError):
+        normalize("~0 && !0")
+
+
+def test_identifier_cannot_be_restored_as_a_quoted_state_id():
+    from scjson.exec_ir import UnsupportedExpr, lower_expression
+
+    name = "__SCJSON_STR_0__"
+    for expr in (f"In({name})", f"In({name}) || In('active')"):
+        ir, diagnostics = lower_expression(expr, "transition", guard=True)
+        assert isinstance(ir, UnsupportedExpr)
+        assert [d.outcome for d in diagnostics] == ["reject"]
+    assert normalize(f"In('{name}')") == f"In('{name}')"
+
+
+def test_negation_in_normalized_script():
+    namespace = {"a": True, "b": False}
+    exec(normalize_script("if (a == !b) { result = !!a }"), {"__builtins__": {}}, namespace)
+    assert namespace["result"] is True
+
+
 def test_strict_equality() -> None:
     """=== is rewritten to ==."""
     result = normalize("a === b")

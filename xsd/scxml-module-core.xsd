@@ -294,7 +294,7 @@
 	<xsd:group name="scxml.if.content">
 		<xsd:sequence>
 			<xsd:group ref="scxml.core.executablecontent" minOccurs="0" maxOccurs="unbounded"/>
-			<xsd:group ref="scxml.if.elseif.mix" minOccurs="0" maxOccurs="1"/>
+			<xsd:group ref="scxml.if.elseif.mix" minOccurs="0" maxOccurs="unbounded"/>
 			<xsd:group ref="scxml.if.else.mix" minOccurs="0" maxOccurs="1"/>
 		</xsd:sequence>
 	</xsd:group>

@@ -145,7 +145,22 @@
                     "anyOf": [
                         {
                             "items": {
-                                "$ref": "#/$defs/Scxml"
+                                "anyOf": [
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/XmlPayloadElement"
+                                    },
+                                    {
+                                        "$ref": "#/$defs/Scxml",
+                                        "not": {
+                                            "required": [
+                                                "qname"
+                                            ]
+                                        }
+                                    }
+                                ]
                             },
                             "type": "array"
                         },
@@ -485,6 +500,13 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Finalize",
@@ -516,7 +538,20 @@
                         }
                     }
                 }
-            ]
+            ],
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Foreach": {
             "description": "iterate over items within executable content.",
@@ -612,6 +647,13 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "required": [
@@ -619,7 +661,20 @@
                 "item"
             ],
             "title": "Foreach",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "History": {
             "description": "pseudostate remembering previous active children.",
@@ -752,10 +807,17 @@
                             "$ref": "#/$defs/Elseif"
                         },
                         {
+                            "items": {
+                                "$ref": "#/$defs/Elseif"
+                            },
+                            "type": "array"
+                        },
+                        {
                             "type": "null"
                         }
                     ],
-                    "default": null
+                    "default": null,
+                    "title": "Elseif"
                 },
                 "else_value": {
                     "anyOf": [
@@ -782,13 +844,32 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "required": [
                 "cond"
             ],
             "title": "If",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue"
+                    ]
+                }
+            }
         },
         "Initial": {
             "description": "starting state within a compound state.",
@@ -1065,10 +1146,30 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Onentry",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Onexit": {
             "description": "actions performed when leaving a state.",
@@ -1144,10 +1245,30 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Onexit",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "Parallel": {
             "description": "coordinates concurrent regions.",
@@ -1234,6 +1355,17 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "region_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "Region Order",
                     "type": "array"
                 }
             },
@@ -1464,6 +1596,18 @@
                         "type": "string"
                     },
                     "title": "Help Text",
+                    "type": "array"
+                },
+                "state_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel",
+                            "final"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "State Order",
                     "type": "array"
                 }
             },
@@ -1732,6 +1876,18 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "state_order": {
+                    "items": {
+                        "enum": [
+                            "state",
+                            "parallel",
+                            "final"
+                        ],
+                        "type": "string"
+                    },
+                    "title": "State Order",
+                    "type": "array"
                 }
             },
             "title": "State",
@@ -1853,10 +2009,30 @@
                     },
                     "title": "Help Text",
                     "type": "array"
+                },
+                "execution_order": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "title": "Execution Order",
+                    "type": "array"
                 }
             },
             "title": "Transition",
-            "type": "object"
+            "type": "object",
+            "propertyNames": {
+                "not": {
+                    "enum": [
+                        "raise",
+                        "raiseValue",
+                        "if",
+                        "ifValue",
+                        "else",
+                        "elseValue",
+                        "else_value"
+                    ]
+                }
+            }
         },
         "TransitionTypeDatatype": {
             "description": "The type of the transition i.e. internal or external.",
@@ -1866,6 +2042,59 @@
             ],
             "title": "TransitionTypeDatatype",
             "type": "string"
+        },
+        "XmlPayloadElement": {
+            "additionalProperties": false,
+            "description": "Preserve an extension element's qualified name, attributes and mixed text.",
+            "properties": {
+                "qname": {
+                    "title": "Qname",
+                    "type": "string"
+                },
+                "text": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Text"
+                },
+                "tail": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Tail"
+                },
+                "children": {
+                    "items": {
+                        "$ref": "#/$defs/XmlPayloadElement"
+                    },
+                    "title": "Children",
+                    "type": "array"
+                },
+                "attributes": {
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "title": "Attributes",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "qname"
+            ],
+            "title": "XmlPayloadElement",
+            "type": "object"
         }
     },
     "$ref": "#/$defs/Scxml",
@@ -1977,6 +2206,18 @@
                 "type": "string"
             },
             "title": "Help Text",
+            "type": "array"
+        },
+        "state_order": {
+            "items": {
+                "enum": [
+                    "state",
+                    "parallel",
+                    "final"
+                ],
+                "type": "string"
+            },
+            "title": "State Order",
             "type": "array"
         }
     }

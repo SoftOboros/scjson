@@ -19,37 +19,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
-import shlex
 import subprocess
+from scjson_argv import format_command
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Iterable, List, Tuple
 
-from scion_support import augment_node_path, ensure_scion_runner
+from scion_support import reference_command
 
-ROOT = Path(__file__).resolve().parent.parent
-
-
-_SCION_KNOWN_BUGS = {
-    (ROOT / "tests" / "sweep_corpus" / "parallel_history_deep.scxml").resolve(): (
-        "SCION reference exits sibling parallel regions when replaying deep history targets."
-    ),
-}
-
-
-_SCXML_NOT_RE = re.compile(r"cond\s*=\s*['\"][^'\"]*\bnot\b[^'\"]*['\"]", re.IGNORECASE)
-_SCJSON_NOT_RE = re.compile(r'"cond"\s*:\s*"[^"]*\bnot\b[^"]*"', re.IGNORECASE)
-_SCXML_IN_RE = re.compile(r"cond\s*=\s*['\"][^'\"]*\bin\b[^'\"]*['\"]", re.IGNORECASE)
-_SCJSON_IN_RE = re.compile(r'"cond"\s*:\s*"[^"]*\bin\b[^"]*"', re.IGNORECASE)
-
-_SCION_EXPR_PATTERNS = [
-    (_SCXML_NOT_RE, "SCION reference lacks support for Python datamodel expressions using 'not'."),
-    (_SCJSON_NOT_RE, "SCION reference lacks support for Python datamodel expressions using 'not'."),
-    (_SCXML_IN_RE, "SCION reference lacks support for Python datamodel membership tests using 'in'."),
-    (_SCJSON_IN_RE, "SCION reference lacks support for Python datamodel membership tests using 'in'."),
-]
+MODULE_DIR = Path(__file__).resolve().parent
+SOURCE_TUTORIAL = MODULE_DIR.parent / "tutorial"
 
 
 def _default_events_path(chart: Path) -> Path | None:
@@ -81,8 +61,8 @@ def main() -> None:
         "root",
         type=Path,
         nargs="?",
-        default=ROOT / "tutorial",
-        help="Root directory to search for charts (default: tutorial)",
+        default=SOURCE_TUTORIAL if MODULE_DIR.name == "py" and SOURCE_TUTORIAL.is_dir() else Path.cwd(),
+        help="Directory of charts (defaults to the checkout tutorial or the current directory)",
     )
     parser.add_argument(
         "--glob",
@@ -161,7 +141,7 @@ def main() -> None:
         type=str,
         choices=["tolerant", "strict", "scion"],
         default="tolerant",
-        help="Ordering policy for child→parent emissions (finalize, etc.)",
+        help="Ordering policy for child-to-parent emissions (finalize, etc.)",
     )
     opts = parser.parse_args()
 
@@ -173,23 +153,11 @@ def main() -> None:
                 continue
             opts.skip.append(line)
 
-    repo_root = ROOT
     common_env = dict(os.environ)
-    py_path = str(repo_root / "py")
-    if common_env.get("PYTHONPATH"):
-        common_env["PYTHONPATH"] = py_path + os.pathsep + common_env["PYTHONPATH"]
-    else:
-        common_env["PYTHONPATH"] = py_path
-    scion_script = (repo_root / "tools" / "scion-runner" / "scion-trace.cjs").resolve()
-    scion_ready = False
-    if scion_script.exists() and not opts.reference:
-        scion_ready = ensure_scion_runner(repo_root)
-        if scion_ready:
-            common_env["NODE_PATH"] = augment_node_path(common_env.get("NODE_PATH"), repo_root)
-
-    python_reference = f"{sys.executable} -m scjson.cli engine-trace"
-    scion_reference = f"node {scion_script}"
-    default_reference = opts.reference or (scion_reference if scion_ready else python_reference)
+    if MODULE_DIR.name == "py":
+        common_env["PYTHONPATH"] = os.pathsep.join(
+            filter(None, [str(MODULE_DIR), common_env.get("PYTHONPATH")])
+        )
 
     charts: List[Path] = []
     for c in _iter_charts(opts.root, opts.glob):
@@ -198,17 +166,16 @@ def main() -> None:
             continue
         charts.append(c)
     if not charts:
-        print("No charts found.")
-        sys.exit(0)
+        raise SystemExit(f"No charts found under {opts.root} matching {opts.glob}.")
 
     mismatches: List[Tuple[Path, str]] = []
     total = 0
     cov_total = {"enteredStates": 0, "firedTransitions": 0, "doneEvents": 0, "errorEvents": 0}
     cov_count = 0
     cov_by_chart: dict[str, dict] = {}
-    reference_notes: List[Tuple[Path, str]] = []
 
-    base_cmd = [sys.executable, str((ROOT / "py" / "exec_compare.py").resolve()), "--reference", default_reference]
+    reference = format_command(reference_command(opts.reference))
+    base_cmd = [sys.executable, str(MODULE_DIR / "exec_compare.py"), "--reference", reference]
     if opts.workdir:
         artifacts_root = Path(opts.workdir)
         artifacts_root.mkdir(parents=True, exist_ok=True)
@@ -238,10 +205,7 @@ def main() -> None:
     temp_dir: TemporaryDirectory[str] | None = None
     try:
         for chart in charts:
-            try:
-                chart_text = chart.read_text(encoding="utf-8")
-            except Exception:
-                chart_text = ""
+            total += 1
             events = _default_events_path(chart)
             # Generate vector + coverage when requested and no events exist
             if events is None and opts.generate_vectors:
@@ -256,7 +220,7 @@ def main() -> None:
                 vec_dir.mkdir(parents=True, exist_ok=True)
                 vg_cmd = [
                     sys.executable,
-                    str((ROOT / "py" / "vector_gen.py").resolve()),
+                    str(MODULE_DIR / "vector_gen.py"),
                     str(chart),
                     "--out",
                     str(vec_dir),
@@ -271,9 +235,15 @@ def main() -> None:
                     vg_cmd.extend(["--limit", str(opts.gen_limit)])
                 if opts.gen_variants_per_event:
                     vg_cmd.extend(["--variants-per-event", str(opts.gen_variants_per_event)])
-                _run(vg_cmd, env=common_env)
+                generated = _run(vg_cmd, env=common_env)
+                if generated.returncode:
+                    mismatches.append((chart, generated.stdout + "\n" + generated.stderr))
+                    continue
                 gen_events = vec_dir / f"{chart.stem}.events.jsonl"
-                events = gen_events if gen_events.exists() else None
+                if not gen_events.is_file():
+                    mismatches.append((chart, "Vector generator did not produce an events file."))
+                    continue
+                events = gen_events
                 # Adopt recommended advance time from vector metadata when user did not pass one
                 try:
                     if (not opts.advance_time) or opts.advance_time <= 0:
@@ -304,7 +274,6 @@ def main() -> None:
                 tmp.parent.mkdir(parents=True, exist_ok=True)
                 tmp.write_text("")
                 events = tmp
-            total += 1
             cmd = list(base_cmd)
             if artifacts_root:
                 rel = chart.relative_to(opts.root)
@@ -322,76 +291,13 @@ def main() -> None:
             cmd.append(str(chart))
             if events:
                 cmd.extend(["--events", str(events)])
-            override_reason: str | None = None
-            if not opts.reference and default_reference == scion_reference:
-                if chart_text:
-                    for pattern, message in _SCION_EXPR_PATTERNS:
-                        if pattern.search(chart_text):
-                            override_reason = message
-                            break
-                if override_reason is None:
-                    bug_reason = _SCION_KNOWN_BUGS.get(chart.resolve())
-                    if bug_reason:
-                        override_reason = bug_reason
-            if override_reason:
-                try:
-                    ref_idx = cmd.index("--reference") + 1
-                except ValueError:
-                    ref_idx = None
-                if ref_idx is not None and cmd[ref_idx] == default_reference:
-                    cmd[ref_idx] = python_reference
-                    note = (
-                        f"{override_reason} Falling back to Python reference for {chart}."
-                    )
-                    print(note)
-                    reference_notes.append((chart, f"{override_reason} Using Python reference."))
             result = _run(cmd, env=common_env)
-            if (
-                result.returncode != 0
-                and not opts.reference
-                and scion_ready
-                and default_reference == scion_reference
-                and (
-                    "Command failed:" in result.stdout
-                    or "Command failed:" in result.stderr
-                )
-            ):
-                try:
-                    ref_idx = cmd.index("--reference") + 1
-                except ValueError:
-                    ref_idx = None
-                if ref_idx is not None and cmd[ref_idx] == scion_reference:
-                    fallback_cmd = list(cmd)
-                    fallback_cmd[ref_idx] = python_reference
-                    fallback = _run(fallback_cmd, env=common_env)
-                    if fallback.returncode == 0:
-                        print(f"SCION reference failed for {chart}; fell back to Python reference.")
-                        result = fallback
-                        cmd = fallback_cmd
-                    else:
-                        combined = (
-                            "SCION reference failed:\n"
-                            + result.stdout
-                            + "\n"
-                            + result.stderr
-                            + "\nFallback to Python reference also failed:\n"
-                            + fallback.stdout
-                            + "\n"
-                            + fallback.stderr
-                        )
-                        mismatches.append((chart, combined))
-                        continue
             if result.returncode != 0:
                 mismatches.append((chart, result.stdout + "\n" + result.stderr))
                 # Keep going; summarize later
     finally:
         if temp_dir is not None:
             temp_dir.cleanup()
-
-    if reference_notes:
-        print("Reference overrides applied for Python-specific conditions:")
-        for path, reason in reference_notes:
-            print(f"- {path}: {reason}")
 
     if mismatches:
         print(f"Mismatches: {len(mismatches)} of {total}")
@@ -416,7 +322,7 @@ def main() -> None:
                     pass
         sys.exit(1)
 
-    print(f"✔ All charts matched reference ({total} compared)")
+    print(f"All charts matched reference ({total} compared)")
     if cov_count:
         print(
             f"Coverage (generated vectors): charts={cov_count} entered={cov_total['enteredStates']} fired={cov_total['firedTransitions']} done={cov_total['doneEvents']} error={cov_total['errorEvents']}"

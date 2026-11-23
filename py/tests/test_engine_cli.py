@@ -84,3 +84,7 @@ def test_engine_trace_accepts_advance_time_token(tmp_path: Path) -> None:
     assert step0.get("step") == 0
     assert step1.get("step") == 1
     assert step1.get("event", {}).get("name") == "go"
+
+    streamed = runner.invoke(main, ["engine-trace", "-I", str(chart), "-e", str(events_file), "--xml"])
+    assert streamed.exit_code == 0, streamed.output
+    assert [json.loads(line) for line in streamed.stdout.splitlines()] == [step0, step1]

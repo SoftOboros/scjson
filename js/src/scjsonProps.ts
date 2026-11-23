@@ -38,13 +38,13 @@ export type AssignArray = AssignProps[];
 
 /**
  * The assign type that allows for precise manipulation of the datamodel
- *     location.
- *     Types are:
- *     replacechildren (default),
- *     firstchild, lastchild,
- *     previoussibling, nextsibling,
- *     replace, delete,
- *     addattribute
+ * location.
+ * Types are:
+ * replacechildren (default),
+ * firstchild, lastchild,
+ * previoussibling, nextsibling,
+ * replace, delete,
+ * addattribute
 */
 export const AssignTypeDatatypeProps = {
     Addattribute: "addattribute",
@@ -60,7 +60,7 @@ export const AssignTypeDatatypeProps = {
 export type AssignTypeDatatypeProps = typeof AssignTypeDatatypeProps[keyof typeof AssignTypeDatatypeProps];
 
 /**
- *     The binding type in use for the SCXML document.
+ * The binding type in use for the SCXML document.
 */
 export const BindingDatatypeProps = {
     Early: "early",
@@ -109,7 +109,7 @@ export type CancelArray = CancelProps[];
  * inline payload used by `<send>` and `<invoke>`.
 */
 export interface ContentProps {
-    content: ScxmlProps[] | null;
+    content: (string | XmlPayloadElementProps | ScxmlProps)[] | null;
     expr: string | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
@@ -236,9 +236,8 @@ export const defaultElseif = (): ElseifProps => ({
 });
 
 /**
- *     Describes the processor execution mode for this document, being either "lax"
- * or
- *     "strict".
+ * Describes the processor execution mode for this document, being either "lax" or
+ * "strict".
 */
 export const ExmodeDatatypeProps = {
     Lax: "lax",
@@ -292,6 +291,7 @@ export interface FinalizeProps {
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type FinalizeProps */
@@ -333,6 +333,7 @@ export interface ForeachProps {
     index: string | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type ForeachProps */
@@ -410,11 +411,12 @@ export interface IfProps {
     assign: AssignProps[];
     log: LogProps[];
     cancel: CancelProps[];
-    elseif: ElseifProps | null;
+    elseif: ElseifProps | ElseifProps[] | null;
     elseValue: ElseProps | null;
     cond: string;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type IfProps */
@@ -550,6 +552,7 @@ export interface OnentryProps {
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type OnentryProps */
@@ -588,6 +591,7 @@ export interface OnexitProps {
     cancel: CancelProps[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type OnexitProps */
@@ -627,6 +631,7 @@ export interface ParallelProps {
     id: string | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    regionOrder?: ('state' | 'parallel')[];
 }
 
 /** Instantiate a default object of type ParallelProps */
@@ -743,6 +748,7 @@ export interface ScxmlProps {
     exmode: ExmodeDatatypeProps | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type ScxmlProps */
@@ -830,6 +836,7 @@ export interface StateProps {
     initialAttribute: string[];
     otherAttributes: Record<string, object>;
     helpText: string[];
+    stateOrder?: ('state' | 'parallel' | 'final')[];
 }
 
 /** Instantiate a default object of type StateProps */
@@ -876,6 +883,7 @@ export interface TransitionProps {
     typeValue: TransitionTypeDatatypeProps | null;
     otherAttributes: Record<string, object>;
     helpText: string[];
+    executionOrder?: string[];
 }
 
 /** Instantiate a default object of type TransitionProps */
@@ -904,7 +912,7 @@ export const defaultTransition = (): TransitionProps => ({
 export type TransitionArray = TransitionProps[];
 
 /**
- *     The type of the transition i.e. internal or external.
+ * The type of the transition i.e. internal or external.
 */
 export const TransitionTypeDatatypeProps = {
     External: "external",
@@ -913,16 +921,43 @@ export const TransitionTypeDatatypeProps = {
 /** executable version of TransitionTypeDatatypeProps */
 export type TransitionTypeDatatypeProps = typeof TransitionTypeDatatypeProps[keyof typeof TransitionTypeDatatypeProps];
 
+/**
+ * Preserve an extension element's qualified name, attributes and mixed text.
+*/
+export interface XmlPayloadElementProps {
+    qname: string;
+    text: string | null;
+    tail: string | null;
+    children: XmlPayloadElementProps[];
+    attributes: Record<string, string>;
+}
+
+/** Instantiate a default object of type XmlPayloadElementProps */
+export const defaultXmlPayloadElement = (): XmlPayloadElementProps => ({
+    qname: "",
+    text: null,
+    tail: null,
+    children: [],
+    attributes: {},
+});
+
+/**
+ * Preserve an extension element's qualified name, attributes and mixed text.
+*/
+/** Type for an array of of XmlPayloadElementProps */
+export type XmlPayloadElementArray = XmlPayloadElementProps[];
+
 export type Kind = "number" | "string" | "record<string, object>" | "number[]" | "string[]"
                    | "record<string, object>[]" | "assign" | "assigntypedatatype" | "bindingdatatype" | "booleandatatype"
                    | "cancel" | "content" | "data" | "datamodel" | "donedata" | "else" | "elseif"
                    | "exmodedatatype" | "final" | "finalize" | "foreach" | "history" | "historytypedatatype" | "if"
                    | "initial" | "invoke" | "log" | "onentry" | "onexit" | "parallel" | "param" | "raise"
                    | "script" | "scxml" | "send" | "state" | "transition" | "transitiontypedatatype"
-                   | "assignarray" | "cancelarray" | "contentarray" | "dataarray" | "datamodelarray"
-                   | "donedataarray" | "finalarray" | "finalizearray" | "foreacharray" | "historyarray" | "ifarray"
-                   | "initialarray" | "invokearray" | "logarray" | "onentryarray" | "onexitarray" | "parallelarray"
-                   | "paramarray" | "raisearray" | "scriptarray" | "sendarray" | "statearray" | "transitionarray";
+                   | "xmlpayloadelement" | "assignarray" | "cancelarray" | "contentarray" | "dataarray"
+                   | "datamodelarray" | "donedataarray" | "finalarray" | "finalizearray" | "foreacharray"
+                   | "historyarray" | "ifarray" | "initialarray" | "invokearray" | "logarray" | "onentryarray"
+                   | "onexitarray" | "parallelarray" | "paramarray" | "raisearray" | "scriptarray" | "sendarray"
+                   | "statearray" | "transitionarray" | "xmlpayloadelementarray";
 
 export type PropsUnion = null | string | number | Record<string, object> | string[] | number[]
                          | Record<string, object>[] | AssignProps | AssignTypeDatatypeProps | BindingDatatypeProps
@@ -931,10 +966,11 @@ export type PropsUnion = null | string | number | Record<string, object> | strin
                          | HistoryProps | HistoryTypeDatatypeProps | IfProps | InitialProps | InvokeProps | LogProps
                          | OnentryProps | OnexitProps | ParallelProps | ParamProps | RaiseProps | ScriptProps
                          | ScxmlProps | SendProps | StateProps | TransitionProps | TransitionTypeDatatypeProps
-                         | AssignArray | CancelArray | ContentArray | DataArray | DatamodelArray | DonedataArray
-                         | FinalArray | FinalizeArray | ForeachArray | HistoryArray | IfArray | InitialArray
-                         | InvokeArray | LogArray | OnentryArray | OnexitArray | ParallelArray | ParamArray
-                         | RaiseArray | ScriptArray | SendArray | StateArray | TransitionArray;
+                         | XmlPayloadElementProps | AssignArray | CancelArray | ContentArray | DataArray | DatamodelArray
+                         | DonedataArray | FinalArray | FinalizeArray | ForeachArray | HistoryArray | IfArray
+                         | InitialArray | InvokeArray | LogArray | OnentryArray | OnexitArray | ParallelArray
+                         | ParamArray | RaiseArray | ScriptArray | SendArray | StateArray | TransitionArray
+                         | XmlPayloadElementArray;
 
 export type KindMap = {
     assign: AssignProps
@@ -992,5 +1028,7 @@ export type KindMap = {
     transition: TransitionProps
     transitionarray: TransitionArray
     transitiontypedatatype: TransitionTypeDatatypeProps
+    xmlpayloadelement: XmlPayloadElementProps
+    xmlpayloadelementarray: XmlPayloadElementArray
 }
 

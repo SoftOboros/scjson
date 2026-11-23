@@ -25,12 +25,15 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable
+from xml.etree import ElementTree
 
 import pytest
 
+from scjson_argv import format_command
 from scjson.SCXMLDocumentHandler import SCXMLDocumentHandler
 from scjson.context import DocumentContext, ExecutionMode
 
@@ -61,6 +64,8 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = ROOT / "tutorial"
+# The pinned tutorial includes a root-level transition outside the SCXML grammar.
+TUTORIAL_INVALID = Path("Tests/ecma/Custom/uscxml/test-enc-UTF8.scxml")
 
 # Optional features known unsupported by the Python engine for now
 ENGINE_KNOWN_UNSUPPORTED = {
@@ -162,7 +167,12 @@ def _available(cmd: list[str], env: dict[str, str] | None = None) -> bool:
     try:
         subprocess.run(cmd + ["--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, env=env)
         return True
-    except Exception:
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or b"").decode("utf-8", errors="replace").strip()
+        print(f"{exe} --help exited {exc.returncode}: {ascii(detail)}", file=sys.stderr)
+        return False
+    except OSError as exc:
+        print(f"Cannot run {exe}: {exc}", file=sys.stderr)
         return False
 
 
@@ -252,7 +262,7 @@ def _run_python_exec_compare(
         if not ensure_scion_runner(ROOT):
             print(f"Skipping Python execution compare: SCION ({SCION_NPM_URL}) not available.")
             return 0
-        reference = f"node {ROOT / 'tools' / 'scion-runner' / 'scion-trace.cjs'}"
+        reference = format_command(["node", str(ROOT / "tools" / "scion-runner" / "scion-trace.cjs")])
         env["NODE_PATH"] = augment_node_path(env.get("NODE_PATH"), ROOT)
 
     failures = 0
@@ -405,7 +415,7 @@ class MismatchInvestigator:
         if not jpath or not jpath.exists():
             return None
         try:
-            data = json.loads(jpath.read_text())
+            data = json.loads(jpath.read_text(encoding="utf-8"))
         except Exception:
             return None
         cache[src] = data
@@ -523,7 +533,7 @@ def _normalize_for_diff(obj: Any, path: str = "", field_key: str | None = None):
 
 
 def _diff_report(expected: dict, actual: dict) -> str:
-    diff = DeepDiff(_normalize_for_diff(expected), _normalize_for_diff(actual), verbose_level=1, ignore_numeric_type_changes=True, ignore_order=True)
+    diff = DeepDiff(_normalize_for_diff(expected), _normalize_for_diff(actual), verbose_level=1, ignore_numeric_type_changes=True)
     return diff.pretty()
 
 
@@ -550,9 +560,10 @@ def _canonical_json(files: list[Path], handler: SCXMLDocumentHandler) -> dict[Pa
     for f in files:
         data = f.read_text(encoding="utf-8")
         try:
+            ElementTree.fromstring(data)
             result[f] = json.loads(handler.xml_to_json(data))
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Reference refused {f}: {exc}")
     return result
 
 
@@ -584,14 +595,21 @@ def main(
             p for p in scxml_files if fnmatch.fnmatch(str(p.relative_to(corpus)), subset)
         ]
     canonical = _canonical_json(scxml_files, handler)
+    print(f"Reference admitted {len(canonical)} of {len(scxml_files)} charts.")
+    if language and not canonical:
+        raise SystemExit("No admitted charts to compare")
+    if language:
+        refused = set(scxml_files).difference(canonical)
+        if corpus.resolve() == TUTORIAL.resolve():
+            refused.discard(corpus / TUTORIAL_INVALID)
+        if refused:
+            raise SystemExit(f"Reference unexpectedly refused {len(refused)} chart(s)")
     scxml_files = list(canonical.keys())
     out_root = Path(out_dir)
-    investigator = MismatchInvestigator(canonical, corpus, out_root)
     if language:
         lang_key = _resolve_language(language)
         if not lang_key:
-            print(f"Skipping {language}: unknown language")
-            return
+            raise SystemExit(f"Unknown converter: {language}")
         languages = [lang_key]
     else:
         languages = list(LANG_CMDS.keys())
@@ -605,12 +623,20 @@ def main(
             env = dict(os.environ)
             env["PYTHONPATH"] = str(ROOT / "py")
         if not _available(cmd, env):
+            if language:
+                raise SystemExit(f"Requested {lang} converter is unavailable: {cmd[0]}")
             print(f"Skipping {lang}: executable not available")
             continue
         if lang == "javascript":
             subprocess.run(["npm", "run", "build"], cwd=ROOT / "js", check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        json_dir = out_root / lang / "json"
-        xml_dir = out_root / lang / "xml"
+        run_root = out_root
+        if (out_root / lang).exists():
+            # Preserve earlier evidence, but never credit a stale output to this run.
+            run_root = Path(tempfile.mkdtemp(prefix=f"{lang}-", dir=out_root))
+            print(f"Writing fresh {lang} comparisons under {run_root}")
+        investigator = MismatchInvestigator(canonical, corpus, run_root)
+        json_dir = run_root / lang / "json"
+        xml_dir = run_root / lang / "xml"
         json_dir.mkdir(parents=True, exist_ok=True)
         xml_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -640,12 +666,15 @@ def main(
                 jpath = json_dir / rel.with_suffix(".scjson")
                 if not jpath.exists():
                     print(f"{lang} failed to write {jpath}")
+                    errors += 1
+                    scjson_errors += 1
                     continue
                 try:
-                    data = json.loads(jpath.read_text())
+                    data = json.loads(jpath.read_text(encoding="utf-8"))
                 except Exception as exc:
                     print(f"{lang} JSON parse error {rel}: {exc}")
                     errors += 1
+                    scjson_errors += 1
                     continue
                 diff = _diff_report(canonical[src], data)
                 lines = _diff_line_count(diff)
@@ -690,9 +719,12 @@ def main(
                 xpath = xml_dir / rel
                 if not xpath.exists():
                     print(f"{lang} failed to write {xpath}")
+                    errors += 1
                     continue
                 try:
-                    parsed = json.loads(handler.xml_to_json(xpath.read_text()))
+                    xml = xpath.read_text(encoding="utf-8-sig")
+                    ElementTree.fromstring(xml)
+                    parsed = json.loads(handler.xml_to_json(xml))
                 except Exception as exc:
                     print(f"{lang} XML parse error {rel}: {exc}")
                     errors += 1
@@ -714,14 +746,22 @@ def main(
                 print(f"{lang} encountered {errors} mismatching files ({scjson_errors} scjson) and {mismatch_items} mismatched items.")
             for line in investigator.summary(lang):
                 print(line)
+            if language and errors:
+                raise SystemExit(f"{lang} failed {errors} converter comparisons")
+            if not errors and not mismatch_items:
+                print(f"{lang} matched {len(canonical)} SCJSON and {len(canonical)} XML outputs.")
         except subprocess.CalledProcessError as exc:
             err = exc.stderr
             if isinstance(err, (bytes, bytearray)):
                 err = err.decode().strip()
             else:
                 err = str(err).strip()
+            if language:
+                raise SystemExit(f"{lang} converter exited {exc.returncode}: {err}") from exc
             print(f"Skipping {lang}: {err}")
         except Exception as exc:
+            if language:
+                raise
             print(f"Skipping {lang}: {exc}")
 
 

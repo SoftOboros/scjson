@@ -36,8 +36,8 @@ def test_safe_evaluator_blocks_imports() -> None:
         raise AssertionError("unsafe import was permitted")
 
 
-def test_assign_falls_back_when_sandbox_blocks() -> None:
-    """Assignments with disallowed expressions fall back to the raw string."""
+def test_blocked_assignment_preserves_target_value() -> None:
+    """A sandbox refusal reports the failed action and preserves its target."""
     doc = Scxml(
         id="root",
         datamodel=[Datamodel(data=[Data(id="danger", expr="0")])],
@@ -51,4 +51,5 @@ def test_assign_falls_back_when_sandbox_blocks() -> None:
         version=Decimal("1.0"),
     )
     ctx = DocumentContext.from_doc(doc)
-    assert ctx.data_model["danger"] == "__import__('os')"
+    assert ctx.data_model["danger"] == 0
+    assert [event.name for event in iter(ctx.events.pop, None)] == ["error.execution", "error"]
