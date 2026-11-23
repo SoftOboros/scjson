@@ -49,6 +49,8 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-012 | 🟢 | Implicit initial state selection loses document order across child kinds at the root and in compound states | 2026-11-21 | Conversion / execution |
 | ERRATA-013 | 🟢 | Raw SCJSON executable keys can silently drop an action or branch | 2026-11-21 | Conversion / intake |
 | ERRATA-014 | 🟢 | Offline vector generation consumes host time between chart steps | 2026-11-22 | EXEC-E / Python vectors |
+| ERRATA-015 | 🟢 | Installed Python models and trace comparison commands fail outside the checkout | 2026-11-22 | Python distribution / execution tools |
+| ERRATA-016 | 🟢 | The installed npm reference command can exit successfully without a trace | 2026-11-22 | JavaScript distribution / trace tools |
 
 ---
 
@@ -999,6 +1001,70 @@ skipped because the runner was unavailable.
 | Held-first and held-second region replay | `08ef26c32ca1432f3ac8b87006abce61faf9048f288c85ed0eb374f3c7e68c35` |
 | Full upstream JUnit report | `b2153079a5d6e99e0ba68652b494cf73ab1a6e73a4f5826e72666a6f11507b69` |
 | `scjson-vector-clock-wheel-review.zip` with wheel, build receipts, and full suite | `40ed075d3c25cf2c2c9d6c89d53b16ea8796f03f8545823a4f3975584436289c` |
+
+## ERRATA-015 — Installed Python models and comparisons
+
+**Symptom and cause.** The 0.4.3 candidate at `4da3292` passed dependency
+checking on a clean Python 3.12 installation, then failed to import
+`scjson.pydantic.State`. Its distribution omitted the xsdata Pydantic
+adapter and the top-level `scion_support` module. The sweep looked for
+helper scripts under a checkout-relative `py/` directory. The package
+advertised Python 3.8 although its CLI used Python 3.10 syntax. During
+minimum-version testing, the first repaired wheel printed a product banner
+before the first JSONL record on standard output.
+
+**Resolution.** `fa39972` declares the model dependencies and Python 3.10
+floor and installs the sweep helper. The sweep runs the selected reference
+and checks its fresh output on each comparison. A missing engine, empty
+output, or wrong state fails the comparison. `2bc548d` keeps the trace
+stream machine-readable from its first byte. The wheel built directly
+from Git and the wheel rebuilt from the source distribution were identical.
+
+**Verification.** A clean installation on CPython 3.10.22 on docker-vm
+exercised all four console scripts, the model adapter, XML and saved SCJSON.
+Both stdout traces matched their file counterparts byte for byte. The sweep
+matched the reference and rejected a changed terminal state at step 1.
+A separate Windows CPython 3.12.14 consumer exercised the installed
+entry points and rejected an empty trace and a stale trace in a reused
+work directory. The Windows run used the embedded console-script entry
+points through Python because Application Control blocked the unsigned
+launchers. The Linux run used the installed commands.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Python wheel | `e4e45b8096d5209463fbc573f32fade53d6038c6f57c4c9a48c9ab970107643e` |
+| Source distribution | `70954b1f7373a04838340757c4cdece50bcd24bcc0484ca3a82540f9245047b5` |
+| CPython 3.10.22 receipt in `istate-release-fixes-20261123/vm/py310-final` | `e358545f0b944cb54b4f72592303cd3babb8c277bbb95157a46e8a3c3eb769d8` |
+
+## ERRATA-016 — Published layout of the npm reference command
+
+**Symptom and cause.** At `4da3292`, the packed command looked outside
+the npm package for the repository's SCION runner. After that failed it
+invoked Python and discarded its exit status. A valid chart exited zero
+with an empty trace. The browser export also named a declaration file
+absent from the tarball.
+
+**Resolution and verification.** `74b5db9` includes the canonical runner
+and declares its engine dependencies. It runs SCION for XML and saved
+SCJSON. File output is replaced after a successful trace. The browser
+export selects its shipped ESM or CommonJS declaration. Two independent
+Git exports reproduced the qualified tarball. A fresh runtime-only npm
+consumer ran the trace commands offline. The startup and `go` frames
+matched on both formats. Wrong inputs and a withheld engine exited
+unsuccessfully. An external TypeScript 5.8.3 consumer checked both module
+modes, including intentional type errors.
+
+The JavaScript `--leaf-only` option describes SCION's atomic configuration.
+Compound states can still appear in its entry and exit lists. Python's
+comparison normalization can additionally filter those lists. The nested
+`conflict_nested.scxml` witness produced the same three raw frames on the
+previous checkout and this package.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| npm tarball | `8aacbc6c149e47c5fc4006d39728467f86a77ca65dcc260907c40bac7e26f56d` |
+| Installed npm and TypeScript checks in `istate-release-fixes-20261123/npm/attempt-1` | `553a7650290ee23d69e41e299d2ab384f8894628e1c321b9245bbf03abda49eb` |
+| Independent source rebuilds and nested trace readback | `7356066016586ef6fc9e3e7e994458fc41cc2cbf4523310381ba3101899b72dc` |
 
 ## How to add an entry
 
