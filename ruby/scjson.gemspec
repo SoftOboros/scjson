@@ -1,6 +1,8 @@
+require_relative 'lib/scjson/version'
+
 Gem::Specification.new do |spec|
   spec.name        = 'scjson'
-  spec.version     = '0.4.2'
+  spec.version     = Scjson::VERSION
   spec.summary     = 'SCXML/SCML execution, SCXML <-> scjson converter and validator'
   spec.description = 'scjson: SCXML ↔ JSON converter, validator, and execution trace interface. Provides CLI tools for conversion, validation, and emitting deterministic traces compatible with SCION semantics.'
   spec.authors     = ['Softoboros Technology Inc.']
