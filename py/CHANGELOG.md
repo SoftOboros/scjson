@@ -8,6 +8,14 @@ the top-level [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## 0.4.3 — Unreleased
 
+- Require Python 3.10 or later and install the Pydantic v2 model adapter.
+  The installed sweep can generate vectors and compare traces outside the
+  checkout. Reference failures and missing or empty traces surface as errors.
+- Refuse misspelled or colliding executable keys on modeled SCJSON owners
+  before conversion or execution. Preserve keys inside extension payloads.
+- Generate offline timer vectors against a logical clock. Elapsed host time
+  between input events no longer changes the generated advance.
+
 - Select the first authored child when a document or compound state has no
   explicit initial target. The optional `state_order` list preserves the
   order of `state`, `parallel`, and `final` through conversion. Unmarked

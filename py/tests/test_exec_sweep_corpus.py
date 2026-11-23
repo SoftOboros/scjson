@@ -5,7 +5,7 @@ Part of the scjson project.
 Developed by Softoboros Technology Inc.
 Licensed under the BSD 1-Clause License.
 
-CI-friendly sweep test over a small corpus, defaulting to [SCION](https://www.npmjs.com/package/scion) if present or the Python engine otherwise.
+Generate and check corpus coverage with SCION when its dependencies are available.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from scjson_argv import format_command
+from scion_support import ensure_scion_runner
 
 
 def test_exec_sweep_small_corpus(tmp_path: Path) -> None:
@@ -34,8 +36,9 @@ def test_exec_sweep_small_corpus(tmp_path: Path) -> None:
         "--generate-vectors",
         "--workdir",
         str(workdir),
-        # Reference omitted on purpose: uses SCION (https://www.npmjs.com/package/scion) if present or Python fallback
     ]
+    if not ensure_scion_runner(root):
+        cmd.extend(["--reference", format_command([sys.executable, "-m", "scjson.cli", "engine-trace"])])
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
     assert result.returncode in (0, 1), f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
     # Coverage summary should be written when vectors are generated

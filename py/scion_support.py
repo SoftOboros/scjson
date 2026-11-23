@@ -16,10 +16,32 @@ import os
 import shutil
 import subprocess
 from typing import Dict, Optional
+from scjson_argv import split_command
 
 SCION_NPM_URL = "https://www.npmjs.com/package/scion"
 
 _SCION_READY: Dict[Path, bool] = {}
+
+
+def reference_command(override: str | None) -> list[str]:
+    """Resolve the reference selected for a trace comparison.
+
+    @param override: Command supplied by the caller through --reference.
+    @returns The reference executable followed by its fixed arguments.
+    """
+    configured = override or os.environ.get("SCJSON_REF_ENGINE_CMD")
+    if configured:
+        return split_command(configured)
+    script = Path(__file__).resolve().parents[1] / "tools" / "scion-runner" / "scion-trace.cjs"
+    if script.is_file() and shutil.which("node"):
+        return ["node", str(script)]
+    installed = shutil.which("scjson-scion-trace")
+    if installed:
+        return [installed]
+    raise SystemExit(
+        "No reference engine available. Install the scjson npm trace tool on PATH, "
+        "pass --reference, or set SCJSON_REF_ENGINE_CMD."
+    )
 
 
 def ensure_scion_runner(repo_root: Path) -> bool:
