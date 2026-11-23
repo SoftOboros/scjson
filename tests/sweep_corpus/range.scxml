@@ -1,6 +1,6 @@
-<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+<scxml initial="s0" datamodel="ecmascript" xmlns="http://www.w3.org/2005/07/scxml">
   <state id="s0">
-    <transition event="go" cond="0 &lt; _event.data.n &lt; 5" target="ok"/>
+    <transition event="go" cond="_event.data &amp;&amp; _event.data.n > 0 &amp;&amp; _event.data.n &lt; 5" target="ok"/>
   </state>
   <state id="ok"/>
 </scxml>

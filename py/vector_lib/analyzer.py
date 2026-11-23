@@ -220,8 +220,7 @@ def extract_payload_heuristics(ctx: DocumentContext, max_variants: int = 3) -> D
                 start, end = m.span(0)
                 window = cond[max(0, start - 48) : min(len(cond), end + 48)]
                 # Equality/inequality
-                eq = re.search(r"==\s*([^\s\)\]\}]+|'.*?'|\".*?\")", window)
-                ne = re.search(r"!=\s*([^\s\)\]\}]+|'.*?'|\".*?\")", window)
+                equality = re.search(r"(===|!==|==|!=)\s*('[^']*'|\"[^\"]*\"|[^\s\)\]\}]+)", window)
                 ge = re.search(r">=\s*([0-9]+(?:\.[0-9]+)?)", window)
                 le = re.search(r"<=\s*([0-9]+(?:\.[0-9]+)?)", window)
                 gt = re.search(r">\s*([0-9]+(?:\.[0-9]+)?)", window)
@@ -257,9 +256,9 @@ def extract_payload_heuristics(ctx: DocumentContext, max_variants: int = 3) -> D
                     except Exception:
                         mem_values = []
 
-                if eq:
-                    val = _parse_literal(eq.group(1))
-                    _set_deep(positive, path, val)
+                if equality:
+                    operator, literal = equality.groups()
+                    val = _parse_literal(literal)
                     # Pick a flipped value for negative branch
                     flipped = None if val is not None else 1
                     if isinstance(val, bool):
@@ -268,7 +267,9 @@ def extract_payload_heuristics(ctx: DocumentContext, max_variants: int = 3) -> D
                         flipped = val + 1
                     elif isinstance(val, str):
                         flipped = val + "_x"
-                    _set_deep(negative, path, flipped)
+                    match, miss = (flipped, val) if operator.startswith("!") else (val, flipped)
+                    _set_deep(positive, path, match)
+                    _set_deep(negative, path, miss)
                 elif ge or le or gt or lt:
                     num_s = (ge or le or gt or lt).group(1)
                     try:

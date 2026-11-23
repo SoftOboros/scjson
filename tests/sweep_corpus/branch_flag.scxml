@@ -1,7 +1,7 @@
-<scxml initial="s0" xmlns="http://www.w3.org/2005/07/scxml">
+<scxml initial="s0" datamodel="ecmascript" xmlns="http://www.w3.org/2005/07/scxml">
   <state id="s0">
-    <transition event="go" cond="_event.data.flag" target="s1"/>
-    <transition event="go" cond="not _event.data.flag" target="s2"/>
+    <transition event="go" cond="_event.data &amp;&amp; _event.data.flag" target="s1"/>
+    <transition event="go" target="s2"/>
   </state>
   <state id="s1"/>
   <state id="s2"/>

@@ -170,6 +170,16 @@ def test_payload_heuristics_extracts_event_data_variants() -> None:
     assert any("false" in s.lower() for s in values)
 
 
+@pytest.mark.parametrize("operator,positive,negative", [
+    ("==", "A", "A_x"), ("===", "A", "A_x"),
+    ("!=", "A_x", "A"), ("!==", "A_x", "A"),
+])
+def test_equality_payloads_use_the_literal(operator, positive, negative) -> None:
+    chart = _chart_membership().replace("in ['A','B']", f"{operator} 'A'")
+    ctx = DocumentContext.from_xml_string(chart, execution_mode=ExecutionMode.LAX)
+    assert extract_payload_heuristics(ctx)["go"][:2] == [{"kind": positive}, {"kind": negative}]
+
+
 def test_payload_heuristics_membership_variants() -> None:
     ctx = DocumentContext.from_xml_string(_chart_membership(), execution_mode=ExecutionMode.LAX)
     hints = extract_payload_heuristics(ctx)
