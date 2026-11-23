@@ -1,7 +1,7 @@
 module.exports = [
   {
     ignores: ['node_modules/**'],
-    languageOptions: { ecmaVersion: 2020 },
+    languageOptions: { ecmaVersion: 2021 },
     rules: {},
   },
 ];
