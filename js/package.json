@@ -27,9 +27,14 @@
       "types": "./dist/converters.d.ts"
     },
     "./browser": {
-      "require": "./dist/browser.cjs",
-      "import": "./dist/browser.mjs",
-      "types": "./dist/browser.d.ts"
+      "import": {
+        "types": "./dist/browser.d.mts",
+        "default": "./dist/browser.mjs"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
+      }
     }
   },
   "files": [
@@ -54,20 +59,21 @@
   ],
   "scripts": {
     "build": "tsc",
-    "postbuild": "node ../tools/scion-runner/extract.cjs",
+    "postbuild": "node -e \"require('node:fs').copyFileSync('../tools/scion-runner/scion-trace.cjs', 'dist/scion-trace.cjs')\"",
+    "prepack": "npm run build",
     "test": "jest",
     "lint": "eslint",
-    "harness:sample": "node dist/harness.js -I ../tests/exec/toggle.scxml -e ../tests/exec/toggle.events.jsonl --xml --leaf-only --omit-delta --strip-step0-noise",
+    "harness:sample": "node dist/harness.js -I ../tests/exec/conflict_nested.scxml -e ../tests/exec/conflict_nested.events.jsonl --xml --leaf-only --omit-delta --strip-step0-noise",
     "ci:harness": "npm run build && npm run harness:sample"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "commander": "^14.0.0",
     "eslint": "^9.31.0",
-    "fast-xml-parser": "^5.2.5"
-  },
-  "peerDependencies": {
-    "scion-core": "*"
+    "fast-xml-parser": "^5.2.5",
+    "jsdom": "^24.1.0",
+    "regenerator-runtime": "^0.14.1",
+    "scxml": "5.0.4"
   },
   "devDependencies": {
     "@babel/parser": "^7.28.0",

@@ -18,6 +18,18 @@ single version stream.
 
 ## Cross-language entries
 
+### 2026-11-23 — Release package corrections on v0.4.3
+
+The Python distribution installs its model adapter and comparison tools.
+The npm trace command uses the packaged SCION runner, and browser consumers
+receive declarations for both module formats.
+
+### 2026-11-22 — Executable keys and vector time (ERRATA-013 and ERRATA-014)
+
+The Python, JavaScript, Rust, and Swift readers reject ambiguous executable
+keys before conversion. Python offline vector generation advances a logical
+clock so host scheduling does not change the event stream.
+
 ### 2026-11-21 — Implicit startup targets on v0.4.3 (ERRATA-012)
 
 Python, JavaScript, and native Rust preserve the order of `state`,

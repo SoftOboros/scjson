@@ -49,24 +49,23 @@ scjson validate path/to/dir -r
 
 ## Harness CLI (SCION)
 
-The package also ships a harness CLI that executes SCXML using the SCION engine
-and emits JSONL traces compatible with compare tooling.
+Installing `scjson` also installs the SCION 5.0.4 compiler and runtime. The
+reference CLI emits one JSONL frame at startup and one after each named event.
 
-Install peer dependency:
 ```bash
-npm i scion-core
+npx scjson-scion-trace -I chart.scxml -e events.jsonl --xml
+npx scjson-scion-trace -I chart.scjson -e events.jsonl -o trace.jsonl
 ```
 
-Usage:
-```bash
-npx scjson-scion-trace -I path/to/chart.(scxml|scjson) -e path/to/events.jsonl [--xml]
-```
+The first command writes to stdout. The second converts the saved SCJSON with
+the package converter and writes the completed trace to a file. A failed
+conversion or execution returns a nonzero status.
 
-Quick check (from this repo):
+To build and run the repository sample from a checkout, use
 ```bash
 cd js
 npm ci
-npm run harness:sample
+npm run ci:harness
 ```
 
 Flags:
@@ -78,8 +77,8 @@ Flags:
 
 Notes:
 - `.scjson` input is converted to SCXML internally before execution.
-- SCION does not model time; `{"advance_time": N}` control tokens emit a
-  synthetic step to keep streams progressing.
+- The reference runner consumes named events. It skips `{"advance_time": N}`
+  control records. Comparisons that require a logical clock need a clock-aware engine.
 
 ## Conversion Functions
 ```js

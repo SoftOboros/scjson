@@ -1,86 +1,20 @@
 #!/usr/bin/env node
+/**
+ * Canonical SCION trace runner for source-tree comparisons and the npm CLI.
+ * Agent Name: scion-reference-runner
+ * Part of the scjson project. Developed by Softoboros Technology Inc.
+ * Licensed under the BSD 1-Clause License.
+ */
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
-let JSDOM = null;
-try {
-  ({ JSDOM } = require("jsdom"));
-} catch (e) {
-  // Optional: jsdom not installed; we'll use a minimal stub DOM
-}
-try {
-  require("regenerator-runtime/runtime");
-} catch (e) {
-  // Optional: when not present, Node's native async should suffice
-}
-
-const SCION_NPM_URL = "https://www.npmjs.com/package/scion";
-function loadScxmlBundle() {
-  const zlib = require("zlib");
-  const vendorDir = path.resolve(__dirname, "vendor");
-  const vendorTgz = path.resolve(vendorDir, "scxml-5.0.4.tgz");
-  const preExtracted = path.resolve(vendorDir, "package", "dist", "scxml.js");
-  const preExtractedCore = path.resolve(vendorDir, "package", "dist", "core.js");
-  // 1) Prefer vendored files if present
-  if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
-    return require(preExtracted);
-  }
-  // 2) If tgz exists, try system tar first
-  if (fs.existsSync(vendorTgz)) {
-    try {
-      const { execSync } = require("child_process");
-      execSync(
-        `tar -xzf ${JSON.stringify(vendorTgz)} -C ${JSON.stringify(vendorDir)} package/dist/scxml.js package/dist/core.js`,
-        { stdio: "ignore" }
-      );
-      if (fs.existsSync(preExtracted) && fs.existsSync(preExtractedCore)) {
-        return require(preExtracted);
-      }
-    } catch (_) {
-      // ignore and fall back to manual extraction
-    }
-    // Manual extractor: minimal TAR reader
-    try {
-      const gzData = fs.readFileSync(vendorTgz);
-      const tarData = zlib.gunzipSync(gzData);
-      let offset = 0;
-      const BLOCK = 512;
-      const targets = new Set(["package/dist/scxml.js", "package/dist/core.js"]);
-      const writes = {};
-      while (offset + BLOCK <= tarData.length && targets.size > 0) {
-        const header = tarData.subarray(offset, offset + BLOCK);
-        const name = header.subarray(0, 100).toString().replace(/\0+$/, "");
-        if (!name) break;
-        const sizeOct = header.subarray(124, 136).toString().replace(/\0+$/, "").trim();
-        const size = parseInt(sizeOct || "0", 8);
-        offset += BLOCK;
-        if (targets.has(name)) {
-          writes[name] = tarData.subarray(offset, offset + size);
-          targets.delete(name);
-        }
-        const pad = Math.ceil(size / BLOCK) * BLOCK;
-        offset += pad;
-      }
-      const pkgDir = path.resolve(vendorDir, "package", "dist");
-      try { fs.mkdirSync(pkgDir, { recursive: true }); } catch (_) {}
-      if (writes["package/dist/core.js"]) fs.writeFileSync(preExtractedCore, writes["package/dist/core.js"]);
-      if (writes["package/dist/scxml.js"]) fs.writeFileSync(preExtracted, writes["package/dist/scxml.js"]);
-      if (fs.existsSync(preExtracted)) {
-        return require(preExtracted);
-      }
-    } catch (_) {
-      // ignore
-    }
-  }
-  // 3) As a final attempt, use installed module if present
-  return require("scxml/dist/scxml.js");
-}
-
-const scxmlBundle = loadScxmlBundle();
-const { documentStringToModel, core } = scxmlBundle;
+const { JSDOM } = require("jsdom");
+require("regenerator-runtime/runtime");
+// The source-tree lock installs the identical compiler from its vendored tarball.
+const { documentStringToModel, core } = require("scxml/dist/scxml.js");
 const DEFAULT_INVOKERS = Object.assign({}, core.InterpreterScriptingContext.invokers || {});
 
 function createMockSession(interpreter, invokeObj, payload, hooks = {}) {
@@ -218,45 +152,24 @@ const MOCK_INVOKERS = {
 
 const COMBINED_INVOKERS = Object.assign({}, DEFAULT_INVOKERS, MOCK_INVOKERS);
 
-function usage() {
-  console.error(
-    "Usage: scjson-scion-trace -I <chart.scxml> [-e events.jsonl] [-o trace.jsonl]"
-  );
-  process.exit(1);
-}
+const usage = "Usage: scjson-scion-trace -I <chart.scxml> [-e events.jsonl] [-o trace.jsonl]";
 
 function parseArgs(argv) {
   const opts = { isXml: false };
-  for (let i = 0; i < argv.length; i += 1) {
+  const options = { "-I": "input", "--input": "input", "-e": "events", "--events": "events",
+                    "-o": "out", "--out": "out" };
+  for (let i = 0; i < argv.length; ++i) {
     const arg = argv[i];
-    switch (arg) {
-      case "-I":
-      case "--input":
-        opts.input = argv[++i];
-        break;
-      case "-e":
-      case "--events":
-        opts.events = argv[++i];
-        break;
-      case "-o":
-      case "--out":
-        opts.out = argv[++i];
-        break;
-      case "--xml":
-        opts.isXml = true;
-        break;
-      case "-h":
-      case "--help":
-        usage();
-        break;
-      default:
-        if (arg.startsWith("-")) {
-          console.error(`Unknown option: ${arg}`);
-          usage();
-        }
+    if (arg === "--xml") opts.isXml = true;
+    else if (Object.hasOwn(options, arg)) {
+      const value = argv[++i];
+      if (!value || value.startsWith("-")) throw new Error("Missing value for " + arg);
+      opts[options[arg]] = value;
+    } else {
+      throw new Error("Unknown argument: " + arg);
     }
   }
-  if (!opts.input) usage();
+  if (!opts.input) throw new Error(usage);
   return opts;
 }
 
@@ -277,25 +190,11 @@ function readEvents(filePath) {
 }
 
 function makeDom(url) {
-  if (JSDOM) {
-    const dom = new JSDOM("", { url });
-    global.window = dom.window;
-    global.document = dom.window.document;
-    global.location = dom.window.location;
-    return dom;
-  }
-  // Fallback stub when jsdom is unavailable
-  const stub = {
-    window: {
-      close() {},
-      document: undefined,
-      location: { href: url },
-    },
-  };
-  global.window = stub.window;
-  global.document = stub.window.document;
-  global.location = stub.window.location;
-  return stub;
+  const dom = new JSDOM("", { url });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.location = dom.window.location;
+  return dom;
 }
 
 function createContext(event) {
@@ -356,7 +255,7 @@ function filterStates(iterable) {
   return Array.from(iterable).filter((sid) => isUserState(sid));
 }
 
-function emitTrace(ctx, step, sink) {
+function traceFrame(ctx, step) {
   const beforeConfig = cloneConfig(ctx.beforeSnapshot);
   const afterConfig = cloneConfig(ctx.afterSnapshot);
   const beforeDatamodel = cloneDatamodel(ctx.beforeSnapshot);
@@ -386,7 +285,7 @@ function emitTrace(ctx, step, sink) {
 
   const configuration = filterStates(afterConfig);
 
-  const trace = {
+  return {
     step,
     event: ctx.event ? { name: ctx.event.name, data: ctx.event.data } : null,
     firedTransitions,
@@ -397,109 +296,130 @@ function emitTrace(ctx, step, sink) {
     datamodelDelta: computeDelta(beforeDatamodel, afterDatamodel),
   };
 
-  sink.write(`${JSON.stringify(trace)}\n`);
 }
 
-(function main() {
-  const opts = parseArgs(process.argv.slice(2));
+async function execute(opts, convertJson, emit) {
   const chartPath = path.resolve(opts.input);
-  if (!fs.existsSync(chartPath)) {
-    console.error(`Chart not found: ${chartPath}`);
-    process.exit(1);
-  }
-  const events = opts.events ? readEvents(path.resolve(opts.events)) : [];
+  const url = pathToFileURL(chartPath).href;
+  let xml = fs.readFileSync(chartPath, "utf8");
+  if (convertJson && !opts.isXml && /\.(scjson|json)$/i.test(chartPath)) xml = convertJson(xml);
+  const events = opts.events ? readEvents(opts.events) : [];
+  const dom = makeDom(new URL(".", url).href);
+  try {
+    const factory = await new Promise((resolve, reject) => {
+      documentStringToModel(url, xml, (err, model) => err ? reject(err) : resolve(model));
+    });
+    const prepared = await new Promise((resolve, reject) => {
+      factory.prepare((err, model) => err ? reject(err) : resolve(model), undefined,
+                      { document: dom.window.document });
+    });
+    const interpreter = new core.Statechart(prepared, { invokers: COMBINED_INVOKERS });
+    const listenerState = { current: null };
+    const originalLog = console.log;
 
-  const sink = opts.out
-    ? fs.createWriteStream(path.resolve(opts.out), { encoding: "utf8" })
-    : process.stdout;
+    const listener = {
+      onEntry(stateId) {
+        if (listenerState.current) listenerState.current.entered.add(stateId);
+      },
+      onExit(stateId) {
+        if (listenerState.current) listenerState.current.exited.add(stateId);
+      },
+      onTransition(source, targets) {
+        if (listenerState.current) {
+          const arr = Array.isArray(targets) ? targets.slice() : [targets];
+          listenerState.current.transitions.push({ source, targets: arr });
+        }
+      },
+    };
+    interpreter.registerListener(listener);
 
-  const dom = makeDom("file:///" + path.dirname(chartPath) + "/");
-
-  const xml = fs.readFileSync(chartPath, "utf8");
-  const url = pathToFileURL(chartPath).toString();
-
-  documentStringToModel(url, xml, (err, modelFactory) => {
-    if (err) {
-      console.error(`SCION (${SCION_NPM_URL}) compile error`, err);
-      process.exit(1);
+    function runWithContext(ctx, fn) {
+      listenerState.current = ctx;
+      const actionLogger = (...args) => {
+        const formatted = args.map(formatLogArg);
+        let payload;
+        if (formatted.length === 2 && typeof args[0] === "string") {
+          payload = `${formatted[0]}:${formatted[1]}`;
+        } else {
+          payload = formatted.join(" ");
+        }
+        listenerState.current.actionLog.push(payload);
+      };
+      console.log = actionLogger;
+      try {
+        fn();
+      } finally {
+        console.log = originalLog;
+        listenerState.current = null;
+      }
     }
 
-    modelFactory.prepare(
-      (prepErr, prepared) => {
-        if (prepErr) {
-          console.error(`SCION (${SCION_NPM_URL}) prepare error`, prepErr);
-          process.exit(1);
-        }
+    // Initial step
+    const startCtx = createContext(null);
+    startCtx.beforeSnapshot = [[], {}, false, {}, []];
+    runWithContext(startCtx, () => interpreter.start());
+    startCtx.afterSnapshot = interpreter.getSnapshot();
+    emit(traceFrame(startCtx, 0));
 
-        const interpreter = new core.Statechart(prepared, { invokers: COMBINED_INVOKERS });
-        const listenerState = { current: null };
-        const originalLog = console.log;
+    // Event steps
+    let stepNo = 1;
+    for (const evt of events) {
+      const eventObj = { name: evt.name, data: evt.data };
+      const ctx = createContext(eventObj);
+      ctx.beforeSnapshot = interpreter.getSnapshot();
+      runWithContext(ctx, () => {
+        interpreter.gen({ name: evt.name, data: evt.data });
+      });
+      ctx.afterSnapshot = interpreter.getSnapshot();
+      emit(traceFrame(ctx, stepNo));
+      stepNo += 1;
+    }
+  } finally {
+    dom.window.close();
+  }
+}
 
-        const listener = {
-          onEntry(stateId) {
-            if (listenerState.current) listenerState.current.entered.add(stateId);
-          },
-          onExit(stateId) {
-            if (listenerState.current) listenerState.current.exited.add(stateId);
-          },
-          onTransition(source, targets) {
-            if (listenerState.current) {
-              const arr = Array.isArray(targets) ? targets.slice() : [targets];
-              listenerState.current.transitions.push({ source, targets: arr });
-            }
-          },
-        };
-        interpreter.registerListener(listener);
+/**
+ * Run the reference CLI, optionally converting saved SCJSON and normalizing frames.
+ * @param {string[]} argv CLI arguments, after any caller-specific flags.
+ * @param {object} hooks Package converter and frame normalization callbacks.
+ * @returns {Promise<void>} Resolves after the last frame is written or an error is reported.
+ */
+async function runCli(argv, { convertJson, normalize = frame => frame } = {}) {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(usage);
+    return;
+  }
+  // An unresolved compiler callback with no remaining Node work must fail the CLI.
+  process.exitCode = 1;
+  let temporary, fd;
+  try {
+    const opts = parseArgs(argv);
+    if (opts.out) {
+      temporary = fs.mkdtempSync(path.join(path.dirname(path.resolve(opts.out)), ".scjson-trace-"));
+      fd = fs.openSync(path.join(temporary, "trace.jsonl"), "wx");
+    }
+    let count = 0;
+    await execute(opts, convertJson, frame => {
+      const line = JSON.stringify(normalize(frame)) + "\n";
+      if (fd === undefined) process.stdout.write(line);
+      else fs.writeFileSync(fd, line);
+      ++count;
+    });
+    if (!count) throw new Error("SCION produced no trace frames");
+    if (fd !== undefined) {
+      fs.closeSync(fd);
+      fd = undefined;
+      fs.renameSync(path.join(temporary, "trace.jsonl"), path.resolve(opts.out));
+    }
+    process.exitCode = 0;
+  } catch (error) {
+    console.error("SCION trace failed:", error.message || error);
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+    if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+  }
+}
 
-        function runWithContext(ctx, fn) {
-          listenerState.current = ctx;
-          const actionLogger = (...args) => {
-            const formatted = args.map(formatLogArg);
-            let payload;
-            if (formatted.length === 2 && typeof args[0] === "string") {
-              payload = `${formatted[0]}:${formatted[1]}`;
-            } else {
-              payload = formatted.join(" ");
-            }
-            listenerState.current.actionLog.push(payload);
-          };
-          console.log = actionLogger;
-          try {
-            fn();
-          } finally {
-            console.log = originalLog;
-            listenerState.current = null;
-          }
-        }
-
-        // Initial step
-        const startCtx = createContext(null);
-        startCtx.beforeSnapshot = [[], {}, false, {}, []];
-        runWithContext(startCtx, () => interpreter.start());
-        startCtx.afterSnapshot = interpreter.getSnapshot();
-        emitTrace(startCtx, 0, sink);
-
-        // Event steps
-        let stepNo = 1;
-        for (const evt of events) {
-          const eventObj = { name: evt.name, data: evt.data };
-          const ctx = createContext(eventObj);
-          ctx.beforeSnapshot = interpreter.getSnapshot();
-          runWithContext(ctx, () => {
-            interpreter.gen({ name: evt.name, data: evt.data });
-          });
-          ctx.afterSnapshot = interpreter.getSnapshot();
-          emitTrace(ctx, stepNo, sink);
-          stepNo += 1;
-        }
-
-        if (sink !== process.stdout) {
-          sink.end();
-        }
-        dom.window.close();
-      },
-      undefined,
-      { document: global.document }
-    );
-  });
-})();
+module.exports = { runCli };
+if (require.main === module) runCli(process.argv.slice(2));
