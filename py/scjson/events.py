@@ -29,6 +29,10 @@ class Event(BaseModel):
     # Note: additional flags may be added in the future
 
 
+class StateCompletion(Event):
+    """Internal event emitted upon final entry in a compound or parallel state."""
+
+
 class EventQueue:
     """Simple FIFO for external/internal events."""
 
@@ -61,6 +65,12 @@ class EventQueue:
         :returns: The next ``Event`` or ``None`` when empty.
         """
         return self._q.popleft() if self._q else None
+
+    def pop_state_completion(self) -> Optional[Event]:
+        """Take a pending state completion without consuming an external event."""
+        if self._q and isinstance(self._q[0], StateCompletion):
+            return self.pop()
+        return None
 
     def cancel(self, send_id: str) -> bool:
         """Remove first queued event matching ``send_id``.

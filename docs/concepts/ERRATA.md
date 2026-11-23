@@ -52,6 +52,7 @@ exhaustion; `blocked` is owned by M1P6 D-M1P6-8, not by the search.)
 | ERRATA-015 | 🟢 | Installed Python models and trace comparison commands fail outside the checkout | 2026-11-22 | Python distribution / execution tools |
 | ERRATA-016 | 🟢 | The installed npm reference command can exit successfully without a trace | 2026-11-22 | JavaScript distribution / trace tools |
 | ERRATA-017 | 🟢 | Native Ruby and Rust lose authored order while the release corpus check reports success | 2026-11-23 | Conversion / CONV-I |
+| ERRATA-018 | 🟢 | Four three-engine trace comparisons depend on CI exceptions | 2026-11-23 | Execution / Ruby acceptance |
 
 ---
 
@@ -1093,6 +1094,32 @@ arrays and requires fresh output in both directions. Its default comparison
 fails on a missing file, parse error, difference, failed converter, empty
 corpus or unexpected reference refusal. Regression controls cover reordered
 states, stale files, broken XML, converter failures and reference admission.
+
+## ERRATA-018 — Four release trace differences
+
+At PR #131 head `416d82a`, the Ruby acceptance harness exempted three
+Python–SCION differences and one SCION–Ruby difference. Replaying the original
+fixtures and events on docker-vm reproduced all four. Independent engine
+invocations exposed the strict Python parser refusal that the comparison
+driver had replaced with a lax inline run.
+
+| Fixture | Original observation | Repair and verification |
+|---|---|---|
+| `membership` | With key 3 and array `[1,2,3]`, Python and Ruby reached `pass`. SCION reached `fail`. | In ECMAScript mode both interpreters test property existence. The original input reaches `fail`. Index 0 of `[42]`, array length and an object key whose value is null all succeed. |
+| `in_predicate` | Only Ruby accepted lowercase `in('s0')`. | The fixture exercises standard `In('s0')`. All engines enter `s1`. The original lowercase guard and an inactive-state guard both leave `s0` active. |
+| `conflict_parallel` | Strict Python rejected the root-level transition. SCION entered `done` before the tick. Ruby reported an empty leaf set. | The completion transition belongs to the parallel, and each region starts in a waiting state. Ruby enters all regions and recognizes completion of the parallel itself. The synchronous trace settles state-completion events. Both regions finish on a shared tick; separate left/right events prove that one final alone is insufficient. |
+| `parallel_history_invoke` | Python entered both region finals before frame zero. Ruby and SCION reported `LS` and `RS`. | Python applies the requested SCION ordering before initial entry and leaves invoked-session completions queued. All three report `LS` and `RS` at startup and on the supplied start event. Delivering the queued completions in a separate Python control reaches `Done`. |
+
+The release harness calls the strict Python CLI and runs the twelve-chart list
+with an empty exceptions file. The SCION ordering profile serializes each
+frame's state sets in sorted order. Transition and action sequences keep
+their execution order.
+
+Docker VM verification covered 12 cases (the four fixtures and eight controls)
+with five traces per case: SCION on the source XML and Python and Ruby on both
+XML and saved SCJSON. All 60 state sequences matched their expected frames.
+The register records synchronous trace parity on those inputs. The
+invoked-session control exercises queued delivery separately.
 
 ## How to add an entry
 

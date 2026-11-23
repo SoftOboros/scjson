@@ -363,14 +363,10 @@ def _write_python_trace_inline(
     out.parent.mkdir(parents=True, exist_ok=True)
     execution_mode = ExecutionMode.LAX if treat_as_xml else ExecutionMode.STRICT
     ctx = (
-        DocumentContext.from_xml_file(chart, execution_mode=execution_mode)
+        DocumentContext.from_xml_file(chart, execution_mode=execution_mode, ordering_mode=ordering)
         if treat_as_xml
-        else DocumentContext.from_json_file(chart, execution_mode=execution_mode)
+        else DocumentContext.from_json_file(chart, execution_mode=execution_mode, ordering_mode=ordering)
     )
-    try:
-        ctx.ordering_mode = (ordering or "tolerant").lower()
-    except Exception:
-        pass
     with out.open("w", encoding="utf-8") as sink:
         # Step 0 snapshot
         config = sorted(ctx._filter_states(ctx.configuration), key=ctx._activation_order_key)

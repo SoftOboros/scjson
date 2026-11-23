@@ -110,10 +110,8 @@ Documentation coverage
 
 ## Troubleshooting
 
-- Known differences in CI runs
-  - The harness reports documented differences such as ECMAScript `in` semantics. The history reentry fixture requires Python, SCION, and Ruby to return to the remembered child after a single `flip`.
-    - File: `scripts/ci_ruby_known_diffs.txt`
-    - Harness: `bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt --known scripts/ci_ruby_known_diffs.txt`
+- The release acceptance suite requires all twelve charts to match Python and SCION.
+  Run `bash scripts/ci_ruby_harness.sh --list scripts/ci_ruby_charts.txt` to reproduce it.
 
 - Normalization profile for comparisons
   - Use the SCION profile to align output fields and ordering across engines:
@@ -128,6 +126,20 @@ Documentation coverage
 - Nokogiri dependency (local development)
   - Ruby’s SCXML↔scjson converter uses the Nokogiri gem for XML parsing when running from source. If the gem is not installed, the Ruby CLI falls back to the Python converter transparently (see “CI Notes”).
   - For best local performance and to keep everything in Ruby, install Nokogiri (and system build deps) in your environment. Otherwise the Python fallback will be used for conversion while execution remains in Ruby.
+
+### Release trace comparisons
+
+Compare configurations at startup and after each named event. In the
+ECMAScript datamodel, the binary `in` guard on JSON arrays tests an index
+or property, and on JSON objects it tests a property name. Use case-sensitive
+`In('stateId')` for SCXML configuration membership. Parallel regions enter
+in document order and emit `done.state` when every region is final. A child
+session's completion is a separate event from entering its invoking state.
+The SCION runner records synchronous input frames. Delivery of a queued child
+completion can be checked separately from the startup frame.
+
+The SCION trace format serializes the configuration, entered states and exited
+states as sorted sets. Fired transitions and action logs retain their order.
 
 ---
 

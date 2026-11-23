@@ -532,6 +532,7 @@ def engine_trace(
     ctx_kwargs = {
         "allow_unsafe_eval": unsafe_eval,
         "execution_mode": execution_mode,
+        "ordering_mode": ordering.lower(),
     }
     if evaluator is not None:
         ctx_kwargs["evaluator"] = evaluator
@@ -540,10 +541,6 @@ def engine_trace(
         if is_xml
         else DocumentContext.from_json_file(input_path, **ctx_kwargs)
     )
-    try:
-        ctx.ordering_mode = (ordering or "tolerant").lower()
-    except Exception:
-        pass
 
     sink: TextIO
     if out_path:
@@ -551,6 +548,12 @@ def engine_trace(
         sink = open(out_path, "w", encoding="utf-8")
     else:
         sink = sys.stdout
+
+    def write_frame(frame):
+        if ctx.ordering_mode == "scion":
+            for key in ("configuration", "enteredStates", "exitedStates"):
+                frame[key] = sorted(set(frame[key]))
+        sink.write(dumps(frame) + "\n")
 
     stream_handle: TextIO | None = None
     try:
@@ -576,7 +579,7 @@ def engine_trace(
                 {} if omit_delta else {k: ctx.data_model[k] for k in sorted(ctx.data_model)}
             ),
         }
-        sink.write(dumps(init) + "\n")
+        write_frame(init)
 
         # Event stream
         if events_path:
@@ -613,7 +616,7 @@ def engine_trace(
                             trace["firedTransitions"] = []
                         trace["event"] = None
                         trace["step"] = step_no
-                        sink.write(dumps(trace) + "\n")
+                        write_frame(trace)
                         step_no += 1
                     continue
             except Exception:
@@ -648,7 +651,7 @@ def engine_trace(
             if omit_transitions and "firedTransitions" in trace:
                 trace["firedTransitions"] = []
             trace["step"] = step_no
-            sink.write(dumps(trace) + "\n")
+            write_frame(trace)
             step_no += 1
     finally:
         if sink is not sys.stdout:

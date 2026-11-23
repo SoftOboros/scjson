@@ -46,7 +46,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 - [x] Parallel completion (basic), history (shallow/deep) targets, and final states semantics; enqueue `done.state.<id>` events.
 - [ ] Error handling and ordering consistent with SCION; adopt Python’s normalization knobs where helpful.
   - [x] `<cancel>` implemented with id-based timer management; emits `error.execution` when id missing/not found.
-  - [x] Evaluator: `in(stateId)`, null-safe `_event.data` traversal, and mixed-type equality (numeric-like string vs number).
+  - [x] Evaluate case-sensitive `In('stateId')`, null-safe `_event.data` traversal, and mixed-type equality (numeric-like string vs number).
   - [x] Invoke: propagate child `<donedata>` to `done.invoke` payload; buffered ordering honored (`--ordering scion`).
   - [x] Add `--defer-done` option (default ON) to defer `done.invoke*` processing to the next step to match SCION step boundaries.
   - [ ] Tighten transition conflict resolution further for nested/parallel edge-cases; add focused tests.
@@ -75,7 +75,7 @@ This checklist tracks work to deliver a Ruby execution engine with full [SCION](
 
 ## Acceptance Criteria
 - [ ] Ruby engine traces match SCION on the canonical corpus (after normalization) and match Python on shared subsets.
-- [ ] CI job runs `exec_compare` for Ruby vs SCION and reports zero mismatches on the acceptance suite.
+- [x] CI runs `exec_compare` for Ruby, Python and SCION on the twelve-chart acceptance suite with zero allowed differences. See [ERRATA-018](concepts/ERRATA.md#errata-018--four-release-trace-differences).
 - [ ] `docs/ENGINE-RB.md` and `ruby/ENGINE-RB-DETAILS.md` are published with runnable examples.
 - [ ] README highlights Ruby engine; RubyGems links and metadata are updated.
 - [ ] Repository version is bumped to 0.3.5 and released artifacts are tagged.

@@ -33,7 +33,7 @@ from .pydantic import (
     ScxmlFinalType,
     State,
 )
-from .events import Event, EventQueue
+from .events import Event, EventQueue, StateCompletion
 from .state_tree import anonymous_state_ids, structural_children
 from .inline_data import inline_data_value
 from .safe_eval import SafeExpressionEvaluator, SafeEvaluationError
@@ -325,6 +325,11 @@ class DocumentContext(BaseModel):
             record(event_obj)
         while record(None):
             pass
+        if self.ordering_mode == "scion":
+            while (completion := self.events.pop_state_completion()) is not None:
+                record(completion)
+                while record(None):
+                    pass
 
         dm_delta: Dict[str, Any] = {
             k: self.data_model[k]
@@ -1371,6 +1376,10 @@ class DocumentContext(BaseModel):
                     pass
             except Exception:
                 self.events.push(Event(name="error.communication"))
+            if self.ordering_mode == "scion":
+                # The synchronous startup/input snapshot precedes delivery from
+                # an invoked session. Leave its real completion in the queue.
+                continue
             # Process any immediately available done.invoke events so that
             # generic/specific done transitions can fire during initialization.
             try:
@@ -1778,13 +1787,13 @@ class DocumentContext(BaseModel):
         payload = self._build_donedata_payload(final_act.node, env, parent)
 
         # Emit done.state for the immediate parent compound state
-        self.events.push(Event(name=f"done.state.{parent.id}", data=payload))
+        self.events.push(StateCompletion(name=f"done.state.{parent.id}", data=payload))
 
         parent.status = ActivationStatus.FINAL
         cur = parent.parent
         while cur is not None and isinstance(cur.node, ScxmlParallelType) and self._in_final_configuration(cur):
             cur.status = ActivationStatus.FINAL
-            self.events.push(Event(name=f"done.state.{cur.id}", data=None))
+            self.events.push(StateCompletion(name=f"done.state.{cur.id}", data=None))
             cur = cur.parent
 
     def _in_final_configuration(self, act: ActivationRecord) -> bool:
@@ -1986,6 +1995,7 @@ class DocumentContext(BaseModel):
         allow_unsafe_eval: bool = False,
         evaluator: SafeExpressionEvaluator | None = None,
         execution_mode: ExecutionMode | str = ExecutionMode.STRICT,
+        ordering_mode: str = "tolerant",
     ) -> "DocumentContext":
         text = Path(path).read_text(encoding="utf-8")
         data = cls._prepare_raw_data(json.loads(text))
@@ -2003,6 +2013,7 @@ class DocumentContext(BaseModel):
             execution_mode=mode,
             source_xml=None,
             base_dir=Path(path).resolve().parent,
+            ordering_mode=ordering_mode,
         )
 
     @classmethod
@@ -2013,6 +2024,7 @@ class DocumentContext(BaseModel):
         allow_unsafe_eval: bool = False,
         evaluator: SafeExpressionEvaluator | None = None,
         execution_mode: ExecutionMode | str = ExecutionMode.STRICT,
+        ordering_mode: str = "tolerant",
     ) -> "DocumentContext":
         mode = (
             execution_mode
@@ -2032,6 +2044,7 @@ class DocumentContext(BaseModel):
             execution_mode=mode,
             source_xml=xml_str,
             base_dir=Path(path).resolve().parent,
+            ordering_mode=ordering_mode,
         )
         return ctx
 
@@ -2094,6 +2107,7 @@ class DocumentContext(BaseModel):
         source_xml: str | None = None,
         base_dir: Path | None = None,
         defer_initial: bool = False,
+        ordering_mode: str = "tolerant",
     ) -> "DocumentContext":
         evaluator = evaluator or SafeExpressionEvaluator()
         lookup, path_map = cls._build_json_lookup(doc, raw_data)
@@ -2111,6 +2125,7 @@ class DocumentContext(BaseModel):
             allow_unsafe_eval=allow_unsafe_eval,
             evaluator=evaluator,
             json_lookup=lookup,
+            ordering_mode=ordering_mode,
         )
         ctx._session_id = session_id
         try:
@@ -2138,6 +2153,14 @@ class DocumentContext(BaseModel):
         if not defer_initial:
             ctx._enter_initial_states(root_state)
             ctx.drain_internal()
+            if ctx.ordering_mode == "scion":
+                while (completion := ctx.events.pop_state_completion()) is not None:
+                    ctx._current_event = completion
+                    try:
+                        ctx._execute_transitions(completion)
+                    finally:
+                        ctx._current_event = None
+                    ctx.drain_internal()
             # Start invocations for active states after initial macrostep
             try:
                 ctx._start_invocations_for_active_states()

@@ -81,6 +81,7 @@ run_one() {
   echo "[ci-ruby-harness] Comparing: $chart"
   set +e
   python py/exec_compare.py "$chart" \
+    --python-cmd "python -m scjson engine-trace" \
     --events "$events" \
     --reference "$REF_CMD" \
     --secondary "$SEC_CMD" \
